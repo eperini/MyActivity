@@ -2,13 +2,22 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Task, TaskList } from "@/types";
-import { getTasks, getLists, updateTask, deleteTask } from "@/lib/api";
+import type { Task, TaskList, Habit } from "@/types";
+import {
+  getTasks, getLists, updateTask, deleteTask,
+  getHabits, getWeekLogs, toggleHabitLog, deleteHabit,
+} from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import TaskListView from "@/components/TaskListView";
 import TaskDetail from "@/components/TaskDetail";
 import DayCalendar from "@/components/DayCalendar";
-import { isToday, parseISO, differenceInDays } from "date-fns";
+import HabitListView from "@/components/HabitListView";
+import HabitDetail from "@/components/HabitDetail";
+import AddHabitForm from "@/components/AddHabitForm";
+import EisenhowerMatrix from "@/components/EisenhowerMatrix";
+import PomodoroTimer from "@/components/PomodoroTimer";
+import PomodoroHistory from "@/components/PomodoroHistory";
+import { isToday, parseISO, differenceInDays, format } from "date-fns";
 
 export default function HomePage() {
   const router = useRouter();
@@ -17,6 +26,13 @@ export default function HomePage() {
   const [selectedView, setSelectedView] = useState("inbox");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Habits state
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [weekLogs, setWeekLogs] = useState<Record<number, string[]>>({});
+  const [selectedHabit, setSelectedHabit] = useState<Habit | null>(null);
+  const [showAddHabit, setShowAddHabit] = useState(false);
+  const [pomodoroRefreshKey, setPomodoroRefreshKey] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -30,6 +46,16 @@ export default function HomePage() {
     }
   }, [router]);
 
+  const loadHabits = useCallback(async () => {
+    try {
+      const [h, wl] = await Promise.all([getHabits(), getWeekLogs()]);
+      setHabits(h);
+      setWeekLogs(wl);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     if (!localStorage.getItem("token")) {
       router.push("/login");
@@ -37,6 +63,23 @@ export default function HomePage() {
     }
     loadData();
   }, [loadData, router]);
+
+  // Load habits when switching to habits view
+  useEffect(() => {
+    if (selectedView === "habits") {
+      loadHabits();
+    }
+  }, [selectedView, loadHabits]);
+
+  // Clear task selection when switching to habits, and vice versa
+  function handleSelectView(view: string) {
+    setSelectedView(view);
+    if (view === "habits") {
+      setSelectedTask(null);
+    } else {
+      setSelectedHabit(null);
+    }
+  }
 
   // Filter tasks based on selected view
   const filteredTasks = tasks.filter((task) => {
@@ -72,6 +115,7 @@ export default function HomePage() {
       return diff >= 0 && diff <= 7;
     }).length,
     inbox: activeTasks.length,
+    habits: habits.length,
   };
   lists.forEach((l) => {
     taskCounts[`list-${l.id}`] = activeTasks.filter((t) => t.list_id === l.id).length;
@@ -111,6 +155,24 @@ export default function HomePage() {
     loadData();
   }
 
+  async function handleToggleHabitLog(habitId: number, dateStr: string) {
+    // Optimistic update for week logs
+    setWeekLogs((prev) => {
+      const logs = prev[habitId] || [];
+      const next = logs.includes(dateStr)
+        ? logs.filter((d) => d !== dateStr)
+        : [...logs, dateStr];
+      return { ...prev, [habitId]: next };
+    });
+    await toggleHabitLog(habitId, dateStr);
+  }
+
+  async function handleDeleteHabit(id: number) {
+    await deleteHabit(id);
+    setSelectedHabit(null);
+    loadHabits();
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -123,46 +185,115 @@ export default function HomePage() {
     ? lists.find((l) => l.id === selectedTask.list_id)
     : undefined;
 
+  const isHabitsView = selectedView === "habits";
+  const isEisenhowerView = selectedView === "eisenhower";
+
+  function renderMainContent() {
+    if (isHabitsView) {
+      return (
+        <>
+          <HabitListView
+            habits={habits}
+            weekLogs={weekLogs}
+            selectedHabit={selectedHabit}
+            onSelectHabit={setSelectedHabit}
+            onToggleLog={handleToggleHabitLog}
+            onAddHabit={() => setShowAddHabit(true)}
+          />
+          {selectedHabit ? (
+            <HabitDetail
+              habit={selectedHabit}
+              onClose={() => setSelectedHabit(null)}
+              onDelete={handleDeleteHabit}
+              onToggleLog={handleToggleHabitLog}
+            />
+          ) : (
+            <DayCalendar tasks={tasks} onSelectDate={() => {}} />
+          )}
+          {showAddHabit && (
+            <AddHabitForm
+              onCreated={() => { loadHabits(); setShowAddHabit(false); }}
+              onClose={() => setShowAddHabit(false)}
+            />
+          )}
+        </>
+      );
+    }
+
+    if (selectedView === "pomodoro") {
+      return (
+        <>
+          <PomodoroTimer
+            onSessionComplete={() => setPomodoroRefreshKey((k) => k + 1)}
+          />
+          <PomodoroHistory refreshKey={pomodoroRefreshKey} />
+        </>
+      );
+    }
+
+    if (isEisenhowerView) {
+      return (
+        <>
+          <EisenhowerMatrix
+            tasks={tasks.filter((t) => t.status !== "done" || true)}
+            lists={lists}
+            onSelectTask={(task) => { setSelectedTask(task); }}
+            onToggleTask={handleToggle}
+          />
+          {selectedTask && (
+            <TaskDetail
+              task={selectedTask}
+              list={selectedList}
+              onClose={() => setSelectedTask(null)}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
+          )}
+        </>
+      );
+    }
+
+    return (
+      <>
+        <TaskListView
+          title={viewTitle}
+          tasks={filteredTasks}
+          lists={lists}
+          selectedTask={selectedTask}
+          defaultListId={
+            selectedView.startsWith("list-")
+              ? parseInt(selectedView.split("-")[1])
+              : lists[0]?.id
+          }
+          onSelectTask={setSelectedTask}
+          onToggleTask={handleToggle}
+          onTaskCreated={loadData}
+        />
+        {selectedTask ? (
+          <TaskDetail
+            task={selectedTask}
+            list={selectedList}
+            onClose={() => setSelectedTask(null)}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+          />
+        ) : (
+          <DayCalendar tasks={tasks} onSelectDate={() => {}} />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="h-screen bg-zinc-950 text-white flex">
       <Sidebar
         lists={lists}
         selectedView={selectedView}
-        onSelectView={setSelectedView}
+        onSelectView={handleSelectView}
         taskCounts={taskCounts}
         onListCreated={loadData}
       />
-
-      <TaskListView
-        title={viewTitle}
-        tasks={filteredTasks}
-        lists={lists}
-        selectedTask={selectedTask}
-        defaultListId={
-          selectedView.startsWith("list-")
-            ? parseInt(selectedView.split("-")[1])
-            : lists[0]?.id
-        }
-        onSelectTask={setSelectedTask}
-        onToggleTask={handleToggle}
-        onTaskCreated={loadData}
-      />
-
-      {/* Right panel: detail or calendar */}
-      {selectedTask ? (
-        <TaskDetail
-          task={selectedTask}
-          list={selectedList}
-          onClose={() => setSelectedTask(null)}
-          onUpdate={handleUpdate}
-          onDelete={handleDelete}
-        />
-      ) : (
-        <DayCalendar
-          tasks={tasks}
-          onSelectDate={() => {}}
-        />
-      )}
+      {renderMainContent()}
     </div>
   );
 }

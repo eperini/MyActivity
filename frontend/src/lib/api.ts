@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, RecurrenceRule, TaskInstance } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
@@ -107,3 +107,32 @@ export const getInstances = (taskId: number) =>
 export const getHabits = () => request<Habit[]>("/habits/");
 export const createHabit = (data: Partial<Habit>) =>
   request<Habit>("/habits/", { method: "POST", body: JSON.stringify(data) });
+export const updateHabit = (id: number, data: Partial<Habit>) =>
+  request<Habit>(`/habits/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteHabit = (id: number) =>
+  request<{ detail: string }>(`/habits/${id}`, { method: "DELETE" });
+export const toggleHabitLog = (habitId: number, logDate: string) =>
+  request<{ checked: boolean }>(`/habits/${habitId}/toggle`, {
+    method: "POST",
+    body: JSON.stringify({ log_date: logDate }),
+  });
+export const getHabitLogs = (habitId: number, year: number, month: number) =>
+  request<HabitLog[]>(`/habits/${habitId}/logs?year=${year}&month=${month}`);
+export const getHabitStats = (habitId: number) =>
+  request<HabitStats>(`/habits/${habitId}/stats`);
+export const getWeekLogs = () =>
+  request<Record<number, string[]>>("/habits/logs/week");
+
+// Pomodoro
+export const createPomodoroSession = (data: {
+  task_id?: number | null;
+  started_at: string;
+  ended_at: string;
+  duration_minutes: number;
+  session_type?: string;
+}) =>
+  request<PomodoroSession>("/pomodoro/", { method: "POST", body: JSON.stringify(data) });
+export const getPomodoroSessions = () =>
+  request<PomodoroSession[]>("/pomodoro/");
+export const getPomodoroStats = () =>
+  request<PomodoroStats>("/pomodoro/stats");

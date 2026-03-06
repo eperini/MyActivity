@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer } from "lucide-react";
 import { useState } from "react";
 import type { TaskList } from "@/types";
 import { createList } from "@/lib/api";
@@ -17,6 +17,9 @@ const NAV_ITEMS = [
   { id: "today", label: "Oggi", icon: Calendar },
   { id: "next7", label: "Prossimi 7 Giorni", icon: Clock },
   { id: "inbox", label: "Inbox", icon: Inbox },
+  { id: "habits", label: "Abitudini", icon: Zap },
+  { id: "eisenhower", label: "Eisenhower", icon: Grid2x2 },
+  { id: "pomodoro", label: "Pomodoro", icon: Timer },
 ];
 
 const LIST_COLORS = [

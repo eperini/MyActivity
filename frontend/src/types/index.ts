@@ -59,3 +59,35 @@ export interface Habit {
   color: string;
   is_archived: boolean;
 }
+
+export interface HabitLog {
+  id: number;
+  habit_id: number;
+  log_date: string;
+  value: number;
+  note: string | null;
+}
+
+export interface HabitStats {
+  total_completions: number;
+  current_streak: number;
+  monthly_checkins: number;
+  monthly_rate: number;
+}
+
+export interface PomodoroSession {
+  id: number;
+  user_id: number;
+  task_id: number | null;
+  started_at: string;
+  ended_at: string;
+  duration_minutes: number;
+  session_type: string;
+}
+
+export interface PomodoroStats {
+  today_pomos: number;
+  today_focus_minutes: number;
+  total_pomos: number;
+  total_focus_minutes: number;
+}
