@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+
+::selection {
+  background-color: #3b82f6;
+  color: white;
+}

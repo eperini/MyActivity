@@ -1,0 +1,91 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: myactivity-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: myactivity
+      POSTGRES_USER: myactivity
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myactivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: myactivity-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: myactivity-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db:5432/myactivity
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-super-secret-change-in-production}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: myactivity-celery-worker
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db:5432/myactivity
+      REDIS_URL: redis://redis:6379/0
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: myactivity-celery-beat
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db:5432/myactivity
+      REDIS_URL: redis://redis:6379/0
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

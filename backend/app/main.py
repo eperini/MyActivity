@@ -1,0 +1,28 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+import app.models  # noqa: F401 - register all models for SQLAlchemy relationships
+from app.api.routes import auth, tasks, lists, habits, recurrences, telegram
+from app.core.config import settings
+
+app = FastAPI(title=settings.APP_NAME, version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(lists.router, prefix="/api/lists", tags=["liste"])
+app.include_router(tasks.router, prefix="/api/tasks", tags=["task"])
+app.include_router(habits.router, prefix="/api/habits", tags=["abitudini"])
+app.include_router(recurrences.router, prefix="/api", tags=["ricorrenze"])
+app.include_router(telegram.router, prefix="/api/telegram", tags=["telegram"])
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}

@@ -1,0 +1,168 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import type { Task, TaskList } from "@/types";
+import { getTasks, getLists, updateTask, deleteTask } from "@/lib/api";
+import Sidebar from "@/components/Sidebar";
+import TaskListView from "@/components/TaskListView";
+import TaskDetail from "@/components/TaskDetail";
+import DayCalendar from "@/components/DayCalendar";
+import { isToday, parseISO, differenceInDays } from "date-fns";
+
+export default function HomePage() {
+  const router = useRouter();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [lists, setLists] = useState<TaskList[]>([]);
+  const [selectedView, setSelectedView] = useState("inbox");
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [t, l] = await Promise.all([getTasks(), getLists()]);
+      setTasks(t);
+      setLists(l);
+    } catch {
+      router.push("/login");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (!localStorage.getItem("token")) {
+      router.push("/login");
+      return;
+    }
+    loadData();
+  }, [loadData, router]);
+
+  // Filter tasks based on selected view
+  const filteredTasks = tasks.filter((task) => {
+    if (task.status === "done" && selectedView !== "completed") return false;
+
+    switch (selectedView) {
+      case "today":
+        return task.due_date && isToday(parseISO(task.due_date));
+      case "next7":
+        if (!task.due_date) return false;
+        const diff = differenceInDays(parseISO(task.due_date), new Date());
+        return diff >= 0 && diff <= 7;
+      case "inbox":
+        return task.status !== "done";
+      case "completed":
+        return task.status === "done";
+      default:
+        if (selectedView.startsWith("list-")) {
+          const listId = parseInt(selectedView.split("-")[1]);
+          return task.list_id === listId;
+        }
+        return true;
+    }
+  });
+
+  // Count tasks per view
+  const activeTasks = tasks.filter((t) => t.status !== "done");
+  const taskCounts: Record<string, number> = {
+    today: activeTasks.filter((t) => t.due_date && isToday(parseISO(t.due_date))).length,
+    next7: activeTasks.filter((t) => {
+      if (!t.due_date) return false;
+      const diff = differenceInDays(parseISO(t.due_date), new Date());
+      return diff >= 0 && diff <= 7;
+    }).length,
+    inbox: activeTasks.length,
+  };
+  lists.forEach((l) => {
+    taskCounts[`list-${l.id}`] = activeTasks.filter((t) => t.list_id === l.id).length;
+  });
+
+  // View title
+  const viewTitles: Record<string, string> = {
+    today: "Oggi",
+    next7: "Prossimi 7 Giorni",
+    inbox: "Inbox",
+    completed: "Completati",
+  };
+  const viewTitle = selectedView.startsWith("list-")
+    ? lists.find((l) => l.id === parseInt(selectedView.split("-")[1]))?.name || "Lista"
+    : viewTitles[selectedView] || "Task";
+
+  async function handleToggle(task: Task) {
+    const newStatus = task.status === "done" ? "todo" : "done";
+    await updateTask(task.id, { status: newStatus });
+    loadData();
+    if (selectedTask?.id === task.id) {
+      setSelectedTask({ ...task, status: newStatus as any });
+    }
+  }
+
+  async function handleUpdate(id: number, data: Partial<Task>) {
+    await updateTask(id, data);
+    if (selectedTask?.id === id) {
+      setSelectedTask({ ...selectedTask, ...data });
+    }
+    loadData();
+  }
+
+  async function handleDelete(id: number) {
+    await deleteTask(id);
+    setSelectedTask(null);
+    loadData();
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-zinc-500 text-sm">Caricamento...</div>
+      </div>
+    );
+  }
+
+  const selectedList = selectedTask
+    ? lists.find((l) => l.id === selectedTask.list_id)
+    : undefined;
+
+  return (
+    <div className="h-screen bg-zinc-950 text-white flex">
+      <Sidebar
+        lists={lists}
+        selectedView={selectedView}
+        onSelectView={setSelectedView}
+        taskCounts={taskCounts}
+        onListCreated={loadData}
+      />
+
+      <TaskListView
+        title={viewTitle}
+        tasks={filteredTasks}
+        lists={lists}
+        selectedTask={selectedTask}
+        defaultListId={
+          selectedView.startsWith("list-")
+            ? parseInt(selectedView.split("-")[1])
+            : lists[0]?.id
+        }
+        onSelectTask={setSelectedTask}
+        onToggleTask={handleToggle}
+        onTaskCreated={loadData}
+      />
+
+      {/* Right panel: detail or calendar */}
+      {selectedTask ? (
+        <TaskDetail
+          task={selectedTask}
+          list={selectedList}
+          onClose={() => setSelectedTask(null)}
+          onUpdate={handleUpdate}
+          onDelete={handleDelete}
+        />
+      ) : (
+        <DayCalendar
+          tasks={tasks}
+          onSelectDate={() => {}}
+        />
+      )}
+    </div>
+  );
+}
