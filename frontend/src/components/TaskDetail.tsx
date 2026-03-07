@@ -103,9 +103,13 @@ export default function TaskDetail({ task, list, onClose, onUpdate, onDelete }: 
   }, [task.id, task.has_recurrence]);
 
   async function handleDeleteRecurrence() {
-    await deleteRecurrence(task.id);
-    setRecurrence(null);
-    setPreviewDates([]);
+    try {
+      await deleteRecurrence(task.id);
+      setRecurrence(null);
+      setPreviewDates([]);
+    } catch {
+      console.error("Failed to delete recurrence");
+    }
   }
 
   return (
@@ -151,7 +155,7 @@ export default function TaskDetail({ task, list, onClose, onUpdate, onDelete }: 
           rows={2}
           onBlur={(e) => {
             const val = e.target.value.trim();
-            if (val !== (task.description || "")) onUpdate(task.id, { description: val || null } as any);
+            if (val !== (task.description || "")) onUpdate(task.id, { description: val || null });
           }}
         />
 
@@ -193,8 +197,8 @@ export default function TaskDetail({ task, list, onClose, onUpdate, onDelete }: 
                 <DatePicker
                   value={task.due_date}
                   timeValue={task.due_time}
-                  onChange={(d) => onUpdate(task.id, { due_date: d } as any)}
-                  onTimeChange={(t) => onUpdate(task.id, { due_time: t } as any)}
+                  onChange={(d) => onUpdate(task.id, { due_date: d } as Partial<Task>)}
+                  onTimeChange={(t) => onUpdate(task.id, { due_time: t } as Partial<Task>)}
                   onClose={() => setShowDatePicker(false)}
                 />
               </div>

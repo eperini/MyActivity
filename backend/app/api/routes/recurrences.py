@@ -1,6 +1,7 @@
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +32,7 @@ class RecurrenceCreate(BaseModel):
     Per il workday adjustment (es. "primo lunedi dopo il 1 del mese"):
     - frequency="monthly", day_of_month=1, workday_adjust="next", workday_target=0
     """
-    frequency: str  # daily, weekly, monthly, yearly
+    frequency: Literal["daily", "weekly", "monthly", "yearly"]
     interval: int = 1
     days_of_week: list[int] | None = None
     day_of_month: int | None = None
@@ -78,7 +79,7 @@ async def set_recurrence(
 ):
     """Imposta o aggiorna la ricorrenza di un task."""
     task = await db.get(Task, task_id)
-    if not task:
+    if not task or task.created_by != user.id:
         raise HTTPException(status_code=404, detail="Task non trovato")
 
     rrule_str = build_rrule_string(
@@ -132,6 +133,9 @@ async def get_recurrence(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    task = await db.get(Task, task_id)
+    if not task or task.created_by != user.id:
+        raise HTTPException(status_code=404, detail="Task non trovato")
     result = await db.execute(
         select(RecurrenceRule).where(RecurrenceRule.task_id == task_id)
     )
@@ -147,6 +151,9 @@ async def delete_recurrence(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    task = await db.get(Task, task_id)
+    if not task or task.created_by != user.id:
+        raise HTTPException(status_code=404, detail="Task non trovato")
     result = await db.execute(
         select(RecurrenceRule).where(RecurrenceRule.task_id == task_id)
     )
@@ -161,11 +168,14 @@ async def delete_recurrence(
 @router.get("/tasks/{task_id}/recurrence/preview", response_model=OccurrencePreview)
 async def preview_occurrences(
     task_id: int,
-    count: int = 10,
+    count: int = Query(default=10, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Anteprima delle prossime N occorrenze di un task ricorrente."""
+    task = await db.get(Task, task_id)
+    if not task or task.created_by != user.id:
+        raise HTTPException(status_code=404, detail="Task non trovato")
     result = await db.execute(
         select(RecurrenceRule).where(RecurrenceRule.task_id == task_id)
     )
@@ -194,6 +204,9 @@ async def get_instances(
     db: AsyncSession = Depends(get_db),
 ):
     """Restituisce le istanze generate di un task ricorrente."""
+    task = await db.get(Task, task_id)
+    if not task or task.created_by != user.id:
+        raise HTTPException(status_code=404, detail="Task non trovato")
     result = await db.execute(
         select(TaskInstance)
         .where(TaskInstance.task_id == task_id)
@@ -213,6 +226,9 @@ async def complete_instance(
 
     instance = await db.get(TaskInstance, instance_id)
     if not instance:
+        raise HTTPException(status_code=404, detail="Istanza non trovata")
+    task = await db.get(Task, instance.task_id)
+    if not task or task.created_by != user.id:
         raise HTTPException(status_code=404, detail="Istanza non trovata")
 
     instance.status = "done"

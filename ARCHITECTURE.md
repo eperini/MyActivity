@@ -25,7 +25,8 @@
 | Migrazioni | Alembic | 1.14.0 | Integrazione SQLAlchemy, autogenerate |
 | Cache/Broker | Redis | 7 (Alpine) | Broker Celery, veloce, persistenza opzionale |
 | Task Queue | Celery | 5.4.0 | Beat scheduler per notifiche e generazione istanze |
-| Autenticazione | python-jose + bcrypt | - | JWT stateless, bcrypt diretto (non passlib) |
+| Autenticazione | PyJWT + bcrypt | - | JWT stateless, bcrypt diretto |
+| Rate Limiting | slowapi | 0.1.9 | Protezione brute-force su auth endpoints |
 | Ricorrenze | python-dateutil | 2.9.0 | Parsing RRULE RFC 5545, calcolo occorrenze |
 | Notifiche | httpx | 0.28.1 | Chiamate HTTP async a Telegram Bot API |
 
@@ -45,6 +46,7 @@
 | Orchestrazione | Docker Compose | 5 servizi, un solo comando per avviare tutto |
 | Host | Mac Mini | Self-hosted, sempre acceso, Docker Desktop |
 | Variabili | .env | Secrets fuori dal codice, gitignored |
+| Container | Multi-stage, non-root | Sicurezza e dimensioni immagine ridotte |
 
 ---
 
@@ -61,7 +63,7 @@
               ▼            ▼            ▼
        ┌───────────┐ ┌─────────┐ ┌──────────┐
        │ PostgreSQL │ │  Redis  │ │ Telegram │
-       │    :5432   │ │  :6379  │ │ Bot API  │
+       │  (interno) │ │(interno)│ │ Bot API  │
        └───────────┘ └────┬────┘ └──────────┘
                           │
               ┌───────────┼───────────┐
@@ -73,13 +75,15 @@
        └──────────────┘    └──────────────┘
 ```
 
-### Docker Compose - 5 servizi
+### Docker Compose - 5 servizi + 2 reti
 
-1. **db** - PostgreSQL 16 Alpine, volume persistente `postgres_data`, healthcheck
-2. **redis** - Redis 7 Alpine, volume `redis_data`, healthcheck
-3. **backend** - FastAPI con uvicorn, hot-reload via volume mount di `./backend/app`
-4. **celery-worker** - Stesso container del backend, comando `celery worker`
-5. **celery-beat** - Stesso container, comando `celery beat`
+1. **db** - PostgreSQL 16 Alpine, volume persistente, rete `internal` (non esposto sull'host)
+2. **redis** - Redis 7 Alpine, volume `redis_data`, rete `internal` (non esposto sull'host)
+3. **backend** - FastAPI con uvicorn, porta 8000 esposta, reti `internal` + `frontend`
+4. **celery-worker** - Stesso container del backend, comando `celery worker`, rete `internal`
+5. **celery-beat** - Stesso container, comando `celery beat`, rete `internal`
+
+**Network segmentation**: DB e Redis sono raggiungibili solo dalla rete `internal`. Solo il backend e' esposto sulla rete `frontend` (porta 8000). Questo impedisce accessi diretti ai servizi dati dall'esterno.
 
 Tutti i servizi backend condividono le stesse variabili d'ambiente (DATABASE_URL, REDIS_URL, SECRET_KEY, TELEGRAM_BOT_TOKEN) iniettate dal file `.env`.
 
@@ -96,18 +100,20 @@ myActivity/
 ├── ARCHITECTURE.md               # Questo documento
 │
 ├── backend/
-│   ├── Dockerfile                # Python 3.12-slim, uvicorn --reload
+│   ├── Dockerfile                # Multi-stage, non-root user
+│   ├── .dockerignore             # Esclude .env, __pycache__, .git
 │   ├── requirements.txt
 │   ├── alembic.ini
 │   ├── migrations/
 │   │   ├── env.py                # Async migration runner
 │   │   └── versions/
 │   └── app/
-│       ├── main.py               # FastAPI app, CORS, router registration
+│       ├── main.py               # FastAPI app, CORS, rate limiting, router registration
 │       ├── core/
 │       │   ├── config.py         # Pydantic Settings (env vars)
 │       │   ├── database.py       # Async engine, sessionmaker, Base
-│       │   ├── security.py       # bcrypt hash/verify, JWT encode/decode
+│       │   ├── security.py       # bcrypt hash/verify, PyJWT encode/decode
+│       │   ├── limiter.py        # slowapi rate limiter instance
 │       │   └── deps.py           # get_current_user dependency
 │       ├── models/
 │       │   ├── __init__.py       # Import ALL models (relationship resolution)
@@ -119,15 +125,15 @@ myActivity/
 │       │   ├── habit.py          # Habit + HabitLog
 │       │   └── pomodoro.py       # PomodoroSession
 │       ├── api/routes/
-│       │   ├── auth.py           # POST /register, /login
+│       │   ├── auth.py           # POST /register, /login (rate limited 5/min)
 │       │   ├── lists.py          # CRUD liste
-│       │   ├── tasks.py          # CRUD task + has_recurrence
-│       │   ├── recurrences.py    # Set/get/delete ricorrenza, preview, istanze
-│       │   ├── habits.py         # CRUD abitudini, toggle, logs, stats
+│       │   ├── tasks.py          # CRUD task + has_recurrence + ownership check
+│       │   ├── recurrences.py    # Set/get/delete ricorrenza + ownership check
+│       │   ├── habits.py         # CRUD abitudini, toggle, logs, stats + ownership check
 │       │   ├── pomodoro.py       # Sessioni pomodoro + stats
-│       │   └── telegram.py       # Webhook, link/unlink
+│       │   └── telegram.py       # Webhook, link/unlink + HTML escape
 │       ├── services/
-│       │   ├── recurrence_service.py  # RRULE builder, occurrenze, workday adjust
+│       │   ├── recurrence_service.py  # RRULE builder, occorrenze, workday adjust
 │       │   └── telegram_service.py    # send_message async/sync
 │       └── workers/
 │           ├── celery_app.py     # Celery config, beat schedule
@@ -158,7 +164,7 @@ myActivity/
         │   ├── PomodoroTimer.tsx # Timer circolare SVG
         │   └── PomodoroHistory.tsx  # Stats + cronologia sessioni
         ├── lib/
-        │   ├── api.ts            # Client HTTP con JWT, tutte le chiamate API
+        │   ├── api.ts            # Client HTTP con JWT, 401 guard, 204 handling
         │   └── dates.ts          # formatRelativeDate, isOverdue
         └── types/
             └── index.ts          # Interfacce TypeScript
@@ -181,7 +187,7 @@ SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
 
 **Problema**: `passlib` con bcrypt 5.x genera `ValueError: password cannot be longer than 72 bytes`.
 
-**Soluzione**: Uso diretto di `bcrypt.hashpw()` e `bcrypt.checkpw()` in `security.py`, bypassando completamente passlib.
+**Soluzione**: Uso diretto di `bcrypt.hashpw()` e `bcrypt.checkpw()` in `security.py`, bypassando completamente passlib. JWT gestiti con `PyJWT` (attivamente mantenuto, sostituisce `python-jose` che ha CVE note).
 
 ### 3. Import esplicito di tutti i models
 
@@ -219,32 +225,55 @@ Questa mappatura permette alla matrice di Eisenhower di funzionare senza campi a
 
 **Soluzione**: L'endpoint `GET /tasks/` fa una query aggiuntiva su `RecurrenceRule` per gli ID dei task restituiti e aggiunge `has_recurrence: bool` al response dict. Nessuna modifica allo schema DB.
 
-### 7. JWT Stateless con token di lunga durata
-
-**Decisione**: Token JWT con scadenza 7 giorni, salvato in `localStorage`.
-
-**Motivazione**: App familiare, non critica dal punto di vista sicurezza. Evita la complessita di refresh token. Il frontend redirige a `/login` su qualsiasi 401.
-
-### 8. Pomodoro Timer lato client
+### 7. Pomodoro Timer lato client
 
 **Decisione**: Il timer gira interamente nel browser con `setInterval`. La sessione viene registrata nel backend solo al completamento.
 
-**Motivazione**: Non serve persistenza durante il timer. Se l'utente chiude il browser, la sessione non viene registrata (comportamento atteso). Evita complessita di sincronizzazione server-side.
+**Motivazione**: Non serve persistenza durante il timer. Se l'utente chiude il browser, la sessione non viene registrata (comportamento atteso). Il timer usa un singolo interval con `isRunning` come unico dep, e un ref per evitare stale closures su `pomosCompleted`.
 
-### 9. Optimistic UI Updates
+### 8. Optimistic UI Updates con rollback
 
-**Pattern**: Per toggle abitudini e date picker, lo stato locale viene aggiornato immediatamente, poi la chiamata API parte in background.
+**Pattern**: Per toggle abitudini e date picker, lo stato locale viene aggiornato immediatamente, poi la chiamata API parte in background. In caso di errore, lo stato viene ripristinato.
 
 **Implementazione**:
-- `handleToggleHabitLog`: aggiorna `weekLogs` localmente, poi chiama `toggleHabitLog()`
+- `handleToggleHabitLog`: salva `prevLogs`, aggiorna `weekLogs` localmente, rollback su catch
+- `HabitDetail.handleDayClick`: salva `prevDates`, aggiorna `logDates` localmente, rollback su catch
 - `DatePicker`: usa `localValue` state per riflettere la selezione immediatamente
-- `handleUpdate` in `page.tsx`: aggiorna `selectedTask` prima di `loadData()`
+- `handleUpdate` in `page.tsx`: usa il task restituito dal server per aggiornare `selectedTask`
 
-### 10. Toggle endpoint per Habit Logs
+### 9. Toggle endpoint per Habit Logs
 
 **Decisione**: `POST /habits/{id}/toggle` crea il log se non esiste, lo elimina se esiste.
 
 **Motivazione**: Semplifica il frontend (un'unica chiamata) e rispecchia il comportamento naturale di un checkbox. Restituisce `{checked: true/false}` per conferma.
+
+---
+
+## Sicurezza
+
+### Autenticazione e Autorizzazione
+- **JWT** con `PyJWT`, `SECRET_KEY` forte (64 char hex) in `.env`
+- **bcrypt** per hashing password (diretto, min 8 char, max 128 char)
+- **Ownership check** su tutte le route: tasks, ricorrenze, abitudini, pomodoro verificano `created_by == user.id`
+- **List access check**: la creazione task verifica che l'utente sia owner o membro della lista
+- **Rate limiting**: `slowapi` 5 req/min su `/auth/login` e `/auth/register`
+
+### Validazione Input
+- **Priority**: `Field(ge=1, le=4)` - solo valori 1-4
+- **Frequency**: `Literal["daily", "weekly", "monthly", "yearly"]`
+- **Password**: `Field(min_length=8, max_length=128)`
+- **Preview count**: `Query(default=10, le=100)` - max 100 occorrenze
+
+### Infrastruttura
+- **CORS** limitato a `http://localhost:3000`, metodi e header specifici
+- **`.env`** con secrets escluso dal git, nessun default debole in produzione
+- **PostgreSQL e Redis non esposti** sull'host (solo rete Docker interna)
+- **Network segmentation**: rete `internal` per DB/Redis/workers, rete `frontend` per il backend
+- **Container non-root**: utente `app` dedicato
+- **Multi-stage Dockerfile**: build tools esclusi dall'immagine finale
+- **`.dockerignore`**: esclude `.env`, `__pycache__`, `.git`
+- **HTML escape** nei messaggi Telegram (`html.escape()` su contenuti utente)
+- **Exception handling specifico**: `jwt.InvalidTokenError` invece di `except Exception`
 
 ---
 
@@ -270,7 +299,7 @@ lists                          tasks
 ├── icon                       ├── list_id (FK -> lists)
 ├── owner_id (FK -> users)     ├── created_by (FK -> users)
 │                              ├── assigned_to (FK -> users)
-list_members                   ├── priority (1-4)
+list_members                   ├── priority (1-4, validated)
 ├── list_id (FK)               ├── status (todo/doing/done)
 ├── user_id (FK)               ├── due_date
 └── role (owner/edit/view)     ├── due_time
@@ -335,37 +364,37 @@ notifications
 
 ## API Endpoints
 
-### Autenticazione
+### Autenticazione (rate limited: 5/min)
 | Metodo | Path | Descrizione |
 |---|---|---|
-| POST | `/api/auth/register` | Registrazione utente |
+| POST | `/api/auth/register` | Registrazione utente (password min 8 char) |
 | POST | `/api/auth/login` | Login, restituisce JWT |
 
 ### Liste
 | Metodo | Path | Descrizione |
 |---|---|---|
-| GET | `/api/lists/` | Tutte le liste dell'utente |
+| GET | `/api/lists/` | Tutte le liste dell'utente (proprie + condivise) |
 | POST | `/api/lists/` | Crea lista |
 
-### Task
+### Task (con ownership check)
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/tasks/` | Task con filtri (list_id, status) + `has_recurrence` |
-| POST | `/api/tasks/` | Crea task |
-| PATCH | `/api/tasks/{id}` | Aggiorna task |
-| DELETE | `/api/tasks/{id}` | Elimina task |
+| POST | `/api/tasks/` | Crea task (verifica accesso alla lista) |
+| PATCH | `/api/tasks/{id}` | Aggiorna task (solo owner) |
+| DELETE | `/api/tasks/{id}` | Elimina task (solo owner) |
 
-### Ricorrenze
+### Ricorrenze (con ownership check)
 | Metodo | Path | Descrizione |
 |---|---|---|
-| POST | `/api/tasks/{id}/recurrence` | Imposta/aggiorna ricorrenza |
+| POST | `/api/tasks/{id}/recurrence` | Imposta/aggiorna ricorrenza (validated frequency) |
 | GET | `/api/tasks/{id}/recurrence` | Dettaglio ricorrenza |
 | DELETE | `/api/tasks/{id}/recurrence` | Rimuovi ricorrenza |
-| GET | `/api/tasks/{id}/recurrence/preview` | Anteprima prossime N date |
+| GET | `/api/tasks/{id}/recurrence/preview` | Anteprima prossime N date (max 100) |
 | GET | `/api/tasks/{id}/instances` | Istanze generate |
 | PATCH | `/api/instances/{id}` | Completa istanza |
 
-### Abitudini
+### Abitudini (con ownership check)
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/habits/` | Tutte le abitudini attive |
@@ -388,7 +417,7 @@ notifications
 ### Telegram
 | Metodo | Path | Descrizione |
 |---|---|---|
-| POST | `/api/telegram/webhook` | Riceve messaggi dal bot |
+| POST | `/api/telegram/webhook` | Riceve messaggi dal bot (HTML escaped) |
 | POST | `/api/telegram/link` | Genera codice di collegamento |
 | DELETE | `/api/telegram/unlink` | Scollega account |
 | GET | `/api/telegram/status` | Stato collegamento |
@@ -412,7 +441,7 @@ Stessa struttura, filtrata per `list_id`.
 Lista abitudini con week strip (pallini cliccabili Lun-Dom) | dettaglio con statistiche e calendario mensile.
 
 ### 4. Matrice di Eisenhower
-Griglia 2x2 che mappa le 4 priorita. Ogni quadrante raggruppa i task per scadenza (Scaduti > Oggi > Prossimi 7gg > Dopo > Completati).
+Griglia 2x2 che mappa le 4 priorita (solo task non completati). Ogni quadrante raggruppa i task per scadenza (Scaduti > Oggi > Prossimi 7gg > Dopo).
 
 ### 5. Pomodoro
 Timer circolare SVG con progress ring (25/5/15 min) | pannello destro con overview statistiche e cronologia sessioni.
@@ -430,24 +459,15 @@ Timezone: `Europe/Rome`
 
 ---
 
-## Sicurezza
-
-- **JWT** con scadenza 7 giorni, `SECRET_KEY` in `.env`
-- **bcrypt** per hashing password (diretto, non passlib)
-- **CORS** limitato a `http://localhost:3000`
-- **HTTPBearer** dependency per autenticazione API
-- **`.env`** con secrets escluso dal git
-- **Docker volumes** per persistenza dati
-- I Celery worker condividono lo stesso `SECRET_KEY` ma non espongono porte
-
----
-
 ## Come Avviare
 
 ```bash
 # 1. Configura le variabili d'ambiente
 cp .env.example .env
-# Modifica .env con le tue credenziali
+# Genera secrets forti:
+python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
+python3 -c "import secrets; print('DB_PASSWORD=' + secrets.token_hex(16))"
+# Inserisci i valori generati in .env
 
 # 2. Avvia i servizi Docker
 docker compose up -d
@@ -476,3 +496,4 @@ npm run dev
 - **Grafici e statistiche avanzate**: trend settimanali, heatmap annuale abitudini
 - **Backup automatico**: export dati, backup PostgreSQL schedulato
 - **Temi personalizzabili**: oltre al dark theme attuale
+- **Refresh token flow**: access token breve + refresh per maggiore sicurezza

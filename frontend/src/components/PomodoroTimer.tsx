@@ -22,7 +22,7 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
   const [isRunning, setIsRunning] = useState(false);
   const [pomosCompleted, setPomosCompleted] = useState(0);
   const startTimeRef = useRef<Date | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pomosRef = useRef(0);
 
   const currentMode = MODES.find((m) => m.key === mode)!;
   const totalSeconds = currentMode.minutes * 60;
@@ -30,6 +30,9 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
 
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
+
+  // Keep ref in sync
+  pomosRef.current = pomosCompleted;
 
   const switchMode = useCallback((newMode: TimerMode) => {
     setMode(newMode);
@@ -51,9 +54,11 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
           duration_minutes: currentMode.minutes,
           session_type: "pomodoro",
         });
-      } catch {}
+      } catch {
+        console.error("Failed to save pomodoro session");
+      }
 
-      const newCount = pomosCompleted + 1;
+      const newCount = pomosRef.current + 1;
       setPomosCompleted(newCount);
       onSessionComplete();
 
@@ -67,22 +72,19 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
       // Break finished, switch to pomodoro
       switchMode("pomodoro");
     }
-  }, [mode, currentMode.minutes, pomosCompleted, onSessionComplete, switchMode]);
+  }, [mode, currentMode.minutes, onSessionComplete, switchMode]);
 
+  // Single interval, only depends on isRunning
   useEffect(() => {
-    if (isRunning && secondsLeft > 0) {
-      intervalRef.current = setInterval(() => {
-        setSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(intervalRef.current!);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(intervalRef.current!);
-    }
-  }, [isRunning, secondsLeft]);
+    if (!isRunning) return;
+    const id = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) return 0;
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isRunning]);
 
   // Handle timer reaching 0
   useEffect(() => {

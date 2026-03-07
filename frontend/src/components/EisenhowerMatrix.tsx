@@ -183,7 +183,7 @@ function QuadrantPanel({
                             color: list.color,
                           }}
                         >
-                          {list.name.length > 8 ? list.name.slice(0, 8) : list.name}
+                          {list.name.length > 8 ? list.name.slice(0, 8) + "..." : list.name}
                         </span>
                       )}
 

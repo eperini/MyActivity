@@ -34,11 +34,15 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
 
   async function handleCreateList() {
     if (!newListName.trim()) return;
-    await createList({ name: newListName.trim(), color: newListColor });
-    setNewListName("");
-    setNewListColor(LIST_COLORS[0]);
-    setShowNewList(false);
-    onListCreated();
+    try {
+      await createList({ name: newListName.trim(), color: newListColor });
+      setNewListName("");
+      setNewListColor(LIST_COLORS[0]);
+      setShowNewList(false);
+      onListCreated();
+    } catch {
+      console.error("Failed to create list");
+    }
   }
 
   return (

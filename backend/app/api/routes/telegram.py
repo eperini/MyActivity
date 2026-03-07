@@ -8,6 +8,7 @@ Flusso di collegamento utente:
 4. Da quel momento l'utente riceve le notifiche su Telegram
 """
 
+import html
 import secrets
 from datetime import datetime, timezone
 
@@ -105,7 +106,7 @@ async def telegram_webhook(
                     await db.commit()
                     await send_message(
                         chat_id,
-                        f"Ciao <b>{user.display_name}</b>! Account collegato con successo.\n\n"
+                        f"Ciao <b>{html.escape(user.display_name)}</b>! Account collegato con successo.\n\n"
                         f"Comandi disponibili:\n"
                         f"/tasks - Mostra i task di oggi\n"
                         f"/help - Aiuto",
@@ -183,12 +184,12 @@ async def telegram_webhook(
 
         for t in all_tasks.values():
             p = priority_emoji.get(t.priority, "⚪")
-            lines.append(f"{p} {t.title}")
+            lines.append(f"{p} {html.escape(t.title)}")
 
         for inst in instances:
             task = await db.get(Task, inst.task_id)
             if task:
-                lines.append(f"🔁 {task.title} (ricorrente)")
+                lines.append(f"🔁 {html.escape(task.title)} (ricorrente)")
 
         await send_message(chat_id, "\n".join(lines))
         return {"ok": True}

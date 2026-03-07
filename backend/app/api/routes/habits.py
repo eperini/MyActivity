@@ -137,7 +137,7 @@ async def toggle_habit_log(
 ):
     """Toggle: se esiste il log per quel giorno lo rimuove, altrimenti lo crea."""
     habit = await db.get(Habit, habit_id)
-    if not habit:
+    if not habit or habit.created_by != user.id:
         raise HTTPException(status_code=404, detail="Abitudine non trovata")
 
     result = await db.execute(
@@ -173,7 +173,7 @@ async def log_habit(
     db: AsyncSession = Depends(get_db),
 ):
     habit = await db.get(Habit, habit_id)
-    if not habit:
+    if not habit or habit.created_by != user.id:
         raise HTTPException(status_code=404, detail="Abitudine non trovata")
 
     log = HabitLog(
@@ -197,6 +197,9 @@ async def get_habit_logs(
     db: AsyncSession = Depends(get_db),
 ):
     """Restituisce i log di un'abitudine per un mese specifico."""
+    habit = await db.get(Habit, habit_id)
+    if not habit or habit.created_by != user.id:
+        raise HTTPException(status_code=404, detail="Abitudine non trovata")
     result = await db.execute(
         select(HabitLog).where(
             HabitLog.habit_id == habit_id,
@@ -214,6 +217,9 @@ async def habit_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Statistiche: totale completamenti, streak, check-in mensili e rate."""
+    habit = await db.get(Habit, habit_id)
+    if not habit or habit.created_by != user.id:
+        raise HTTPException(status_code=404, detail="Abitudine non trovata")
     # Total
     result = await db.execute(
         select(func.count(HabitLog.id)).where(HabitLog.habit_id == habit_id)

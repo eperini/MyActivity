@@ -1,6 +1,6 @@
 from datetime import date, time
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task, TaskStatus
+from app.models.task_list import TaskList, ListMember
 from app.models.recurrence import RecurrenceRule
 
 router = APIRouter()
@@ -18,7 +19,7 @@ class TaskCreate(BaseModel):
     description: str | None = None
     list_id: int
     assigned_to: int | None = None
-    priority: int = 4
+    priority: int = Field(default=4, ge=1, le=4)
     due_date: date | None = None
     due_time: time | None = None
     parent_id: int | None = None
@@ -27,7 +28,7 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
-    priority: int | None = None
+    priority: int | None = Field(default=None, ge=1, le=4)
     status: TaskStatus | None = None
     due_date: date | None = None
     due_time: time | None = None
@@ -88,12 +89,29 @@ async def get_tasks(
     return await _enrich_with_recurrence(tasks, db)
 
 
+async def _check_list_access(list_id: int, user_id: int, db: AsyncSession) -> None:
+    """Verify user owns or is member of the list."""
+    task_list = await db.get(TaskList, list_id)
+    if not task_list:
+        raise HTTPException(status_code=404, detail="Lista non trovata")
+    if task_list.owner_id != user_id:
+        member = await db.execute(
+            select(ListMember).where(
+                ListMember.list_id == list_id,
+                ListMember.user_id == user_id,
+            )
+        )
+        if not member.scalar_one_or_none():
+            raise HTTPException(status_code=403, detail="Non hai accesso a questa lista")
+
+
 @router.post("/", response_model=TaskResponse)
 async def create_task(
     data: TaskCreate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _check_list_access(data.list_id, user.id, db)
     task = Task(**data.model_dump(), created_by=user.id)
     db.add(task)
     await db.commit()
@@ -109,7 +127,7 @@ async def update_task(
     db: AsyncSession = Depends(get_db),
 ):
     task = await db.get(Task, task_id)
-    if not task:
+    if not task or task.created_by != user.id:
         raise HTTPException(status_code=404, detail="Task non trovato")
 
     update_data = data.model_dump(exclude_unset=True)
@@ -128,7 +146,7 @@ async def delete_task(
     db: AsyncSession = Depends(get_db),
 ):
     task = await db.get(Task, task_id)
-    if not task:
+    if not task or task.created_by != user.id:
         raise HTTPException(status_code=404, detail="Task non trovato")
     await db.delete(task)
     await db.commit()

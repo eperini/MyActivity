@@ -91,11 +91,11 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
         priority,
         due_date: dueDate || undefined,
         due_time: dueTime || undefined,
-      } as any);
+      } as Parameters<typeof createTask>[0]);
 
       // Set recurrence if selected
       if (recurrenceType !== "none") {
-        const recData: any = {
+        const recData: Parameters<typeof setRecurrence>[1] = {
           frequency: recurrenceType === "monthly_workday" ? "monthly" : recurrenceType,
           interval: recurrenceInterval,
         };
@@ -116,6 +116,8 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
 
       onCreated();
       onClose();
+    } catch {
+      console.error("Failed to create task");
     } finally {
       setSubmitting(false);
     }

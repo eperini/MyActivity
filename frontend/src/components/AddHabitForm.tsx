@@ -44,9 +44,11 @@ export default function AddHabitForm({ onCreated, onClose }: AddHabitFormProps) 
         frequency_days: frequencyType === "custom" ? frequencyDays : [],
         start_date: format(new Date(), "yyyy-MM-dd"),
         color,
-      } as any);
+      } as Parameters<typeof createHabit>[0]);
       onCreated();
       onClose();
+    } catch {
+      console.error("Failed to create habit");
     } finally {
       setSubmitting(false);
     }

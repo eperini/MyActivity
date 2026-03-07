@@ -52,7 +52,7 @@ export default function HomePage() {
       setHabits(h);
       setWeekLogs(wl);
     } catch {
-      // ignore
+      console.error("Failed to load habits");
     }
   }, []);
 
@@ -134,29 +134,43 @@ export default function HomePage() {
 
   async function handleToggle(task: Task) {
     const newStatus = task.status === "done" ? "todo" : "done";
-    await updateTask(task.id, { status: newStatus });
-    loadData();
-    if (selectedTask?.id === task.id) {
-      setSelectedTask({ ...task, status: newStatus as any });
+    try {
+      await updateTask(task.id, { status: newStatus });
+      if (selectedTask?.id === task.id) {
+        setSelectedTask({ ...task, status: newStatus as Task["status"] });
+      }
+      loadData();
+    } catch {
+      // Reload to restore consistent state
+      loadData();
     }
   }
 
   async function handleUpdate(id: number, data: Partial<Task>) {
-    await updateTask(id, data);
-    if (selectedTask?.id === id) {
-      setSelectedTask({ ...selectedTask, ...data });
+    try {
+      const updated = await updateTask(id, data);
+      if (selectedTask?.id === id) {
+        setSelectedTask(updated);
+      }
+      loadData();
+    } catch {
+      loadData();
     }
-    loadData();
   }
 
   async function handleDelete(id: number) {
-    await deleteTask(id);
-    setSelectedTask(null);
-    loadData();
+    try {
+      await deleteTask(id);
+      setSelectedTask(null);
+      loadData();
+    } catch {
+      loadData();
+    }
   }
 
   async function handleToggleHabitLog(habitId: number, dateStr: string) {
     // Optimistic update for week logs
+    const prevLogs = { ...weekLogs };
     setWeekLogs((prev) => {
       const logs = prev[habitId] || [];
       const next = logs.includes(dateStr)
@@ -164,13 +178,22 @@ export default function HomePage() {
         : [...logs, dateStr];
       return { ...prev, [habitId]: next };
     });
-    await toggleHabitLog(habitId, dateStr);
+    try {
+      await toggleHabitLog(habitId, dateStr);
+    } catch {
+      // Rollback on error
+      setWeekLogs(prevLogs);
+    }
   }
 
   async function handleDeleteHabit(id: number) {
-    await deleteHabit(id);
-    setSelectedHabit(null);
-    loadHabits();
+    try {
+      await deleteHabit(id);
+      setSelectedHabit(null);
+      loadHabits();
+    } catch {
+      loadHabits();
+    }
   }
 
   if (loading) {
@@ -235,7 +258,7 @@ export default function HomePage() {
       return (
         <>
           <EisenhowerMatrix
-            tasks={tasks.filter((t) => t.status !== "done" || true)}
+            tasks={tasks.filter((t) => t.status !== "done")}
             lists={lists}
             onSelectTask={(task) => { setSelectedTask(task); }}
             onToggleTask={handleToggle}

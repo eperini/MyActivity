@@ -47,16 +47,22 @@ export default function HabitDetail({ habit, onClose, onDelete, onToggleLog }: H
 
   const initial = habit.name.charAt(0).toUpperCase();
 
-  function handleDayClick(day: Date) {
+  async function handleDayClick(day: Date) {
     const dayStr = format(day, "yyyy-MM-dd");
     // Optimistic update
+    const prevDates = new Set(logDates);
     setLogDates((prev) => {
       const next = new Set(prev);
       if (next.has(dayStr)) next.delete(dayStr);
       else next.add(dayStr);
       return next;
     });
-    onToggleLog(habit.id, dayStr);
+    try {
+      await onToggleLog(habit.id, dayStr);
+    } catch {
+      // Rollback on error
+      setLogDates(prevDates);
+    }
   }
 
   return (

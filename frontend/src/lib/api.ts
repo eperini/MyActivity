@@ -20,7 +20,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 401) {
     localStorage.removeItem("token");
-    window.location.href = "/login";
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
     throw new Error("Non autorizzato");
   }
 
@@ -29,6 +31,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error(error.detail || "Errore API");
   }
 
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
