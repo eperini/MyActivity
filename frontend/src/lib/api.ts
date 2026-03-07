@@ -1,6 +1,12 @@
 import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember } from "@/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+function getApiUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window === "undefined") return "http://localhost:8000/api";
+  // Use same hostname as browser (works with localhost and Tailscale IP)
+  return `http://${window.location.hostname}:8000/api`;
+}
+const API_URL = getApiUrl();
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
