@@ -58,6 +58,10 @@ export async function register(email: string, password: string, display_name: st
 export const getLists = () => request<TaskList[]>("/lists/");
 export const createList = (data: { name: string; color?: string }) =>
   request<TaskList>("/lists/", { method: "POST", body: JSON.stringify(data) });
+export const updateList = (id: number, data: { name?: string; color?: string }) =>
+  request<TaskList>(`/lists/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteList = (id: number) =>
+  request<{ detail: string }>(`/lists/${id}`, { method: "DELETE" });
 
 // Tasks
 export const getTasks = (params?: { list_id?: number; status?: string }) => {

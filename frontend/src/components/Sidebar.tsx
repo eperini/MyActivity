@@ -1,9 +1,9 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer } from "lucide-react";
-import { useState } from "react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import type { TaskList } from "@/types";
-import { createList } from "@/lib/api";
+import { createList, updateList, deleteList } from "@/lib/api";
 
 interface SidebarProps {
   lists: TaskList[];
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { id: "today", label: "Oggi", icon: Calendar },
   { id: "next7", label: "Prossimi 7 Giorni", icon: Clock },
   { id: "inbox", label: "Inbox", icon: Inbox },
+  { id: "calendar", label: "Calendario", icon: CalendarDays },
   { id: "habits", label: "Abitudini", icon: Zap },
   { id: "eisenhower", label: "Eisenhower", icon: Grid2x2 },
   { id: "pomodoro", label: "Pomodoro", icon: Timer },
@@ -31,6 +32,23 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [newListColor, setNewListColor] = useState(LIST_COLORS[0]);
+  const [contextMenu, setContextMenu] = useState<{ listId: number; x: number; y: number } | null>(null);
+  const [editingList, setEditingList] = useState<{ id: number; name: string; color: string } | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
+  const contextRef = useRef<HTMLDivElement>(null);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (contextRef.current && !contextRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    }
+    if (contextMenu) {
+      document.addEventListener("mousedown", handleClick);
+      return () => document.removeEventListener("mousedown", handleClick);
+    }
+  }, [contextMenu]);
 
   async function handleCreateList() {
     if (!newListName.trim()) return;
@@ -43,6 +61,36 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
     } catch {
       console.error("Failed to create list");
     }
+  }
+
+  async function handleRenameList() {
+    if (!editingList || !editingList.name.trim()) return;
+    try {
+      await updateList(editingList.id, { name: editingList.name.trim(), color: editingList.color });
+      setEditingList(null);
+      onListCreated();
+    } catch {
+      console.error("Failed to rename list");
+    }
+  }
+
+  async function handleDeleteList(id: number) {
+    try {
+      await deleteList(id);
+      setShowDeleteConfirm(null);
+      if (selectedView === `list-${id}`) {
+        onSelectView("inbox");
+      }
+      onListCreated();
+    } catch {
+      console.error("Failed to delete list");
+    }
+  }
+
+  function handleContextMenu(e: React.MouseEvent, listId: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ listId, x: e.clientX, y: e.clientY });
   }
 
   return (
@@ -130,15 +178,67 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
           {lists.map((list) => {
             const isActive = selectedView === `list-${list.id}`;
             const count = taskCounts[`list-${list.id}`] || 0;
+            const isEditing = editingList?.id === list.id;
+
+            if (isEditing) {
+              return (
+                <div key={list.id} className="mx-1 p-2 bg-zinc-800 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: editingList.color }}
+                    />
+                    <input
+                      autoFocus
+                      value={editingList.name}
+                      onChange={(e) => setEditingList({ ...editingList, name: e.target.value })}
+                      className="flex-1 bg-transparent text-sm text-zinc-200 outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRenameList();
+                        if (e.key === "Escape") setEditingList(null);
+                      }}
+                    />
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {LIST_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setEditingList({ ...editingList, color })}
+                        className={`w-4 h-4 rounded-full transition-all ${
+                          editingList.color === color ? "ring-2 ring-white ring-offset-1 ring-offset-zinc-800 scale-110" : ""
+                        }`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setEditingList(null)}
+                      className="flex-1 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300"
+                    >
+                      Annulla
+                    </button>
+                    <button
+                      onClick={handleRenameList}
+                      className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white"
+                    >
+                      Salva
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
             return (
-              <button
+              <div
                 key={list.id}
-                onClick={() => onSelectView(`list-${list.id}`)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                className={`group flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-pointer ${
                   isActive
                     ? "bg-zinc-800 text-white"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
                 }`}
+                onClick={() => onSelectView(`list-${list.id}`)}
+                onContextMenu={(e) => handleContextMenu(e, list.id)}
               >
                 <span
                   className="w-3 h-3 rounded-full flex-shrink-0"
@@ -146,13 +246,76 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
                 />
                 <span className="flex-1 text-left truncate">{list.name}</span>
                 {count > 0 && (
-                  <span className="text-xs text-zinc-500">{count}</span>
+                  <span className="text-xs text-zinc-500 group-hover:hidden">{count}</span>
                 )}
-              </button>
+                <button
+                  onClick={(e) => handleContextMenu(e, list.id)}
+                  className="text-zinc-600 hover:text-zinc-300 hidden group-hover:block"
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              </div>
             );
           })}
         </div>
       </div>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          ref={contextRef}
+          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 z-50 min-w-[140px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            onClick={() => {
+              const list = lists.find((l) => l.id === contextMenu.listId);
+              if (list) setEditingList({ id: list.id, name: list.name, color: list.color });
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+          >
+            <Pencil size={14} />
+            Modifica
+          </button>
+          <button
+            onClick={() => {
+              setShowDeleteConfirm(contextMenu.listId);
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-zinc-700 transition-colors"
+          >
+            <Trash2 size={14} />
+            Elimina
+          </button>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-5 max-w-sm mx-4">
+            <h3 className="text-sm font-medium text-white mb-2">Elimina lista</h3>
+            <p className="text-xs text-zinc-400 mb-4">
+              Tutti i task nella lista verranno eliminati. Questa azione non si puo annullare.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="flex-1 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm text-zinc-300"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={() => handleDeleteList(showDeleteConfirm)}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm text-white"
+              >
+                Elimina
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom */}
       <div className="mt-auto px-3 space-y-0.5">
