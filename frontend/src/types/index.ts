@@ -91,3 +91,11 @@ export interface PomodoroStats {
   total_pomos: number;
   total_focus_minutes: number;
 }
+
+export interface ListMember {
+  id: number;
+  user_id: number;
+  email: string;
+  display_name: string;
+  role: string;
+}

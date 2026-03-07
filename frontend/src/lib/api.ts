@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
@@ -62,6 +62,12 @@ export const updateList = (id: number, data: { name?: string; color?: string }) 
   request<TaskList>(`/lists/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteList = (id: number) =>
   request<{ detail: string }>(`/lists/${id}`, { method: "DELETE" });
+export const getListMembers = (listId: number) =>
+  request<ListMember[]>(`/lists/${listId}/members`);
+export const addListMember = (listId: number, email: string, role = "edit") =>
+  request<ListMember>(`/lists/${listId}/members`, { method: "POST", body: JSON.stringify({ email, role }) });
+export const removeListMember = (listId: number, memberId: number) =>
+  request<{ detail: string }>(`/lists/${listId}/members/${memberId}`, { method: "DELETE" });
 
 // Tasks
 export const getTasks = (params?: { list_id?: number; status?: string }) => {

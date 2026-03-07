@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { TaskList } from "@/types";
 import { createList, updateList, deleteList } from "@/lib/api";
@@ -11,6 +11,7 @@ interface SidebarProps {
   onSelectView: (view: string) => void;
   taskCounts: Record<string, number>;
   onListCreated: () => void;
+  onShareList?: (list: TaskList) => void;
 }
 
 const NAV_ITEMS = [
@@ -28,7 +29,7 @@ const LIST_COLORS = [
   "#EC4899", "#06B6D4", "#F97316", "#6366F1", "#14B8A6",
 ];
 
-export default function Sidebar({ lists, selectedView, onSelectView, taskCounts, onListCreated }: SidebarProps) {
+export default function Sidebar({ lists, selectedView, onSelectView, taskCounts, onListCreated, onShareList }: SidebarProps) {
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [newListColor, setNewListColor] = useState(LIST_COLORS[0]);
@@ -277,6 +278,17 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
           >
             <Pencil size={14} />
             Modifica
+          </button>
+          <button
+            onClick={() => {
+              const list = lists.find((l) => l.id === contextMenu.listId);
+              if (list && onShareList) onShareList(list);
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+          >
+            <Users size={14} />
+            Condividi
           </button>
           <button
             onClick={() => {

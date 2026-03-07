@@ -18,6 +18,7 @@ import EisenhowerMatrix from "@/components/EisenhowerMatrix";
 import PomodoroTimer from "@/components/PomodoroTimer";
 import PomodoroHistory from "@/components/PomodoroHistory";
 import CalendarView from "@/components/CalendarView";
+import ShareListModal from "@/components/ShareListModal";
 import { isToday, parseISO, differenceInDays } from "date-fns";
 
 export default function HomePage() {
@@ -37,6 +38,9 @@ export default function HomePage() {
 
   // Calendar add task
   const [calendarAddDate, setCalendarAddDate] = useState<string | null>(null);
+
+  // Share list
+  const [shareList, setShareList] = useState<TaskList | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -332,6 +336,7 @@ export default function HomePage() {
         onSelectView={handleSelectView}
         taskCounts={taskCounts}
         onListCreated={loadData}
+        onShareList={setShareList}
       />
       {renderMainContent()}
 
@@ -348,6 +353,14 @@ export default function HomePage() {
             />
           </div>
         </div>
+      )}
+
+      {/* Share list modal */}
+      {shareList && (
+        <ShareListModal
+          list={shareList}
+          onClose={() => setShareList(null)}
+        />
       )}
 
       {/* Calendar add task modal */}
