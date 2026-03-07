@@ -19,6 +19,8 @@ import PomodoroTimer from "@/components/PomodoroTimer";
 import PomodoroHistory from "@/components/PomodoroHistory";
 import CalendarView from "@/components/CalendarView";
 import ShareListModal from "@/components/ShareListModal";
+import StatsView from "@/components/StatsView";
+import SettingsView from "@/components/SettingsView";
 import { isToday, parseISO, differenceInDays } from "date-fns";
 
 export default function HomePage() {
@@ -219,8 +221,18 @@ export default function HomePage() {
   const isHabitsView = selectedView === "habits";
   const isEisenhowerView = selectedView === "eisenhower";
   const isCalendarView = selectedView === "calendar";
+  const isStatsView = selectedView === "stats";
+  const isSettingsView = selectedView === "settings";
 
   function renderMainContent() {
+    if (isStatsView) {
+      return <StatsView />;
+    }
+
+    if (isSettingsView) {
+      return <SettingsView />;
+    }
+
     if (isHabitsView) {
       return (
         <>

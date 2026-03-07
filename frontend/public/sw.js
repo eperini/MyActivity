@@ -1,4 +1,4 @@
-const CACHE_NAME = "myactivity-v1";
+const CACHE_NAME = "myactivity-v2";
 const PRECACHE_URLS = ["/", "/login"];
 
 self.addEventListener("install", (event) => {
@@ -50,5 +50,40 @@ self.addEventListener("fetch", (event) => {
   // Network first for navigation
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
+  );
+});
+
+// Push notifications
+self.addEventListener("push", (event) => {
+  let data = { title: "MyActivity", body: "Nuova notifica", icon: "/icons/icon-192.png" };
+  if (event.data) {
+    try {
+      data = { ...data, ...event.data.json() };
+    } catch {
+      data.body = event.data.text();
+    }
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon,
+      badge: "/icons/icon-192.png",
+      vibrate: [100, 50, 100],
+      data: { url: "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: "window" }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          return client.focus();
+        }
+      }
+      return clients.openWindow(event.notification.data?.url || "/");
+    })
   );
 });

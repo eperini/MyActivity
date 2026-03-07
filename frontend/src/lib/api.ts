@@ -155,3 +155,58 @@ export const getPomodoroSessions = () =>
   request<PomodoroSession[]>("/pomodoro/");
 export const getPomodoroStats = () =>
   request<PomodoroStats>("/pomodoro/stats");
+
+// Push notifications
+export const getVapidKey = () =>
+  request<{ public_key: string }>("/push/vapid-key");
+export const subscribePush = (endpoint: string, p256dh: string, auth: string) =>
+  request<{ detail: string }>("/push/subscribe", {
+    method: "POST",
+    body: JSON.stringify({ endpoint, p256dh, auth }),
+  });
+export const unsubscribePush = (endpoint: string, p256dh: string, auth: string) =>
+  request<{ detail: string }>("/push/subscribe", {
+    method: "DELETE",
+    body: JSON.stringify({ endpoint, p256dh, auth }),
+  });
+export const sendTestPush = () =>
+  request<{ detail: string }>("/push/test", { method: "POST" });
+
+// Export
+export const exportTasks = (fmt: "json" | "csv") =>
+  request<Blob>(`/export/tasks?fmt=${fmt}`);
+export const exportHabits = (fmt: "json" | "csv") =>
+  request<Blob>(`/export/habits?fmt=${fmt}`);
+
+// Import
+export async function importTasks(file: File): Promise<{ tasks_imported: number; errors: string[] }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_URL}/export/import/tasks`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Errore import" }));
+    throw new Error(err.detail || "Errore import");
+  }
+  return res.json();
+}
+
+// Stats
+export const getDashboardStats = () => request<{
+  total_tasks: number;
+  completed_tasks: number;
+  overdue_tasks: number;
+  due_today: number;
+  completion_rate: number;
+  avg_daily_completed: number;
+  weekly: { date: string; completed: number; created: number }[];
+  monthly: { month: string; completed: number; created: number }[];
+  habits_overview: { id: number; name: string; color: string; completions_this_month: number; current_streak: number }[];
+  total_focus_hours: number;
+  focus_sessions_this_week: number;
+  by_priority: Record<string, number>;
+}>("/stats/dashboard");

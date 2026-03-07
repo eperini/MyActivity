@@ -6,9 +6,10 @@ from app.models.recurrence import RecurrenceRule, TaskInstance
 from app.models.notification import Notification
 from app.models.habit import Habit, HabitLog
 from app.models.pomodoro import PomodoroSession
+from app.models.push_subscription import PushSubscription
 
 __all__ = [
     "User", "TaskList", "ListMember", "Task",
     "RecurrenceRule", "TaskInstance", "Notification",
-    "Habit", "HabitLog", "PomodoroSession",
+    "Habit", "HabitLog", "PomodoroSession", "PushSubscription",
 ]
