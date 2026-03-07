@@ -9,7 +9,6 @@ Flusso di collegamento utente:
 """
 
 import html
-import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -19,13 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.link_codes import generate_code, consume_code
 from app.models.user import User
 from app.services.telegram_service import send_message, get_bot_info
 
 router = APIRouter()
-
-# Codici di collegamento temporanei: {codice: user_id}
-_link_codes: dict[str, int] = {}
 
 
 class LinkResponse(BaseModel):
@@ -40,8 +37,7 @@ async def generate_link_code(
     db: AsyncSession = Depends(get_db),
 ):
     """Genera un codice per collegare l'account Telegram."""
-    code = secrets.token_hex(4)  # 8 caratteri
-    _link_codes[code] = user.id
+    code = generate_code(user.id)
 
     bot_info = await get_bot_info()
     bot_username = bot_info["username"] if bot_info else "myactivity_bot"
@@ -98,7 +94,7 @@ async def telegram_webhook(
         parts = text.split()
         if len(parts) == 2:
             code = parts[1]
-            user_id = _link_codes.pop(code, None)
+            user_id = consume_code(code)
             if user_id:
                 user = await db.get(User, user_id)
                 if user:

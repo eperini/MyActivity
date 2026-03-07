@@ -93,6 +93,25 @@ services:
       redis:
         condition: service_healthy
 
+  telegram-bot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: myactivity-telegram-bot
+    restart: unless-stopped
+    command: python -m app.bot
+    environment:
+      DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db:5432/myactivity
+      REDIS_URL: redis://redis:6379/0
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    volumes:
+      - ./backend/app:/app/app
+    networks:
+      - internal
+    depends_on:
+      db:
+        condition: service_healthy
+
 networks:
   internal:
     driver: bridge
