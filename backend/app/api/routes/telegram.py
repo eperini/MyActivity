@@ -80,6 +80,13 @@ async def telegram_webhook(
     Riceve gli aggiornamenti dal bot Telegram.
     Gestisce i comandi: /start, /tasks, /done
     """
+    # Verify webhook secret token if configured
+    from app.core.config import settings
+    if settings.TELEGRAM_WEBHOOK_SECRET:
+        secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if secret != settings.TELEGRAM_WEBHOOK_SECRET:
+            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+
     data = await request.json()
     message = data.get("message")
     if not message:

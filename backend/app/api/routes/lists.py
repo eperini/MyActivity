@@ -14,14 +14,14 @@ router = APIRouter()
 
 class ListCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    color: str = "#3B82F6"
-    icon: str | None = None
+    color: str = Field(default="#3B82F6", pattern=r"^#[0-9a-fA-F]{6}$")
+    icon: str | None = Field(default=None, max_length=50)
 
 
 class ListUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    color: str | None = None
-    icon: str | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    icon: str | None = Field(default=None, max_length=50)
 
 
 class ListResponse(BaseModel):

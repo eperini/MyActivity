@@ -2,7 +2,7 @@ from datetime import datetime, date, time, timezone
 
 from sqlalchemy import (
     String, Text, ForeignKey, DateTime, Date, Time,
-    Integer, Boolean, SmallInteger, ARRAY
+    Integer, Boolean, SmallInteger, ARRAY, UniqueConstraint
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -61,6 +61,5 @@ class HabitLog(Base):
     habit: Mapped["Habit"] = relationship(back_populates="logs")
 
     __table_args__ = (
-        # un solo log per abitudine per giorno
-        {"sqlite_autoincrement": True},
+        UniqueConstraint("habit_id", "log_date", name="uq_habit_log_date"),
     )

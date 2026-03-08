@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum as PyEnum
 
-from sqlalchemy import String, Text, ForeignKey, DateTime, SmallInteger, Enum
+from sqlalchemy import String, Text, ForeignKey, DateTime, SmallInteger, Enum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -35,6 +35,9 @@ class RecurrenceRule(Base):
 
 class TaskInstance(Base):
     __tablename__ = "task_instances"
+    __table_args__ = (
+        UniqueConstraint("task_id", "due_date", name="uq_task_instance_date"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)

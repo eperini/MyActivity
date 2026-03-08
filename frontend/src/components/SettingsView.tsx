@@ -2,12 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey } from "@/lib/api";
-
-function getApiUrl(): string {
-  if (typeof window === "undefined") return "http://localhost:8000/api";
-  return `http://${window.location.hostname}:8000/api`;
-}
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob } from "@/lib/api";
 
 export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [pushSupported, setPushSupported] = useState(false);
@@ -70,7 +65,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   }
 
   function handleCopyInvite() {
-    const url = `http://${window.location.hostname}:${window.location.port || 3000}/login`;
+    const url = `${window.location.origin}/login`;
     const text = `Ciao! Ti invito a usare MyActivity per gestire task e abitudini insieme.\n\nRegistrati qui: ${url}\n\nDopo la registrazione, potro condividere le liste con te.`;
     navigator.clipboard.writeText(text).then(() => {
       setInviteCopied(true);
@@ -122,18 +117,16 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   }
 
   async function handleExport(type: "tasks" | "habits", fmt: "json" | "csv") {
-    const url = `${getApiUrl()}/export/${type}?fmt=${fmt}`;
-    const token = localStorage.getItem("token");
-    const res = await fetch(url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${type}.${fmt}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    try {
+      const blob = await exportBlob(`/export/${type}?fmt=${fmt}`);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${type}.${fmt}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      // silently fail
+    }
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {

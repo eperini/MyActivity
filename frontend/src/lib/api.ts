@@ -177,6 +177,19 @@ export const exportTasks = (fmt: "json" | "csv") =>
   request<Blob>(`/export/tasks?fmt=${fmt}`);
 export const exportHabits = (fmt: "json" | "csv") =>
   request<Blob>(`/export/habits?fmt=${fmt}`);
+export async function exportBlob(path: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 401) {
+    localStorage.removeItem("token");
+    if (window.location.pathname !== "/login") window.location.href = "/login";
+    throw new Error("Non autorizzato");
+  }
+  if (!res.ok) throw new Error("Errore export");
+  return res.blob();
+}
 
 // Import
 export async function importTasks(file: File): Promise<{ tasks_imported: number; errors: string[] }> {

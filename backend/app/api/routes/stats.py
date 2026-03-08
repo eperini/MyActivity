@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import select, func, extract, and_, case
+from sqlalchemy import select, func, extract, and_, case, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -63,62 +63,69 @@ async def get_dashboard_stats(
 ):
     today = date.today()
 
-    # --- Task counts ---
+    # --- Task counts (single query with conditional aggregation) ---
     result = await db.execute(
-        select(func.count(Task.id)).where(Task.created_by == user.id)
+        select(
+            func.count(Task.id).label("total"),
+            func.count(Task.id).filter(Task.status == TaskStatus.DONE).label("completed"),
+            func.count(Task.id).filter(
+                and_(Task.status != TaskStatus.DONE, Task.due_date < today)
+            ).label("overdue"),
+            func.count(Task.id).filter(
+                and_(Task.status != TaskStatus.DONE, Task.due_date == today)
+            ).label("due_today"),
+        ).where(Task.created_by == user.id)
     )
-    total_tasks = result.scalar() or 0
-
-    result = await db.execute(
-        select(func.count(Task.id)).where(
-            Task.created_by == user.id, Task.status == TaskStatus.DONE
-        )
-    )
-    completed_tasks = result.scalar() or 0
-
-    result = await db.execute(
-        select(func.count(Task.id)).where(
-            Task.created_by == user.id,
-            Task.status != TaskStatus.DONE,
-            Task.due_date < today,
-        )
-    )
-    overdue_tasks = result.scalar() or 0
-
-    result = await db.execute(
-        select(func.count(Task.id)).where(
-            Task.created_by == user.id,
-            Task.status != TaskStatus.DONE,
-            Task.due_date == today,
-        )
-    )
-    due_today = result.scalar() or 0
+    row = result.one()
+    total_tasks = row.total or 0
+    completed_tasks = row.completed or 0
+    overdue_tasks = row.overdue or 0
+    due_today = row.due_today or 0
 
     completion_rate = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
 
-    # --- Weekly breakdown (last 7 days) ---
+    # --- Weekly breakdown (single query with GROUP BY) ---
     week_start = today - timedelta(days=6)
+
+    completed_by_day = {}
+    result = await db.execute(
+        select(
+            func.date(Task.completed_at).label("d"),
+            func.count(Task.id),
+        ).where(
+            Task.created_by == user.id,
+            Task.status == TaskStatus.DONE,
+            func.date(Task.completed_at) >= week_start,
+            func.date(Task.completed_at) <= today,
+        ).group_by(text("d"))
+    )
+    for d, c in result.all():
+        completed_by_day[d] = c
+
+    created_by_day = {}
+    result = await db.execute(
+        select(
+            func.date(Task.created_at).label("d"),
+            func.count(Task.id),
+        ).where(
+            Task.created_by == user.id,
+            func.date(Task.created_at) >= week_start,
+            func.date(Task.created_at) <= today,
+        ).group_by(text("d"))
+    )
+    for d, c in result.all():
+        created_by_day[d] = c
+
     weekly = []
     for i in range(7):
         d = week_start + timedelta(days=i)
-        result = await db.execute(
-            select(func.count(Task.id)).where(
-                Task.created_by == user.id,
-                Task.status == TaskStatus.DONE,
-                func.date(Task.completed_at) == d,
-            )
-        )
-        completed = result.scalar() or 0
-        result = await db.execute(
-            select(func.count(Task.id)).where(
-                Task.created_by == user.id,
-                func.date(Task.created_at) == d,
-            )
-        )
-        created = result.scalar() or 0
-        weekly.append(WeekDay(date=d.isoformat(), completed=completed, created=created))
+        weekly.append(WeekDay(
+            date=d.isoformat(),
+            completed=completed_by_day.get(d, 0),
+            created=created_by_day.get(d, 0),
+        ))
 
-    # Avg daily completed (last 30 days)
+    # Avg daily completed (last 30 days - single query)
     thirty_days_ago = today - timedelta(days=30)
     result = await db.execute(
         select(func.count(Task.id)).where(
@@ -130,75 +137,102 @@ async def get_dashboard_stats(
     completed_30d = result.scalar() or 0
     avg_daily = round(completed_30d / 30, 1)
 
-    # --- Monthly trend (last 6 months) ---
+    # --- Monthly trend (2 queries instead of 12) ---
+    six_months_ago = (today.replace(day=1) - timedelta(days=150)).replace(day=1)
+
+    monthly_completed = {}
+    result = await db.execute(
+        select(
+            extract("year", Task.completed_at).label("y"),
+            extract("month", Task.completed_at).label("m"),
+            func.count(Task.id),
+        ).where(
+            Task.created_by == user.id,
+            Task.status == TaskStatus.DONE,
+            Task.completed_at >= six_months_ago,
+        ).group_by(text("y"), text("m"))
+    )
+    for y, m, c in result.all():
+        monthly_completed[(int(y), int(m))] = c
+
+    monthly_created = {}
+    result = await db.execute(
+        select(
+            extract("year", Task.created_at).label("y"),
+            extract("month", Task.created_at).label("m"),
+            func.count(Task.id),
+        ).where(
+            Task.created_by == user.id,
+            Task.created_at >= six_months_ago,
+        ).group_by(text("y"), text("m"))
+    )
+    for y, m, c in result.all():
+        monthly_created[(int(y), int(m))] = c
+
     monthly = []
+    current = today.replace(day=1)
     for i in range(5, -1, -1):
-        m_date = today.replace(day=1) - timedelta(days=i * 30)
+        # Walk back i months from current month
+        m_date = today.replace(day=1)
+        for _ in range(i):
+            m_date = (m_date - timedelta(days=1)).replace(day=1)
         year, month = m_date.year, m_date.month
-        result = await db.execute(
-            select(func.count(Task.id)).where(
-                Task.created_by == user.id,
-                Task.status == TaskStatus.DONE,
-                extract("year", Task.completed_at) == year,
-                extract("month", Task.completed_at) == month,
-            )
-        )
-        m_completed = result.scalar() or 0
-        result = await db.execute(
-            select(func.count(Task.id)).where(
-                Task.created_by == user.id,
-                extract("year", Task.created_at) == year,
-                extract("month", Task.created_at) == month,
-            )
-        )
-        m_created = result.scalar() or 0
         monthly.append(MonthStat(
             month=f"{year}-{month:02d}",
-            completed=m_completed,
-            created=m_created,
+            completed=monthly_completed.get((year, month), 0),
+            created=monthly_created.get((year, month), 0),
         ))
 
-    # --- Habits overview ---
+    # --- Habits overview (2 queries instead of N*2) ---
     result = await db.execute(
-        select(Habit).where(Habit.created_by == user.id, Habit.is_archived == False)
+        select(Habit).where(Habit.created_by == user.id, Habit.is_archived.is_(False))
     )
     habits = result.scalars().all()
     habits_overview = []
-    for h in habits:
-        # This month completions
+
+    if habits:
+        habit_ids = [h.id for h in habits]
+
+        # Monthly completions per habit (single query)
         result = await db.execute(
-            select(func.count(HabitLog.id)).where(
-                HabitLog.habit_id == h.id,
+            select(HabitLog.habit_id, func.count(HabitLog.id)).where(
+                HabitLog.habit_id.in_(habit_ids),
                 extract("year", HabitLog.log_date) == today.year,
                 extract("month", HabitLog.log_date) == today.month,
-            )
+            ).group_by(HabitLog.habit_id)
         )
-        month_count = result.scalar() or 0
+        month_counts = {hid: c for hid, c in result.all()}
 
-        # Streak
+        # All log dates for streak calculation (single query)
         result = await db.execute(
-            select(HabitLog.log_date)
-            .where(HabitLog.habit_id == h.id)
-            .order_by(HabitLog.log_date.desc())
+            select(HabitLog.habit_id, HabitLog.log_date).where(
+                HabitLog.habit_id.in_(habit_ids),
+            ).order_by(HabitLog.habit_id, HabitLog.log_date.desc())
         )
-        dates = [row[0] for row in result.all()]
-        streak = 0
-        if dates:
-            expected = today
-            for d in dates:
-                if d == expected:
-                    streak += 1
-                    expected -= timedelta(days=1)
-                elif d < expected:
-                    break
+        logs_by_habit: dict[int, list[date]] = {}
+        for hid, log_date in result.all():
+            logs_by_habit.setdefault(hid, []).append(log_date)
 
-        habits_overview.append(HabitOverview(
-            id=h.id, name=h.name, color=h.color,
-            completions_this_month=month_count,
-            current_streak=streak,
-        ))
+        for h in habits:
+            month_count = month_counts.get(h.id, 0)
+            dates = logs_by_habit.get(h.id, [])
+            streak = 0
+            if dates:
+                expected = today
+                for d in dates:
+                    if d == expected:
+                        streak += 1
+                        expected -= timedelta(days=1)
+                    elif d < expected:
+                        break
 
-    # --- Pomodoro ---
+            habits_overview.append(HabitOverview(
+                id=h.id, name=h.name, color=h.color,
+                completions_this_month=month_count,
+                current_streak=streak,
+            ))
+
+    # --- Pomodoro (unchanged, already 2 queries) ---
     week_start_dt = today - timedelta(days=today.weekday())
     result = await db.execute(
         select(func.sum(PomodoroSession.duration_minutes)).where(
@@ -216,7 +250,7 @@ async def get_dashboard_stats(
     )
     focus_sessions_week = result.scalar() or 0
 
-    # --- Priority breakdown ---
+    # --- Priority breakdown (already 1 query) ---
     result = await db.execute(
         select(Task.priority, func.count(Task.id)).where(
             Task.created_by == user.id, Task.status != TaskStatus.DONE

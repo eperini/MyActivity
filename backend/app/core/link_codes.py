@@ -17,7 +17,7 @@ TTL = 300  # 5 minuti
 
 
 def generate_code(user_id: int) -> str:
-    code = secrets.token_hex(4)
+    code = secrets.token_hex(16)
     _r.setex(f"{PREFIX}{code}", TTL, str(user_id))
     return code
 
