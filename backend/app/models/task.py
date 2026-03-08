@@ -50,3 +50,5 @@ class Task(Base):
     )
     subtasks: Mapped[list["Task"]] = relationship(back_populates="parent")
     parent: Mapped["Task | None"] = relationship(back_populates="subtasks", remote_side="Task.id")
+    tags: Mapped[list["Tag"]] = relationship(secondary="task_tags", back_populates="tasks")
+    comments: Mapped[list["Comment"]] = relationship(back_populates="task")

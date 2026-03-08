@@ -62,17 +62,33 @@ export default function TaskItem({ task, list, isSelected, onSelect, onToggle }:
         <div className={`text-base md:text-sm ${isDone ? "line-through text-zinc-500" : "text-zinc-200"}`}>
           {task.title}
         </div>
-        {list && (
-          <span
-            className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium"
-            style={{
-              backgroundColor: list.color + "20",
-              color: list.color,
-            }}
-          >
-            {list.name}
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-1 mt-1">
+          {list && (
+            <span
+              className="inline-block px-2 py-0.5 rounded text-[10px] font-medium"
+              style={{
+                backgroundColor: list.color + "20",
+                color: list.color,
+              }}
+            >
+              {list.name}
+            </span>
+          )}
+          {task.tags && task.tags.length > 0 && task.tags.map(tag => (
+            <span
+              key={tag.id}
+              className="inline-block px-1.5 py-0.5 rounded text-[10px]"
+              style={{ backgroundColor: tag.color + "20", color: tag.color }}
+            >
+              #{tag.name}
+            </span>
+          ))}
+          {task.assigned_to_name && (
+            <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-zinc-700 text-zinc-400">
+              → {task.assigned_to_name}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Recurrence + Due date */}

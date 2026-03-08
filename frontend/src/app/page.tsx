@@ -360,6 +360,8 @@ export default function HomePage() {
               onClose={() => setSelectedTask(null)}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              lists={lists}
+              onRefresh={loadData}
             />
           ) : (
             <DayCalendar tasks={tasks} onSelectDate={() => {}} />
@@ -427,6 +429,8 @@ export default function HomePage() {
               onClose={() => setSelectedTask(null)}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              lists={lists}
+              onRefresh={loadData}
             />
           </div>
         </div>

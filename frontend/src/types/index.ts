@@ -16,6 +16,21 @@ export interface TaskList {
 
 export type TaskStatus = "todo" | "doing" | "done";
 
+export interface Tag {
+  id: number;
+  name: string;
+  color: string;
+}
+
+export interface TaskComment {
+  id: number;
+  task_id: number;
+  user_id: number;
+  user_name: string;
+  text: string;
+  created_at: string;
+}
+
 export interface Task {
   id: number;
   title: string;
@@ -23,6 +38,7 @@ export interface Task {
   list_id: number;
   created_by: number;
   assigned_to: number | null;
+  assigned_to_name?: string | null;
   priority: number;
   status: TaskStatus;
   due_date: string | null;
@@ -30,6 +46,7 @@ export interface Task {
   parent_id: number | null;
   has_recurrence?: boolean;
   next_occurrence?: string | null;
+  tags?: Tag[];
 }
 
 export interface RecurrenceRule {

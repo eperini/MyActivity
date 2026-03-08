@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences } from "@/lib/api";
+import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone } from "lucide-react";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey } from "@/lib/api";
 
 function getApiUrl(): string {
   if (typeof window === "undefined") return "http://localhost:8000/api";
@@ -29,6 +29,8 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [reportTime, setReportTime] = useState("07:00");
   const [reportSaving, setReportSaving] = useState(false);
   const [reportMessage, setReportMessage] = useState("");
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
 
   useEffect(() => {
     getGoogleCalendarConfig()
@@ -434,6 +436,52 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
             <CheckCircle2 size={12} className="text-green-400" />
             {importMessage}
           </p>
+        )}
+      </div>
+
+      {/* API Key for iOS Shortcuts */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+          <Smartphone size={16} />
+          Tasto Azione iPhone
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Genera una API key per aggiungere task velocemente dal Tasto Azione dell'iPhone tramite Comandi Rapidi.
+          Endpoint: <code className="text-zinc-400">POST /api/shortcut/task</code> con header <code className="text-zinc-400">X-API-Key</code>.
+        </p>
+        {apiKey ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-zinc-900 px-3 py-2 rounded text-xs text-zinc-300 font-mono break-all">{apiKey}</code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(apiKey);
+                  setApiKeyCopied(true);
+                  setTimeout(() => setApiKeyCopied(false), 2000);
+                }}
+                className="p-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors"
+              >
+                {apiKeyCopied ? <Check size={14} className="text-green-400" /> : <Copy size={14} className="text-zinc-400" />}
+              </button>
+            </div>
+            <button
+              onClick={async () => { await revokeApiKey(); setApiKey(null); }}
+              className="px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-lg text-xs transition-colors"
+            >
+              Revoca chiave
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={async () => {
+              const res = await generateApiKey();
+              setApiKey(res.api_key);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium text-white transition-colors"
+          >
+            <Key size={16} />
+            Genera API Key
+          </button>
         )}
       </div>
 

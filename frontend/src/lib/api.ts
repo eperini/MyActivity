@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -206,6 +206,37 @@ export const triggerBackup = () =>
   request<{ detail: string; task_id: string }>("/backup/trigger", { method: "POST" });
 export const listBackups = () =>
   request<{ backups: { name: string; size: number; created: string }[]; configured: boolean }>("/backup/list");
+
+// Tags
+export const getTags = () => request<Tag[]>("/tags/");
+export const createTag = (data: { name: string; color: string }) =>
+  request<Tag>("/tags/", { method: "POST", body: JSON.stringify(data) });
+export const updateTag = (id: number, data: { name?: string; color?: string }) =>
+  request<Tag>(`/tags/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteTag = (id: number) =>
+  request<{ detail: string }>(`/tags/${id}`, { method: "DELETE" });
+export const addTagToTask = (taskId: number, tagId: number) =>
+  request<{ detail: string }>(`/tags/tasks/${taskId}/tags/${tagId}`, { method: "POST" });
+export const removeTagFromTask = (taskId: number, tagId: number) =>
+  request<{ detail: string }>(`/tags/tasks/${taskId}/tags/${tagId}`, { method: "DELETE" });
+
+// Comments
+export const getComments = (taskId: number) =>
+  request<TaskComment[]>(`/tasks/${taskId}/comments`);
+export const addComment = (taskId: number, text: string) =>
+  request<TaskComment>(`/tasks/${taskId}/comments`, { method: "POST", body: JSON.stringify({ text }) });
+export const deleteComment = (taskId: number, commentId: number) =>
+  request<{ detail: string }>(`/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" });
+
+// Quick add
+export const quickAddTask = (text: string, listId: number) =>
+  request<Task>("/tasks/quickadd", { method: "POST", body: JSON.stringify({ text, list_id: listId }) });
+
+// API Key (for iOS Shortcuts)
+export const generateApiKey = () =>
+  request<{ api_key: string }>("/auth/me/api-key", { method: "POST" });
+export const revokeApiKey = () =>
+  request<{ detail: string }>("/auth/me/api-key", { method: "DELETE" });
 
 // User profile & preferences
 export interface UserProfile {

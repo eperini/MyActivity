@@ -19,6 +19,8 @@ class User(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
+    api_key: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+
     # Daily report preferences
     daily_report_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     daily_report_push: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

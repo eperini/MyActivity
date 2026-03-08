@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X } from "lucide-react";
-import type { Task, TaskList, RecurrenceRule } from "@/types";
+import { useEffect, useState, useRef } from "react";
+import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X, Tag as TagIcon, MessageCircle, UserCircle, Send } from "lucide-react";
+import type { Task, TaskList, RecurrenceRule, Tag, TaskComment, ListMember } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
-import { getRecurrence, getRecurrencePreview, deleteRecurrence } from "@/lib/api";
+import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getListMembers, updateTask as apiUpdateTask } from "@/lib/api";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
 import DatePicker from "./DatePicker";
@@ -12,9 +12,11 @@ import DatePicker from "./DatePicker";
 interface TaskDetailProps {
   task: Task;
   list?: TaskList;
+  lists?: TaskList[];
   onClose: () => void;
   onUpdate: (id: number, data: Partial<Task>) => void;
   onDelete: (id: number) => void;
+  onRefresh?: () => void;
 }
 
 const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
@@ -77,7 +79,7 @@ function describeRrule(rrule: string, workdayAdjust: string, workdayTarget: numb
   return desc;
 }
 
-export default function TaskDetail({ task, list, onClose, onUpdate, onDelete }: TaskDetailProps) {
+export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDelete, onRefresh }: TaskDetailProps) {
   const priority = PRIORITY_LABELS[task.priority] || PRIORITY_LABELS[4];
   const overdue = task.due_date ? isOverdue(task.due_date) : false;
 
@@ -85,6 +87,26 @@ export default function TaskDetail({ task, list, onClose, onUpdate, onDelete }: 
   const [previewDates, setPreviewDates] = useState<string[]>([]);
   const [loadingRec, setLoadingRec] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Tags
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+
+  // Comments
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+
+  // Assignment
+  const [members, setMembers] = useState<ListMember[]>([]);
+  const [showAssignDropdown, setShowAssignDropdown] = useState(false);
+
+  useEffect(() => {
+    getTags().then(setAllTags).catch(() => {});
+    getComments(task.id).then(setComments).catch(() => {});
+    getListMembers(task.list_id).then(setMembers).catch(() => {});
+  }, [task.id, task.list_id]);
 
   useEffect(() => {
     if (!task.has_recurrence) {
@@ -288,6 +310,185 @@ export default function TaskDetail({ task, list, onClose, onUpdate, onDelete }: 
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Tags */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 text-sm">
+              <TagIcon size={16} className="text-zinc-500" />
+              <span className="text-zinc-500 text-xs">Tag</span>
+            </div>
+            <div className="ml-7 flex flex-wrap gap-1">
+              {task.tags && task.tags.map(tag => (
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs"
+                  style={{ backgroundColor: tag.color + "20", color: tag.color }}
+                >
+                  #{tag.name}
+                  <button
+                    onClick={async () => {
+                      await removeTagFromTask(task.id, tag.id);
+                      onRefresh?.();
+                    }}
+                    className="hover:opacity-70"
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+              <div className="relative">
+                <button
+                  onClick={() => setShowTagDropdown(!showTagDropdown)}
+                  className="px-2 py-0.5 rounded text-xs bg-zinc-800 text-zinc-500 hover:bg-zinc-700"
+                >
+                  + tag
+                </button>
+                {showTagDropdown && (
+                  <div className="absolute top-7 left-0 z-50 bg-zinc-800 border border-zinc-700 rounded-lg p-2 w-48 space-y-1 shadow-xl">
+                    {allTags
+                      .filter(t => !task.tags?.some(tt => tt.id === t.id))
+                      .map(tag => (
+                        <button
+                          key={tag.id}
+                          onClick={async () => {
+                            await addTagToTask(task.id, tag.id);
+                            setShowTagDropdown(false);
+                            onRefresh?.();
+                          }}
+                          className="flex items-center gap-2 w-full px-2 py-1 rounded text-xs text-zinc-300 hover:bg-zinc-700"
+                        >
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
+                          {tag.name}
+                        </button>
+                      ))}
+                    <div className="flex gap-1 pt-1 border-t border-zinc-700">
+                      <input
+                        value={newTagName}
+                        onChange={e => setNewTagName(e.target.value)}
+                        placeholder="Nuovo tag..."
+                        className="flex-1 bg-zinc-900 rounded px-2 py-1 text-xs text-zinc-300 outline-none"
+                        onKeyDown={async (e) => {
+                          if (e.key === "Enter" && newTagName.trim()) {
+                            const colors = ["#3b82f6","#ef4444","#22c55e","#f59e0b","#8b5cf6","#ec4899","#06b6d4"];
+                            const color = colors[Math.floor(Math.random() * colors.length)];
+                            const tag = await createTag({ name: newTagName.trim(), color });
+                            await addTagToTask(task.id, tag.id);
+                            setAllTags(prev => [...prev, tag]);
+                            setNewTagName("");
+                            setShowTagDropdown(false);
+                            onRefresh?.();
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Assignment */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 text-sm">
+              <UserCircle size={16} className="text-zinc-500" />
+              <span className="text-zinc-500 text-xs">Assegnato a</span>
+            </div>
+            <div className="ml-7 relative">
+              <button
+                onClick={() => setShowAssignDropdown(!showAssignDropdown)}
+                className="px-2 py-1 rounded text-xs bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              >
+                {task.assigned_to_name || "Nessuno"}
+              </button>
+              {showAssignDropdown && (
+                <div className="absolute top-8 left-0 z-50 bg-zinc-800 border border-zinc-700 rounded-lg p-1 w-44 shadow-xl">
+                  <button
+                    onClick={async () => {
+                      onUpdate(task.id, { assigned_to: null } as Partial<Task>);
+                      setShowAssignDropdown(false);
+                    }}
+                    className="w-full px-2 py-1.5 rounded text-xs text-zinc-400 hover:bg-zinc-700 text-left"
+                  >
+                    Nessuno
+                  </button>
+                  {members.map(m => (
+                    <button
+                      key={m.user_id}
+                      onClick={async () => {
+                        onUpdate(task.id, { assigned_to: m.user_id } as Partial<Task>);
+                        setShowAssignDropdown(false);
+                      }}
+                      className={`w-full px-2 py-1.5 rounded text-xs text-left hover:bg-zinc-700 ${
+                        task.assigned_to === m.user_id ? "text-blue-400" : "text-zinc-300"
+                      }`}
+                    >
+                      {m.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Comments */}
+        <div className="border-t border-zinc-800 pt-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm text-zinc-500">
+            <MessageCircle size={16} />
+            <span className="text-xs">Commenti ({comments.length})</span>
+          </div>
+
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {comments.map(c => (
+              <div key={c.id} className="bg-zinc-800/50 rounded-lg p-2.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-zinc-300">{c.user_name}</span>
+                  <span className="text-[10px] text-zinc-600">
+                    {c.created_at ? format(parseISO(c.created_at), "d MMM HH:mm", { locale: it }) : ""}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400">{c.text}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              value={newComment}
+              onChange={e => setNewComment(e.target.value)}
+              placeholder="Scrivi un commento..."
+              className="flex-1 bg-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 outline-none focus:ring-1 focus:ring-zinc-600"
+              onKeyDown={async (e) => {
+                if (e.key === "Enter" && newComment.trim() && !sendingComment) {
+                  setSendingComment(true);
+                  try {
+                    const c = await addComment(task.id, newComment.trim());
+                    setComments(prev => [...prev, c]);
+                    setNewComment("");
+                  } finally {
+                    setSendingComment(false);
+                  }
+                }
+              }}
+            />
+            <button
+              onClick={async () => {
+                if (!newComment.trim() || sendingComment) return;
+                setSendingComment(true);
+                try {
+                  const c = await addComment(task.id, newComment.trim());
+                  setComments(prev => [...prev, c]);
+                  setNewComment("");
+                } finally {
+                  setSendingComment(false);
+                }
+              }}
+              disabled={sendingComment || !newComment.trim()}
+              className="p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg transition-colors"
+            >
+              <Send size={14} className="text-white" />
+            </button>
           </div>
         </div>
       </div>

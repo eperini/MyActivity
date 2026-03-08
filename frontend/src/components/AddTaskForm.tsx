@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Calendar, Flag, List, Repeat, X } from "lucide-react";
+import { Calendar, Flag, List, Repeat, X, Zap } from "lucide-react";
 import type { TaskList } from "@/types";
-import { createTask, setRecurrence } from "@/lib/api";
+import { createTask, setRecurrence, quickAddTask } from "@/lib/api";
 import DatePicker from "./DatePicker";
 import { formatRelativeDate } from "@/lib/dates";
 
@@ -44,6 +44,8 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
   const [showMore, setShowMore] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [quickMode, setQuickMode] = useState(false);
+  const [quickText, setQuickText] = useState("");
   const dateButtonRef = useRef<HTMLButtonElement>(null);
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -133,14 +135,91 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
-          <span className="text-sm font-medium text-zinc-300">Nuovo task</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-zinc-300">Nuovo task</span>
+            <button
+              type="button"
+              onClick={() => setQuickMode(!quickMode)}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
+                quickMode ? "bg-yellow-600/20 text-yellow-400" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <Zap size={10} />
+              Quick
+            </button>
+          </div>
           <button type="button" onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
             <X size={18} />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-5 space-y-4">
+        {/* Quick add mode */}
+        {quickMode && (
+          <div className="px-5 pt-4 pb-2 space-y-2">
+            <input
+              autoFocus
+              value={quickText}
+              onChange={(e) => setQuickText(e.target.value)}
+              placeholder='es. "comprare latte domani p1 #spesa"'
+              className="w-full bg-zinc-800 rounded-lg px-4 py-3 text-sm text-white outline-none placeholder-zinc-500 focus:ring-1 focus:ring-blue-600"
+              onKeyDown={async (e) => {
+                if (e.key === "Enter" && quickText.trim() && !submitting) {
+                  e.preventDefault();
+                  setSubmitting(true);
+                  try {
+                    await quickAddTask(quickText.trim(), listId);
+                    onCreated();
+                    onClose();
+                  } catch {
+                    console.error("Quick add failed");
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }
+              }}
+            />
+            <p className="text-[10px] text-zinc-600">
+              Supporta: date (oggi, domani, lunedì), priorità (p1-p4), tag (#nome), orario (alle 14:30)
+            </p>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
+                <List size={14} className="text-zinc-500" />
+                <select
+                  value={listId}
+                  onChange={(e) => setListId(Number(e.target.value))}
+                  className="bg-transparent text-xs text-zinc-300 outline-none cursor-pointer"
+                >
+                  {lists.map((l) => (
+                    <option key={l.id} value={l.id} className="bg-zinc-800">{l.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                disabled={!quickText.trim() || submitting}
+                onClick={async () => {
+                  if (!quickText.trim() || submitting) return;
+                  setSubmitting(true);
+                  try {
+                    await quickAddTask(quickText.trim(), listId);
+                    onCreated();
+                    onClose();
+                  } catch {
+                    console.error("Quick add failed");
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg text-xs font-medium text-white transition-colors"
+              >
+                {submitting ? "..." : "Crea"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Body - structured form */}
+        {!quickMode && <div className="p-5 space-y-4">
           {/* Title */}
           <input
             autoFocus
@@ -350,10 +429,10 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-800">
+        {!quickMode && <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-800">
           <button
             type="button"
             onClick={onClose}
@@ -368,7 +447,7 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
           >
             {submitting ? "..." : "Crea task"}
           </button>
-        </div>
+        </div>}
       </form>
 
       {/* DatePicker as fixed overlay to avoid clipping */}

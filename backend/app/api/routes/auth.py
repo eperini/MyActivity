@@ -89,6 +89,28 @@ async def get_profile(user: User = Depends(get_current_user)):
     )
 
 
+@router.post("/me/api-key")
+async def generate_api_key(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    import secrets
+    key = secrets.token_hex(32)
+    user.api_key = key
+    await db.commit()
+    return {"api_key": key}
+
+
+@router.delete("/me/api-key")
+async def revoke_api_key(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user.api_key = None
+    await db.commit()
+    return {"detail": "API key revocata"}
+
+
 @router.patch("/me/preferences")
 async def update_preferences(
     data: DailyReportPreferences,

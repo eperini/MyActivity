@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.task import Task, TaskStatus
 from app.models.task_list import TaskList, ListMember
 from app.models.recurrence import RecurrenceRule
+from app.models.tag import Tag, task_tags
 
 router = APIRouter()
 
@@ -36,6 +37,12 @@ class TaskUpdate(BaseModel):
     assigned_to: int | None = None
 
 
+class TagResponse(BaseModel):
+    id: int
+    name: str
+    color: str
+
+
 class TaskResponse(BaseModel):
     id: int
     title: str
@@ -43,6 +50,7 @@ class TaskResponse(BaseModel):
     list_id: int
     created_by: int
     assigned_to: int | None
+    assigned_to_name: str | None = None
     priority: int
     status: TaskStatus
     due_date: date | None
@@ -50,6 +58,7 @@ class TaskResponse(BaseModel):
     parent_id: int | None
     has_recurrence: bool = False
     next_occurrence: date | None = None
+    tags: list[TagResponse] = []
 
     class Config:
         from_attributes = True
@@ -104,21 +113,46 @@ def _delete_task_from_gcal(event_id: str):
 
 
 async def _enrich_with_recurrence(tasks: list[Task], db: AsyncSession) -> list[dict]:
-    """Add has_recurrence flag and next_occurrence to task dicts."""
+    """Add has_recurrence, next_occurrence, tags, assigned_to_name to task dicts."""
     if not tasks:
         return []
     task_ids = [t.id for t in tasks]
+
+    # Recurrence info
     result = await db.execute(
         select(RecurrenceRule.task_id, RecurrenceRule.next_occurrence).where(
             RecurrenceRule.task_id.in_(task_ids)
         )
     )
     recurrence_map = {row.task_id: row.next_occurrence for row in result.all()}
+
+    # Tags per task
+    tag_result = await db.execute(
+        select(task_tags.c.task_id, Tag.id, Tag.name, Tag.color)
+        .join(Tag, task_tags.c.tag_id == Tag.id)
+        .where(task_tags.c.task_id.in_(task_ids))
+    )
+    tags_map: dict[int, list[dict]] = {}
+    for row in tag_result.all():
+        tags_map.setdefault(row[0], []).append({"id": row[1], "name": row[2], "color": row[3]})
+
+    # Assigned user names
+    assigned_ids = {t.assigned_to for t in tasks if t.assigned_to}
+    names_map: dict[int, str] = {}
+    if assigned_ids:
+        from app.models.user import User
+        name_result = await db.execute(
+            select(User.id, User.display_name).where(User.id.in_(assigned_ids))
+        )
+        names_map = {row.id: row.display_name for row in name_result.all()}
+
     enriched = []
     for t in tasks:
         d = {c.name: getattr(t, c.name) for c in t.__table__.columns}
         d["has_recurrence"] = t.id in recurrence_map
         d["next_occurrence"] = recurrence_map.get(t.id)
+        d["tags"] = tags_map.get(t.id, [])
+        d["assigned_to_name"] = names_map.get(t.assigned_to) if t.assigned_to else None
         enriched.append(d)
     return enriched
 
@@ -127,6 +161,7 @@ async def _enrich_with_recurrence(tasks: list[Task], db: AsyncSession) -> list[d
 async def get_tasks(
     list_id: int | None = Query(None),
     status: TaskStatus | None = Query(None),
+    tag_id: int | None = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -135,6 +170,8 @@ async def get_tasks(
         query = query.where(Task.list_id == list_id)
     if status:
         query = query.where(Task.status == status)
+    if tag_id:
+        query = query.where(Task.id.in_(select(task_tags.c.task_id).where(task_tags.c.tag_id == tag_id)))
     query = query.order_by(Task.priority, Task.due_date)
 
     result = await db.execute(query)
