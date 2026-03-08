@@ -8,6 +8,7 @@ Worker Celery per:
 Usa SQLAlchemy sincrono (psycopg2) per evitare problemi di event loop con Celery.
 """
 
+import logging
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, select
@@ -16,78 +17,94 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import settings
 from app.workers.celery_app import celery_app
 
+logger = logging.getLogger(__name__)
+
 # URL sincrono per Celery (postgresql:// invece di postgresql+asyncpg://)
 SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
-_engine = create_engine(SYNC_DB_URL, echo=False)
+_engine = create_engine(SYNC_DB_URL, echo=False, pool_size=5, max_overflow=5)
 _SessionLocal = sessionmaker(_engine)
 
 
-@celery_app.task
-def generate_recurring_instances():
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
+def generate_recurring_instances(self):
     """Genera le istanze dei task ricorrenti per i prossimi 7 giorni."""
     from app.models.recurrence import RecurrenceRule, TaskInstance
     from app.models.task import Task
     from app.services.recurrence_service import get_occurrences
 
-    with _SessionLocal() as db:
-        rules = db.execute(select(RecurrenceRule)).scalars().all()
+    try:
+        with _SessionLocal() as db:
+            # Batch load rules with their tasks to avoid N+1
+            rules = db.execute(select(RecurrenceRule)).scalars().all()
+            task_ids = [r.task_id for r in rules]
+            tasks_result = db.execute(select(Task).where(Task.id.in_(task_ids))) if task_ids else None
+            tasks_map = {t.id: t for t in (tasks_result.scalars().all() if tasks_result else [])}
 
-        today = date.today()
-        horizon = today + timedelta(days=7)
-        created_count = 0
+            today = date.today()
+            horizon = today + timedelta(days=7)
+            created_count = 0
 
-        for rule in rules:
-            task = db.get(Task, rule.task_id)
-            if not task:
-                continue
-
-            start = task.due_date or today
-            occurrences = get_occurrences(
-                rrule_string=rule.rrule,
-                dtstart=start,
-                after=today,
-                count=14,
-                workday_adjust=rule.workday_adjust.value,
-                workday_target=rule.workday_target,
-            )
-
-            for occ_date in occurrences:
-                if occ_date > horizon:
-                    break
-
-                due_dt = datetime.combine(occ_date, datetime.min.time(), tzinfo=timezone.utc)
-
-                existing = db.execute(
-                    select(TaskInstance).where(
-                        TaskInstance.task_id == rule.task_id,
-                        TaskInstance.due_date == due_dt,
-                    )
-                ).scalar_one_or_none()
-
-                if existing:
+            for rule in rules:
+                task = tasks_map.get(rule.task_id)
+                if not task:
                     continue
 
-                instance = TaskInstance(
-                    task_id=rule.task_id,
-                    due_date=due_dt,
-                    status="todo",
-                )
-                db.add(instance)
-                created_count += 1
-
-            # Aggiorna next_occurrence
-            future = [d for d in occurrences if d >= today]
-            if future:
-                rule.next_occurrence = datetime.combine(
-                    future[0], datetime.min.time(), tzinfo=timezone.utc
+                start = task.due_date or today
+                occurrences = get_occurrences(
+                    rrule_string=rule.rrule,
+                    dtstart=start,
+                    after=today,
+                    count=14,
+                    workday_adjust=rule.workday_adjust.value,
+                    workday_target=rule.workday_target,
                 )
 
-        db.commit()
-        return f"Create {created_count} nuove istanze"
+                # Batch check existing instances for this task
+                existing_dates = set()
+                if occurrences:
+                    due_dts = [datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc) for d in occurrences if d <= horizon]
+                    if due_dts:
+                        existing_result = db.execute(
+                            select(TaskInstance.due_date).where(
+                                TaskInstance.task_id == rule.task_id,
+                                TaskInstance.due_date.in_(due_dts),
+                            )
+                        )
+                        existing_dates = {r[0] for r in existing_result.all()}
+
+                for occ_date in occurrences:
+                    if occ_date > horizon:
+                        break
+
+                    due_dt = datetime.combine(occ_date, datetime.min.time(), tzinfo=timezone.utc)
+
+                    if due_dt in existing_dates:
+                        continue
+
+                    instance = TaskInstance(
+                        task_id=rule.task_id,
+                        due_date=due_dt,
+                        status="todo",
+                    )
+                    db.add(instance)
+                    created_count += 1
+
+                # Aggiorna next_occurrence
+                future = [d for d in occurrences if d >= today]
+                if future:
+                    rule.next_occurrence = datetime.combine(
+                        future[0], datetime.min.time(), tzinfo=timezone.utc
+                    )
+
+            db.commit()
+            return f"Create {created_count} nuove istanze"
+    except Exception as exc:
+        logger.exception("Error generating recurring instances")
+        raise self.retry(exc=exc)
 
 
-@celery_app.task
-def backup_database_to_drive():
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=120)
+def backup_database_to_drive(self):
     """Esegue pg_dump e carica il backup su Google Drive."""
     import subprocess
     import tempfile
@@ -132,7 +149,8 @@ def backup_database_to_drive():
         )
 
         if result.returncode != 0:
-            return f"pg_dump fallito: {result.stderr}"
+            logger.error("pg_dump failed: %s", result.stderr[:500])
+            return "pg_dump fallito"
 
         # Compress
         with open(sql_path, "rb") as f_in:
@@ -151,8 +169,8 @@ def backup_database_to_drive():
         return f"Backup {filename} ({file_size} bytes) caricato su Drive (id={file_id}), eliminati {deleted} vecchi backup"
 
 
-@celery_app.task
-def check_and_send_notifications():
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
+def check_and_send_notifications(self):
     """Controlla e invia le notifiche in scadenza."""
     from app.models.notification import Notification
     from app.models.task import Task
@@ -161,44 +179,64 @@ def check_and_send_notifications():
 
     now = datetime.now(timezone.utc)
 
-    with _SessionLocal() as db:
-        notifications = db.execute(
-            select(Notification)
-            .where(Notification.sent_at.is_(None))
-            .where(Notification.task_id.isnot(None))
-        ).scalars().all()
+    try:
+        with _SessionLocal() as db:
+            # Batch load notifications with tasks and users
+            notifications = db.execute(
+                select(Notification)
+                .where(Notification.sent_at.is_(None))
+                .where(Notification.task_id.isnot(None))
+            ).scalars().all()
 
-        sent_count = 0
-        for notif in notifications:
-            task = db.get(Task, notif.task_id)
-            if not task or not task.due_date:
-                continue
+            if not notifications:
+                return "Nessuna notifica da inviare"
 
-            due_dt = datetime.combine(
-                task.due_date,
-                task.due_time or datetime.min.time(),
-                tzinfo=timezone.utc,
-            )
-            send_at = due_dt + timedelta(minutes=notif.offset_minutes)
+            # Batch load tasks and users
+            task_ids = {n.task_id for n in notifications if n.task_id}
+            user_ids = {n.user_id for n in notifications}
+            tasks_map = {}
+            if task_ids:
+                result = db.execute(select(Task).where(Task.id.in_(task_ids)))
+                tasks_map = {t.id: t for t in result.scalars().all()}
+            users_map = {}
+            if user_ids:
+                result = db.execute(select(User).where(User.id.in_(user_ids)))
+                users_map = {u.id: u for u in result.scalars().all()}
 
-            if now >= send_at:
-                user = db.get(User, notif.user_id)
-                if user and user.telegram_chat_id:
-                    priority_emoji = {1: "🔴", 2: "🟠", 3: "🟡", 4: "⚪"}
-                    emoji = priority_emoji.get(task.priority, "⚪")
-                    text = f"{emoji} <b>Promemoria</b>\n\n{task.title}"
-                    if task.description:
-                        text += f"\n<i>{task.description}</i>"
-                    if send_message_sync(user.telegram_chat_id, text):
-                        notif.sent_at = now
-                        sent_count += 1
+            sent_count = 0
+            for notif in notifications:
+                task = tasks_map.get(notif.task_id)
+                if not task or not task.due_date:
+                    continue
 
-        db.commit()
-        return f"Inviate {sent_count} notifiche"
+                due_dt = datetime.combine(
+                    task.due_date,
+                    task.due_time or datetime.min.time(),
+                    tzinfo=timezone.utc,
+                )
+                send_at = due_dt + timedelta(minutes=notif.offset_minutes)
+
+                if now >= send_at:
+                    user = users_map.get(notif.user_id)
+                    if user and user.telegram_chat_id:
+                        priority_emoji = {1: "🔴", 2: "🟠", 3: "🟡", 4: "⚪"}
+                        emoji = priority_emoji.get(task.priority, "⚪")
+                        text = f"{emoji} <b>Promemoria</b>\n\n{task.title}"
+                        if task.description:
+                            text += f"\n<i>{task.description}</i>"
+                        if send_message_sync(user.telegram_chat_id, text):
+                            notif.sent_at = now
+                            sent_count += 1
+
+            db.commit()
+            return f"Inviate {sent_count} notifiche"
+    except Exception as exc:
+        logger.exception("Error checking notifications")
+        raise self.retry(exc=exc)
 
 
-@celery_app.task
-def send_daily_reports():
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+def send_daily_reports(self):
     """Controlla quali utenti devono ricevere il report giornaliero e lo invia."""
     import json
     from zoneinfo import ZoneInfo
@@ -339,12 +377,14 @@ def send_daily_reports():
 
 def _build_report_html(display_name, today, overdue, today_tasks, tomorrow_tasks, emojis):
     """Build HTML email for the daily report."""
+    import html
     priority_colors = {1: "#ef4444", 2: "#f97316", 3: "#eab308", 4: "#9ca3af"}
 
     def task_row(t):
         color = priority_colors.get(t.priority, "#9ca3af")
+        safe_title = html.escape(t.title)
         time_str = f" <span style='color:#888'>alle {t.due_time.strftime('%H:%M')}</span>" if t.due_time else ""
-        return f"<li style='padding:4px 0'><span style='color:{color};font-weight:bold'>●</span> {t.title}{time_str}</li>"
+        return f"<li style='padding:4px 0'><span style='color:{color};font-weight:bold'>●</span> {safe_title}{time_str}</li>"
 
     sections = ""
     if overdue:
@@ -390,5 +430,10 @@ def _send_push_to_subs(subs, title, body, db):
                 vapid_private_key=settings.VAPID_PRIVATE_KEY,
                 vapid_claims={"sub": settings.VAPID_MAILTO},
             )
-        except Exception:
-            db.delete(sub)
+        except WebPushException as e:
+            if e.response and e.response.status_code in (404, 410):
+                db.delete(sub)
+            else:
+                logger.warning("Push failed for sub %s: %s", sub.id, e)
+        except Exception as e:
+            logger.warning("Push error for sub %s: %s", sub.id, e)

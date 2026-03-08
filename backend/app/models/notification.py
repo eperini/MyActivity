@@ -17,17 +17,17 @@ class Notification(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True
     )
     habit_id: Mapped[int | None] = mapped_column(
         ForeignKey("habits.id", ondelete="CASCADE"), nullable=True
     )
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     channel: Mapped[NotificationChannel] = mapped_column(
         Enum(NotificationChannel), default=NotificationChannel.TELEGRAM
     )
     offset_minutes: Mapped[int] = mapped_column(Integer, default=0)
-    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

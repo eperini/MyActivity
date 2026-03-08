@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,16 +7,37 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.comment import Comment
+from app.models.task import Task
+from app.models.task_list import TaskList, ListMember
 
 router = APIRouter()
 
 
 class CommentCreate(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=5000)
+
+
+async def _check_task_access(task_id: int, user_id: int, db: AsyncSession) -> Task:
+    """Verify user has access to the task (owns it or is member of its list)."""
+    task = await db.get(Task, task_id)
+    if not task:
+        raise HTTPException(404, "Task non trovato")
+    if task.created_by == user_id:
+        return task
+    task_list = await db.get(TaskList, task.list_id)
+    if task_list and task_list.owner_id == user_id:
+        return task
+    member = await db.execute(
+        select(ListMember).where(ListMember.list_id == task.list_id, ListMember.user_id == user_id)
+    )
+    if not member.scalar_one_or_none():
+        raise HTTPException(403, "Non hai accesso a questo task")
+    return task
 
 
 @router.get("/tasks/{task_id}/comments")
 async def list_comments(task_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await _check_task_access(task_id, user.id, db)
     result = await db.execute(
         select(Comment, User.display_name)
         .join(User, Comment.user_id == User.id)
@@ -38,6 +59,7 @@ async def list_comments(task_id: int, user: User = Depends(get_current_user), db
 
 @router.post("/tasks/{task_id}/comments")
 async def add_comment(task_id: int, data: CommentCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await _check_task_access(task_id, user.id, db)
     comment = Comment(task_id=task_id, user_id=user.id, text=data.text)
     db.add(comment)
     await db.commit()

@@ -42,7 +42,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db:5432/myactivity
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-super-secret-change-in-production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}

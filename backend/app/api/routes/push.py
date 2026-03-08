@@ -33,9 +33,12 @@ async def subscribe(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Upsert: delete old with same endpoint, then insert
+    # Upsert: delete old with same endpoint for THIS user only
     await db.execute(
-        delete(PushSubscription).where(PushSubscription.endpoint == data.endpoint)
+        delete(PushSubscription).where(
+            PushSubscription.endpoint == data.endpoint,
+            PushSubscription.user_id == user.id,
+        )
     )
     sub = PushSubscription(
         user_id=user.id,

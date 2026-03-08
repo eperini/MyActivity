@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 class ShortcutTaskRequest(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=500)
     list_id: int | None = None
 
 
@@ -33,6 +33,10 @@ async def create_task_via_shortcut(
 
     # Use provided list_id or user's first owned list
     list_id = data.list_id
+    if list_id:
+        # Verify list access
+        from app.api.routes.tasks import _check_list_access
+        await _check_list_access(list_id, user.id, db)
     if not list_id:
         result = await db.execute(
             select(TaskList.id).where(TaskList.owner_id == user.id).order_by(TaskList.id).limit(1)

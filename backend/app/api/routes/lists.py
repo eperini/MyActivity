@@ -45,7 +45,7 @@ class MemberResponse(BaseModel):
 
 class AddMemberRequest(BaseModel):
     email: EmailStr
-    role: str = "edit"
+    role: str = Field(default="edit", pattern=r"^(edit|view)$")
 
 
 class UpdateMemberRole(BaseModel):

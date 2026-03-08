@@ -95,8 +95,9 @@ async def generate_api_key(
     db: AsyncSession = Depends(get_db),
 ):
     import secrets
+    import hashlib
     key = secrets.token_hex(32)
-    user.api_key = key
+    user.api_key = hashlib.sha256(key.encode()).hexdigest()
     await db.commit()
     return {"api_key": key}
 

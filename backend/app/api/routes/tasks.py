@@ -17,8 +17,8 @@ router = APIRouter()
 
 
 class TaskCreate(BaseModel):
-    title: str
-    description: str | None = None
+    title: str = Field(min_length=1, max_length=500)
+    description: str | None = Field(default=None, max_length=5000)
     list_id: int
     assigned_to: int | None = None
     priority: int = Field(default=4, ge=1, le=4)
@@ -28,8 +28,8 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    description: str | None = Field(default=None, max_length=5000)
     priority: int | None = Field(default=None, ge=1, le=4)
     status: TaskStatus | None = None
     due_date: date | None = None
@@ -74,17 +74,29 @@ def _should_sync(task) -> bool:
     )
 
 
+_gcal_engine = None
+_gcal_session_factory = None
+
+
+def _get_gcal_session():
+    """Get a reusable async session for Google Calendar sync."""
+    global _gcal_engine, _gcal_session_factory
+    if _gcal_engine is None:
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession as AS
+        _gcal_engine = create_async_engine(settings.DATABASE_URL, pool_size=2, max_overflow=2)
+        _gcal_session_factory = async_sessionmaker(_gcal_engine, class_=AS, expire_on_commit=False)
+    return _gcal_session_factory
+
+
 def _sync_task_to_gcal(task_id: int):
     """Background task: sync a task to Google Calendar."""
     if not settings.GOOGLE_CALENDAR_ID:
         return
     try:
         import asyncio
-        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession as AS
         from app.services.google_calendar import push_task_to_calendar
 
-        engine = create_async_engine(settings.DATABASE_URL)
-        Session = async_sessionmaker(engine, class_=AS, expire_on_commit=False)
+        Session = _get_gcal_session()
 
         async def _do():
             async with Session() as db:
@@ -94,11 +106,11 @@ def _sync_task_to_gcal(task_id: int):
                     if event_id and event_id != task.google_event_id:
                         task.google_event_id = event_id
                         await db.commit()
-            await engine.dispose()
 
         asyncio.run(_do())
     except Exception as e:
-        print(f"Google Calendar sync error for task {task_id}: {e}")
+        import logging
+        logging.getLogger(__name__).warning("Google Calendar sync error for task %s: %s", task_id, e)
 
 
 def _delete_task_from_gcal(event_id: str):
@@ -165,7 +177,13 @@ async def get_tasks(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Task).where(Task.created_by == user.id)
+    # Include tasks from owned lists + lists where user is a member
+    from app.models.task_list import ListMember
+    owned_list_ids = select(TaskList.id).where(TaskList.owner_id == user.id)
+    member_list_ids = select(ListMember.list_id).where(ListMember.user_id == user.id)
+    query = select(Task).where(
+        Task.list_id.in_(owned_list_ids.union(member_list_ids))
+    )
     if list_id:
         query = query.where(Task.list_id == list_id)
     if status:

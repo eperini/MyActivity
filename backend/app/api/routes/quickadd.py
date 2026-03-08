@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 class QuickAddRequest(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=500)
     list_id: int
 
 
@@ -24,6 +24,10 @@ async def quick_add_task(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Verify list access
+    from app.api.routes.tasks import _check_list_access
+    await _check_list_access(data.list_id, user.id, db)
+
     parsed = parse_quick_add(data.text)
 
     if not parsed.title:

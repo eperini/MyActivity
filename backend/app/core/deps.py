@@ -27,7 +27,9 @@ async def get_user_by_api_key(
     x_api_key: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    result = await db.execute(select(User).where(User.api_key == x_api_key))
+    import hashlib
+    key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+    result = await db.execute(select(User).where(User.api_key == key_hash))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key non valida")

@@ -1,5 +1,6 @@
 """Google Drive backup service using OAuth2 refresh token."""
 import os
+import threading
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -9,22 +10,25 @@ from googleapiclient.errors import HttpError
 from app.core.config import settings
 
 _service = None
+_lock = threading.Lock()
 
 
 def _get_service():
     global _service
     if _service is None:
-        if not settings.GOOGLE_DRIVE_CLIENT_ID or not settings.GOOGLE_DRIVE_REFRESH_TOKEN:
-            raise RuntimeError("Google Drive OAuth2 credentials not configured")
+        with _lock:
+            if _service is None:
+                if not settings.GOOGLE_DRIVE_CLIENT_ID or not settings.GOOGLE_DRIVE_REFRESH_TOKEN:
+                    raise RuntimeError("Google Drive OAuth2 credentials not configured")
 
-        creds = Credentials(
-            token=None,
-            refresh_token=settings.GOOGLE_DRIVE_REFRESH_TOKEN,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=settings.GOOGLE_DRIVE_CLIENT_ID,
-            client_secret=settings.GOOGLE_DRIVE_CLIENT_SECRET,
-        )
-        _service = build("drive", "v3", credentials=creds, cache_discovery=False)
+                creds = Credentials(
+                    token=None,
+                    refresh_token=settings.GOOGLE_DRIVE_REFRESH_TOKEN,
+                    token_uri="https://oauth2.googleapis.com/token",
+                    client_id=settings.GOOGLE_DRIVE_CLIENT_ID,
+                    client_secret=settings.GOOGLE_DRIVE_CLIENT_SECRET,
+                )
+                _service = build("drive", "v3", credentials=creds, cache_discovery=False)
     return _service
 
 
