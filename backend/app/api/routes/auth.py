@@ -1,9 +1,12 @@
+from datetime import time
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.deps import get_current_user
 from app.core.security import hash_password, verify_password, create_access_token
 from app.models.user import User
 
@@ -27,6 +30,21 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class UserProfileResponse(BaseModel):
+    id: int
+    email: str
+    display_name: str
+    daily_report_email: bool
+    daily_report_push: bool
+    daily_report_time: str | None
+
+
+class DailyReportPreferences(BaseModel):
+    daily_report_email: bool | None = None
+    daily_report_push: bool | None = None
+    daily_report_time: str | None = None  # "HH:MM" format
 
 
 @router.post("/register", response_model=TokenResponse)
@@ -57,3 +75,36 @@ async def login(request: Request, data: LoginRequest, db: AsyncSession = Depends
         raise HTTPException(status_code=401, detail="Credenziali non valide")
 
     return TokenResponse(access_token=create_access_token(user.id))
+
+
+@router.get("/me", response_model=UserProfileResponse)
+async def get_profile(user: User = Depends(get_current_user)):
+    return UserProfileResponse(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        daily_report_email=user.daily_report_email,
+        daily_report_push=user.daily_report_push,
+        daily_report_time=user.daily_report_time.strftime("%H:%M") if user.daily_report_time else "07:00",
+    )
+
+
+@router.patch("/me/preferences")
+async def update_preferences(
+    data: DailyReportPreferences,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if data.daily_report_email is not None:
+        user.daily_report_email = data.daily_report_email
+    if data.daily_report_push is not None:
+        user.daily_report_push = data.daily_report_push
+    if data.daily_report_time is not None:
+        try:
+            h, m = data.daily_report_time.split(":")
+            user.daily_report_time = time(int(h), int(m))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Formato orario non valido (usa HH:MM)")
+
+    await db.commit()
+    return {"detail": "Preferenze aggiornate"}

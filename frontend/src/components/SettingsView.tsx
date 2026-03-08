@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups } from "@/lib/api";
+import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock } from "lucide-react";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences } from "@/lib/api";
 
 function getApiUrl(): string {
   if (typeof window === "undefined") return "http://localhost:8000/api";
@@ -24,6 +24,11 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [backupMessage, setBackupMessage] = useState("");
   const [backups, setBackups] = useState<{ name: string; size: number; created: string }[]>([]);
   const [backupConfigured, setBackupConfigured] = useState(false);
+  const [reportEmail, setReportEmail] = useState(false);
+  const [reportPush, setReportPush] = useState(false);
+  const [reportTime, setReportTime] = useState("07:00");
+  const [reportSaving, setReportSaving] = useState(false);
+  const [reportMessage, setReportMessage] = useState("");
 
   useEffect(() => {
     getGoogleCalendarConfig()
@@ -31,6 +36,13 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
       .catch(() => {});
     listBackups()
       .then((res) => { setBackups(res.backups); setBackupConfigured(res.configured); })
+      .catch(() => {});
+    getProfile()
+      .then((p) => {
+        setReportEmail(p.daily_report_email);
+        setReportPush(p.daily_report_push);
+        setReportTime(p.daily_report_time || "07:00");
+      })
       .catch(() => {});
   }, []);
 
@@ -292,6 +304,71 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
             )}
           </>
         )}
+      </div>
+
+      {/* Daily Report */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+          <Mail size={16} />
+          Report giornaliero
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Ricevi ogni mattina un riepilogo dei task in scadenza oggi, domani e in ritardo. Scegli come riceverlo e a che ora.
+        </p>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={reportEmail}
+              onChange={(e) => setReportEmail(e.target.checked)}
+              className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+            />
+            <span className="text-sm text-zinc-300">Invia via email</span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={reportPush}
+              onChange={(e) => setReportPush(e.target.checked)}
+              className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+            />
+            <span className="text-sm text-zinc-300">Notifica push sul telefono</span>
+          </label>
+          <div className="flex items-center gap-3">
+            <Clock size={16} className="text-zinc-500" />
+            <span className="text-sm text-zinc-400">Orario invio:</span>
+            <input
+              type="time"
+              value={reportTime}
+              onChange={(e) => setReportTime(e.target.value)}
+              className="bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+        <button
+          onClick={async () => {
+            setReportSaving(true);
+            setReportMessage("");
+            try {
+              await updatePreferences({
+                daily_report_email: reportEmail,
+                daily_report_push: reportPush,
+                daily_report_time: reportTime,
+              });
+              setReportMessage("Preferenze salvate!");
+              setTimeout(() => setReportMessage(""), 3000);
+            } catch (err) {
+              setReportMessage("Errore: " + (err instanceof Error ? err.message : "sconosciuto"));
+            } finally {
+              setReportSaving(false);
+            }
+          }}
+          disabled={reportSaving}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition-colors"
+        >
+          {reportSaving ? "Salvataggio..." : "Salva preferenze"}
+        </button>
+        {reportMessage && <p className="text-xs text-zinc-400">{reportMessage}</p>}
       </div>
 
       {/* Export */}

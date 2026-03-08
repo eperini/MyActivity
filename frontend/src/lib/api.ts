@@ -207,6 +207,22 @@ export const triggerBackup = () =>
 export const listBackups = () =>
   request<{ backups: { name: string; size: number; created: string }[]; configured: boolean }>("/backup/list");
 
+// User profile & preferences
+export interface UserProfile {
+  id: number;
+  email: string;
+  display_name: string;
+  daily_report_email: boolean;
+  daily_report_push: boolean;
+  daily_report_time: string | null;
+}
+export const getProfile = () => request<UserProfile>("/auth/me");
+export const updatePreferences = (data: {
+  daily_report_email?: boolean;
+  daily_report_push?: boolean;
+  daily_report_time?: string;
+}) => request<{ detail: string }>("/auth/me/preferences", { method: "PATCH", body: JSON.stringify(data) });
+
 // Stats
 export const getDashboardStats = () => request<{
   total_tasks: number;

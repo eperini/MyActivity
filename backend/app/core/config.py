@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     GOOGLE_CREDENTIALS_FILE: str = "/app/google-credentials.json"
     GOOGLE_CALENDAR_ID: str = ""
     GOOGLE_SYNC_LIST_ID: int = 0
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "noreply@myactivity.local"
     GOOGLE_DRIVE_FOLDER_ID: str = ""
     GOOGLE_DRIVE_CLIENT_ID: str = ""
     GOOGLE_DRIVE_CLIENT_SECRET: str = ""

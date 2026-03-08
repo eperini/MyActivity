@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 
-from sqlalchemy import String, Boolean, DateTime, BigInteger
+from sqlalchemy import String, Boolean, DateTime, BigInteger, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -18,6 +18,12 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    # Daily report preferences
+    daily_report_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    daily_report_push: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    daily_report_time: Mapped[time | None] = mapped_column(Time, nullable=True, default=lambda: time(7, 0))
+    daily_report_last_sent: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     owned_lists: Mapped[list["TaskList"]] = relationship(back_populates="owner")
     list_memberships: Mapped[list["ListMember"]] = relationship(back_populates="user")

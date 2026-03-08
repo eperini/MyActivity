@@ -2,6 +2,8 @@
 Worker Celery per:
 1. Generare le istanze dei task ricorrenti (ogni giorno alle 00:05)
 2. Controllare e inviare notifiche (ogni minuto)
+3. Inviare il report giornaliero (ogni 5 minuti, check orario utente)
+4. Backup database su Google Drive (ogni giorno alle 03:00)
 
 Usa SQLAlchemy sincrono (psycopg2) per evitare problemi di event loop con Celery.
 """
@@ -193,3 +195,200 @@ def check_and_send_notifications():
 
         db.commit()
         return f"Inviate {sent_count} notifiche"
+
+
+@celery_app.task
+def send_daily_reports():
+    """Controlla quali utenti devono ricevere il report giornaliero e lo invia."""
+    import json
+    from zoneinfo import ZoneInfo
+
+    from sqlalchemy import or_
+    from app.models.user import User
+    from app.models.task import Task, TaskStatus
+    from app.models.task_list import ListMember
+
+    rome_tz = ZoneInfo("Europe/Rome")
+    now_rome = datetime.now(rome_tz)
+    now_utc = datetime.now(timezone.utc)
+    today = now_rome.date()
+    tomorrow = today + timedelta(days=1)
+
+    with _SessionLocal() as db:
+        # Find users with daily report enabled (email or push)
+        users = db.execute(
+            select(User).where(
+                or_(User.daily_report_email == True, User.daily_report_push == True)
+            )
+        ).scalars().all()
+
+        sent_count = 0
+        for user in users:
+            if not user.daily_report_time:
+                continue
+
+            # Check if it's time to send (within 5-minute window)
+            report_dt = datetime.combine(today, user.daily_report_time, tzinfo=rome_tz)
+            diff_minutes = (now_rome - report_dt).total_seconds() / 60
+            if diff_minutes < 0 or diff_minutes >= 5:
+                continue
+
+            # Check if already sent today
+            if user.daily_report_last_sent:
+                last_sent_rome = user.daily_report_last_sent.astimezone(rome_tz)
+                if last_sent_rome.date() == today:
+                    continue
+
+            # Get user's list IDs (owned + member)
+            list_ids = set()
+            from app.models.task_list import TaskList
+            owned = db.execute(
+                select(TaskList.id).where(TaskList.owner_id == user.id)
+            ).scalars().all()
+            list_ids.update(owned)
+            member_of = db.execute(
+                select(ListMember.list_id).where(ListMember.user_id == user.id)
+            ).scalars().all()
+            list_ids.update(member_of)
+
+            if not list_ids:
+                continue
+
+            # Query tasks
+            base_q = select(Task).where(
+                Task.list_id.in_(list_ids),
+                Task.status != TaskStatus.DONE,
+            )
+
+            overdue_tasks = db.execute(
+                base_q.where(Task.due_date < today)
+            ).scalars().all()
+
+            today_tasks = db.execute(
+                base_q.where(Task.due_date == today)
+            ).scalars().all()
+
+            tomorrow_tasks = db.execute(
+                base_q.where(Task.due_date == tomorrow)
+            ).scalars().all()
+
+            if not overdue_tasks and not today_tasks and not tomorrow_tasks:
+                user.daily_report_last_sent = now_utc
+                continue
+
+            # Build report
+            priority_emoji = {1: "🔴", 2: "🟠", 3: "🟡", 4: "⚪"}
+
+            def task_line(t):
+                emoji = priority_emoji.get(t.priority, "⚪")
+                time_str = f" alle {t.due_time.strftime('%H:%M')}" if t.due_time else ""
+                return f"{emoji} {t.title}{time_str}"
+
+            # Send email
+            if user.daily_report_email:
+                html = _build_report_html(
+                    user.display_name, today, overdue_tasks, today_tasks, tomorrow_tasks, priority_emoji
+                )
+                from app.services.email_service import send_email
+                send_email(user.email, f"📋 Report giornaliero - {today.strftime('%d/%m/%Y')}", html)
+
+            # Send push notification
+            if user.daily_report_push:
+                lines = []
+                if overdue_tasks:
+                    lines.append(f"⚠️ {len(overdue_tasks)} in ritardo")
+                if today_tasks:
+                    lines.append(f"📅 {len(today_tasks)} oggi")
+                if tomorrow_tasks:
+                    lines.append(f"📆 {len(tomorrow_tasks)} domani")
+                body = " · ".join(lines)
+
+                from app.models.push_subscription import PushSubscription
+                subs = db.execute(
+                    select(PushSubscription).where(PushSubscription.user_id == user.id)
+                ).scalars().all()
+
+                if subs:
+                    _send_push_to_subs(subs, "📋 Report giornaliero", body, db)
+
+            # Send Telegram
+            if user.telegram_chat_id:
+                text = f"📋 <b>Report giornaliero</b> - {today.strftime('%d/%m/%Y')}\n"
+                if overdue_tasks:
+                    text += f"\n⚠️ <b>In ritardo ({len(overdue_tasks)})</b>\n"
+                    text += "\n".join(task_line(t) for t in overdue_tasks[:10])
+                    text += "\n"
+                if today_tasks:
+                    text += f"\n📅 <b>Oggi ({len(today_tasks)})</b>\n"
+                    text += "\n".join(task_line(t) for t in today_tasks[:10])
+                    text += "\n"
+                if tomorrow_tasks:
+                    text += f"\n📆 <b>Domani ({len(tomorrow_tasks)})</b>\n"
+                    text += "\n".join(task_line(t) for t in tomorrow_tasks[:10])
+
+                from app.services.telegram_service import send_message_sync
+                if user.daily_report_email or user.daily_report_push:
+                    send_message_sync(user.telegram_chat_id, text)
+
+            user.daily_report_last_sent = now_utc
+            sent_count += 1
+
+        db.commit()
+        return f"Report giornaliero inviato a {sent_count} utenti"
+
+
+def _build_report_html(display_name, today, overdue, today_tasks, tomorrow_tasks, emojis):
+    """Build HTML email for the daily report."""
+    priority_colors = {1: "#ef4444", 2: "#f97316", 3: "#eab308", 4: "#9ca3af"}
+
+    def task_row(t):
+        color = priority_colors.get(t.priority, "#9ca3af")
+        time_str = f" <span style='color:#888'>alle {t.due_time.strftime('%H:%M')}</span>" if t.due_time else ""
+        return f"<li style='padding:4px 0'><span style='color:{color};font-weight:bold'>●</span> {t.title}{time_str}</li>"
+
+    sections = ""
+    if overdue:
+        sections += f"<h3 style='color:#ef4444;margin-top:16px'>⚠️ In ritardo ({len(overdue)})</h3><ul style='list-style:none;padding:0'>{''.join(task_row(t) for t in overdue)}</ul>"
+    if today_tasks:
+        sections += f"<h3 style='color:#3b82f6;margin-top:16px'>📅 Oggi ({len(today_tasks)})</h3><ul style='list-style:none;padding:0'>{''.join(task_row(t) for t in today_tasks)}</ul>"
+    if tomorrow_tasks:
+        sections += f"<h3 style='color:#8b5cf6;margin-top:16px'>📆 Domani ({len(tomorrow_tasks)})</h3><ul style='list-style:none;padding:0'>{''.join(task_row(t) for t in tomorrow_tasks)}</ul>"
+
+    return f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e0e0e0;padding:24px;border-radius:12px">
+      <h2 style="color:#fff;margin-bottom:4px">📋 Report giornaliero</h2>
+      <p style="color:#888;margin-top:0">{display_name} · {today.strftime('%A %d %B %Y')}</p>
+      {sections}
+      <hr style="border-color:#333;margin-top:24px">
+      <p style="color:#666;font-size:12px;text-align:center">MyActivity</p>
+    </div>
+    """
+
+
+def _send_push_to_subs(subs, title, body, db):
+    """Send web push notifications to subscriptions."""
+    import json
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        return
+
+    payload = json.dumps({
+        "title": title,
+        "body": body,
+        "icon": "/icons/icon-192.png",
+    })
+
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                },
+                data=payload,
+                vapid_private_key=settings.VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": settings.VAPID_MAILTO},
+            )
+        except Exception:
+            db.delete(sub)

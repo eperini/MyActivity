@@ -24,6 +24,11 @@ celery_app.conf.update(
             "task": "app.workers.tasks.generate_recurring_instances",
             "schedule": crontab(hour=0, minute=5),
         },
+        # Report giornaliero - controlla ogni 5 minuti se ci sono utenti da notificare
+        "send-daily-reports": {
+            "task": "app.workers.tasks.send_daily_reports",
+            "schedule": 300.0,
+        },
         # Backup database su Google Drive ogni giorno alle 03:00
         "backup-database": {
             "task": "app.workers.tasks.backup_database_to_drive",
