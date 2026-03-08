@@ -217,13 +217,13 @@ export default function EisenhowerMatrix({
 }: EisenhowerMatrixProps) {
   return (
     <div className="flex-1 flex flex-col h-full bg-zinc-950">
-      {/* Header */}
-      <div className="flex items-center px-6 py-4 border-b border-zinc-800">
+      {/* Header - hidden on mobile */}
+      <div className="hidden md:flex items-center px-6 py-4 border-b border-zinc-800">
         <h1 className="text-lg font-semibold text-white">Matrice di Eisenhower</h1>
       </div>
 
       {/* 2x2 Grid */}
-      <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-2 p-3 min-h-0">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 md:grid-rows-2 gap-2 p-3 min-h-0 overflow-y-auto pb-20 md:pb-3 md:overflow-hidden">
         {QUADRANTS.map((q) => (
           <QuadrantPanel
             key={q.title}

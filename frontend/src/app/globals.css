@@ -2,6 +2,12 @@
 
 @theme inline {
   --font-sans: var(--font-geist);
+  --animate-slide-in: slide-in 0.2s ease-out;
+}
+
+@keyframes slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
 }
 
 * {

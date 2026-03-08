@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime as dt
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -91,6 +91,11 @@ async def trigger_sync(
         if not sync_list:
             return {"pushed": pushed, "pulled": 0, "detail": "Lista sync non trovata"}
 
+        # For recurring events, keep only the next occurrence (closest to today)
+        today = date.today()
+        recurring_best: dict[str, dict] = {}  # recurringEventId -> best event
+        single_events: list[dict] = []
+
         for event in events:
             if event.get("status") == "cancelled":
                 continue
@@ -103,6 +108,49 @@ async def trigger_sync(
             if ext_props.get("myactivity_task_id"):
                 continue
 
+            recurring_id = event.get("recurringEventId")
+            if recurring_id:
+                # Also skip if we already have any instance of this recurring event
+                # Check by recurringEventId prefix in existing event ids
+                # Parse event date for comparison
+                start = event.get("start", {})
+                event_date = None
+                if "date" in start:
+                    event_date = date.fromisoformat(start["date"])
+                elif "dateTime" in start:
+                    event_date = dt.fromisoformat(start["dateTime"]).date()
+
+                if event_date and event_date >= today:
+                    prev = recurring_best.get(recurring_id)
+                    if prev is None:
+                        recurring_best[recurring_id] = event
+                    else:
+                        # Keep the one closest to today (earliest future)
+                        prev_start = prev.get("start", {})
+                        prev_date = None
+                        if "date" in prev_start:
+                            prev_date = date.fromisoformat(prev_start["date"])
+                        elif "dateTime" in prev_start:
+                            prev_date = dt.fromisoformat(prev_start["dateTime"]).date()
+                        if prev_date and event_date < prev_date:
+                            recurring_best[recurring_id] = event
+            else:
+                single_events.append(event)
+
+        # Also check if any recurring event's base ID is already imported
+        existing_titles_dates = set()
+        if recurring_best:
+            title_result = await db.execute(
+                select(Task.title, Task.due_date).where(
+                    Task.list_id == sync_list_id,
+                )
+            )
+            existing_titles_dates = {(r[0], r[1]) for r in title_result.all()}
+
+        # Combine: single events + best occurrence of each recurring event
+        events_to_import = single_events + list(recurring_best.values())
+
+        for event in events_to_import:
             summary = event.get("summary", "Evento senza titolo")
             description = event.get("description", "")
 
@@ -113,10 +161,13 @@ async def trigger_sync(
             if "date" in start:
                 due_date = date.fromisoformat(start["date"])
             elif "dateTime" in start:
-                from datetime import datetime as dt
                 parsed = dt.fromisoformat(start["dateTime"])
                 due_date = parsed.date()
                 due_time = parsed.time()
+
+            # Skip if we already have a task with same title and date
+            if (summary, due_date) in existing_titles_dates:
+                continue
 
             task = Task(
                 title=summary,
@@ -125,7 +176,7 @@ async def trigger_sync(
                 created_by=sync_list.owner_id,
                 due_date=due_date,
                 due_time=due_time,
-                google_event_id=event_id,
+                google_event_id=event.get("id"),
                 priority=4,
             )
             db.add(task)

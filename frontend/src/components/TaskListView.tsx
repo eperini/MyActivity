@@ -98,8 +98,8 @@ export default function TaskListView({
 
   return (
     <div className="flex-1 flex flex-col h-full bg-zinc-950">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+      {/* Header - hidden on mobile (MobileHeader is used) */}
+      <div className="hidden md:flex items-center justify-between px-6 py-4 border-b border-zinc-800">
         <h1 className="text-lg font-semibold text-white">{title}</h1>
         <span className="text-xs text-zinc-500">
           {filteredAndSorted.length}{hasActiveFilters ? `/${tasks.length}` : ""} task
@@ -135,7 +135,7 @@ export default function TaskListView({
           </button>
           <button
             onClick={() => setShowAddForm(true)}
-            className="p-2 text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 rounded-lg transition-colors"
+            className="hidden md:block p-2 text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 rounded-lg transition-colors"
           >
             <Plus size={16} />
           </button>
@@ -201,7 +201,7 @@ export default function TaskListView({
       </div>
 
       {/* Task list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
         {filteredAndSorted.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-zinc-600">
             <p className="text-sm">

@@ -12,6 +12,8 @@ interface SidebarProps {
   taskCounts: Record<string, number>;
   onListCreated: () => void;
   onShareList?: (list: TaskList) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 const NAV_ITEMS = [
@@ -31,7 +33,7 @@ const LIST_COLORS = [
   "#EC4899", "#06B6D4", "#F97316", "#6366F1", "#14B8A6",
 ];
 
-export default function Sidebar({ lists, selectedView, onSelectView, taskCounts, onListCreated, onShareList }: SidebarProps) {
+export default function Sidebar({ lists, selectedView, onSelectView, taskCounts, onListCreated, onShareList, isOpen, onClose }: SidebarProps) {
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [newListColor, setNewListColor] = useState(LIST_COLORS[0]);
@@ -52,6 +54,11 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
       return () => document.removeEventListener("mousedown", handleClick);
     }
   }, [contextMenu]);
+
+  function handleNav(view: string) {
+    onSelectView(view);
+    onClose?.();
+  }
 
   async function handleCreateList() {
     if (!newListName.trim()) return;
@@ -96,8 +103,8 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
     setContextMenu({ listId, x: e.clientX, y: e.clientY });
   }
 
-  return (
-    <aside className="w-56 h-full bg-zinc-900 border-r border-zinc-800 flex flex-col py-4 text-sm">
+  const sidebarContent = (
+    <aside className="w-full md:w-56 h-full bg-zinc-900 flex flex-col py-4 text-sm overflow-y-auto">
       {/* Navigation */}
       <nav className="px-3 space-y-0.5">
         {NAV_ITEMS.map((item) => {
@@ -107,15 +114,15 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
           return (
             <button
               key={item.id}
-              onClick={() => onSelectView(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+              onClick={() => handleNav(item.id)}
+              className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors ${
                 isActive
                   ? "bg-zinc-800 text-white"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
               }`}
             >
-              <Icon size={18} />
-              <span className="flex-1 text-left">{item.label}</span>
+              <Icon size={20} className="md:w-[18px] md:h-[18px]" />
+              <span className="flex-1 text-left text-base md:text-sm">{item.label}</span>
               {count > 0 && (
                 <span className="text-xs text-zinc-500">{count}</span>
               )}
@@ -235,19 +242,19 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
             return (
               <div
                 key={list.id}
-                className={`group flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-pointer ${
+                className={`group flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors cursor-pointer ${
                   isActive
                     ? "bg-zinc-800 text-white"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
                 }`}
-                onClick={() => onSelectView(`list-${list.id}`)}
+                onClick={() => handleNav(`list-${list.id}`)}
                 onContextMenu={(e) => handleContextMenu(e, list.id)}
               >
                 <span
                   className="w-3 h-3 rounded-full flex-shrink-0"
                   style={{ backgroundColor: list.color }}
                 />
-                <span className="flex-1 text-left truncate">{list.name}</span>
+                <span className="flex-1 text-left truncate text-base md:text-sm">{list.name}</span>
                 {count > 0 && (
                   <span className="text-xs text-zinc-500 group-hover:hidden">{count}</span>
                 )}
@@ -262,6 +269,52 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
           })}
         </div>
       </div>
+
+      {/* Bottom */}
+      <div className="mt-auto px-3 space-y-0.5">
+        <button
+          onClick={() => handleNav("completed")}
+          className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors ${
+            selectedView === "completed" ? "bg-zinc-800 text-white" : ""
+          }`}
+        >
+          <CheckCircle2 size={20} className="md:w-[18px] md:h-[18px]" />
+          <span className="text-base md:text-sm">Completati</span>
+        </button>
+        <button
+          onClick={() => handleNav("trash")}
+          className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors ${
+            selectedView === "trash" ? "bg-zinc-800 text-white" : ""
+          }`}
+        >
+          <Trash2 size={20} className="md:w-[18px] md:h-[18px]" />
+          <span className="text-base md:text-sm">Cestino</span>
+        </button>
+      </div>
+    </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop: inline sidebar */}
+      <div className="hidden md:flex md:flex-shrink-0 border-r border-zinc-800">
+        {sidebarContent}
+      </div>
+
+      {/* Mobile: overlay sidebar */}
+      {isOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={onClose}
+          />
+          {/* Panel */}
+          <div className="absolute inset-y-0 left-0 w-72 animate-slide-in">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
 
       {/* Context menu */}
       {contextMenu && (
@@ -330,28 +383,6 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
           </div>
         </div>
       )}
-
-      {/* Bottom */}
-      <div className="mt-auto px-3 space-y-0.5">
-        <button
-          onClick={() => onSelectView("completed")}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors ${
-            selectedView === "completed" ? "bg-zinc-800 text-white" : ""
-          }`}
-        >
-          <CheckCircle2 size={18} />
-          <span>Completati</span>
-        </button>
-        <button
-          onClick={() => onSelectView("trash")}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors ${
-            selectedView === "trash" ? "bg-zinc-800 text-white" : ""
-          }`}
-        >
-          <Trash2 size={18} />
-          <span>Cestino</span>
-        </button>
-      </div>
-    </aside>
+    </>
   );
 }

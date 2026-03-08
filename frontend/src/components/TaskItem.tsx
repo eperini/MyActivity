@@ -34,7 +34,7 @@ export default function TaskItem({ task, list, isSelected, onSelect, onToggle }:
   return (
     <div
       onClick={() => onSelect(task)}
-      className={`group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors border-l-2 ${
+      className={`group flex items-start gap-3 px-4 py-4 md:py-3 cursor-pointer transition-colors border-l-2 ${
         isSelected
           ? "bg-zinc-800/80 border-l-blue-500"
           : "border-l-transparent hover:bg-zinc-800/40"
@@ -46,7 +46,7 @@ export default function TaskItem({ task, list, isSelected, onSelect, onToggle }:
           e.stopPropagation();
           onToggle(task);
         }}
-        className={`mt-0.5 w-[18px] h-[18px] rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+        className={`mt-0.5 w-5 h-5 md:w-[18px] md:h-[18px] rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
           isDone ? "bg-zinc-600 border-zinc-600" : PRIORITY_COLORS[task.priority] || PRIORITY_COLORS[4]
         }`}
       >
@@ -59,7 +59,7 @@ export default function TaskItem({ task, list, isSelected, onSelect, onToggle }:
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <div className={`text-sm ${isDone ? "line-through text-zinc-500" : "text-zinc-200"}`}>
+        <div className={`text-base md:text-sm ${isDone ? "line-through text-zinc-500" : "text-zinc-200"}`}>
           {task.title}
         </div>
         {list && (

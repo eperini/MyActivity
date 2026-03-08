@@ -7,6 +7,7 @@ import {
   getTasks, getLists, updateTask, deleteTask,
   getHabits, getWeekLogs, toggleHabitLog, deleteHabit,
 } from "@/lib/api";
+import useIsMobile from "@/hooks/useIsMobile";
 import Sidebar from "@/components/Sidebar";
 import TaskListView from "@/components/TaskListView";
 import TaskDetail from "@/components/TaskDetail";
@@ -14,6 +15,7 @@ import DayCalendar from "@/components/DayCalendar";
 import HabitListView from "@/components/HabitListView";
 import HabitDetail from "@/components/HabitDetail";
 import AddHabitForm from "@/components/AddHabitForm";
+import AddTaskForm from "@/components/AddTaskForm";
 import EisenhowerMatrix from "@/components/EisenhowerMatrix";
 import PomodoroTimer from "@/components/PomodoroTimer";
 import PomodoroHistory from "@/components/PomodoroHistory";
@@ -21,15 +23,24 @@ import CalendarView from "@/components/CalendarView";
 import ShareListModal from "@/components/ShareListModal";
 import StatsView from "@/components/StatsView";
 import SettingsView from "@/components/SettingsView";
+import BottomTabBar from "@/components/BottomTabBar";
+import MobileHeader from "@/components/MobileHeader";
+import FloatingAddButton from "@/components/FloatingAddButton";
 import { isToday, parseISO, differenceInDays } from "date-fns";
 
 export default function HomePage() {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [lists, setLists] = useState<TaskList[]>([]);
   const [selectedView, setSelectedView] = useState("inbox");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Mobile sidebar
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Mobile add task
+  const [showMobileAdd, setShowMobileAdd] = useState(false);
 
   // Habits state
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -81,7 +92,7 @@ export default function HomePage() {
     }
   }, [selectedView, loadHabits]);
 
-  // Clear task selection when switching to habits, and vice versa
+  // Clear task selection when switching views
   function handleSelectView(view: string) {
     setSelectedView(view);
     if (view === "habits") {
@@ -150,6 +161,12 @@ export default function HomePage() {
     next7: "Prossimi 7 Giorni",
     inbox: "Inbox",
     completed: "Completati",
+    calendar: "Calendario",
+    habits: "Abitudini",
+    eisenhower: "Eisenhower",
+    pomodoro: "Pomodoro",
+    stats: "Statistiche",
+    settings: "Impostazioni",
   };
   const viewTitle = selectedView.startsWith("list-")
     ? lists.find((l) => l.id === parseInt(selectedView.split("-")[1]))?.name || "Lista"
@@ -216,6 +233,9 @@ export default function HomePage() {
     }
   }
 
+  // Should show FAB?
+  const showFab = ["inbox", "today", "next7", "completed", "habits"].includes(selectedView) || selectedView.startsWith("list-");
+
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -233,6 +253,9 @@ export default function HomePage() {
   const isCalendarView = selectedView === "calendar";
   const isStatsView = selectedView === "stats";
   const isSettingsView = selectedView === "settings";
+
+  // Check if current view is a task list view (needs TaskDetail)
+  const isTaskListView = !isHabitsView && !isEisenhowerView && !isCalendarView && !isStatsView && !isSettingsView && selectedView !== "pomodoro";
 
   function renderMainContent() {
     if (isStatsView) {
@@ -254,15 +277,18 @@ export default function HomePage() {
             onToggleLog={handleToggleHabitLog}
             onAddHabit={() => setShowAddHabit(true)}
           />
-          {selectedHabit ? (
-            <HabitDetail
-              habit={selectedHabit}
-              onClose={() => setSelectedHabit(null)}
-              onDelete={handleDeleteHabit}
-              onToggleLog={handleToggleHabitLog}
-            />
-          ) : (
-            <DayCalendar tasks={tasks} onSelectDate={() => {}} />
+          {/* Desktop only: side panel */}
+          {!isMobile && (
+            selectedHabit ? (
+              <HabitDetail
+                habit={selectedHabit}
+                onClose={() => setSelectedHabit(null)}
+                onDelete={handleDeleteHabit}
+                onToggleLog={handleToggleHabitLog}
+              />
+            ) : (
+              <DayCalendar tasks={tasks} onSelectDate={() => {}} />
+            )
           )}
           {showAddHabit && (
             <AddHabitForm
@@ -280,30 +306,19 @@ export default function HomePage() {
           <PomodoroTimer
             onSessionComplete={() => setPomodoroRefreshKey((k) => k + 1)}
           />
-          <PomodoroHistory refreshKey={pomodoroRefreshKey} />
+          {!isMobile && <PomodoroHistory refreshKey={pomodoroRefreshKey} />}
         </>
       );
     }
 
     if (isEisenhowerView) {
       return (
-        <>
-          <EisenhowerMatrix
-            tasks={tasks.filter((t) => t.status !== "done")}
-            lists={lists}
-            onSelectTask={(task) => { setSelectedTask(task); }}
-            onToggleTask={handleToggle}
-          />
-          {selectedTask && (
-            <TaskDetail
-              task={selectedTask}
-              list={selectedList}
-              onClose={() => setSelectedTask(null)}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-            />
-          )}
-        </>
+        <EisenhowerMatrix
+          tasks={tasks.filter((t) => t.status !== "done")}
+          lists={lists}
+          onSelectTask={(task) => { setSelectedTask(task); }}
+          onToggleTask={handleToggle}
+        />
       );
     }
 
@@ -319,6 +334,7 @@ export default function HomePage() {
       );
     }
 
+    // Default: task list views (inbox, today, next7, completed, list-*)
     return (
       <>
         <TaskListView
@@ -335,23 +351,27 @@ export default function HomePage() {
           onToggleTask={handleToggle}
           onTaskCreated={loadData}
         />
-        {selectedTask ? (
-          <TaskDetail
-            task={selectedTask}
-            list={selectedList}
-            onClose={() => setSelectedTask(null)}
-            onUpdate={handleUpdate}
-            onDelete={handleDelete}
-          />
-        ) : (
-          <DayCalendar tasks={tasks} onSelectDate={() => {}} />
+        {/* Desktop only: side panel */}
+        {!isMobile && (
+          selectedTask ? (
+            <TaskDetail
+              task={selectedTask}
+              list={selectedList}
+              onClose={() => setSelectedTask(null)}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
+          ) : (
+            <DayCalendar tasks={tasks} onSelectDate={() => {}} />
+          )
         )}
       </>
     );
   }
 
   return (
-    <div className="h-screen bg-zinc-950 text-white flex">
+    <div className="h-screen bg-zinc-950 text-white flex flex-col md:flex-row">
+      {/* Sidebar */}
       <Sidebar
         lists={lists}
         selectedView={selectedView}
@@ -359,11 +379,46 @@ export default function HomePage() {
         taskCounts={taskCounts}
         onListCreated={loadData}
         onShareList={setShareList}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
-      {renderMainContent()}
 
-      {/* Calendar task detail overlay */}
-      {isCalendarView && selectedTask && (
+      {/* Mobile header */}
+      <MobileHeader
+        title={viewTitle}
+        onOpenSidebar={() => setSidebarOpen(true)}
+      />
+
+      {/* Main content */}
+      <div className="flex-1 flex overflow-hidden">
+        {renderMainContent()}
+      </div>
+
+      {/* Mobile: TaskDetail as full-screen overlay */}
+      {isMobile && selectedTask && (
+        <TaskDetail
+          task={selectedTask}
+          list={selectedList}
+          onClose={() => setSelectedTask(null)}
+          onUpdate={handleUpdate}
+          onDelete={handleDelete}
+        />
+      )}
+
+      {/* Mobile: HabitDetail as full-screen overlay */}
+      {isMobile && selectedHabit && isHabitsView && (
+        <div className="fixed inset-0 z-40 bg-zinc-900">
+          <HabitDetail
+            habit={selectedHabit}
+            onClose={() => setSelectedHabit(null)}
+            onDelete={handleDeleteHabit}
+            onToggleLog={handleToggleHabitLog}
+          />
+        </div>
+      )}
+
+      {/* Desktop: Calendar task detail overlay */}
+      {!isMobile && isCalendarView && selectedTask && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40" onClick={() => setSelectedTask(null)}>
           <div onClick={(e) => e.stopPropagation()} className="max-h-[80vh] overflow-y-auto">
             <TaskDetail
@@ -375,6 +430,17 @@ export default function HomePage() {
             />
           </div>
         </div>
+      )}
+
+      {/* Desktop: Eisenhower task detail */}
+      {!isMobile && isEisenhowerView && selectedTask && (
+        <TaskDetail
+          task={selectedTask}
+          list={selectedList}
+          onClose={() => setSelectedTask(null)}
+          onUpdate={handleUpdate}
+          onDelete={handleDelete}
+        />
       )}
 
       {/* Share list modal */}
@@ -398,6 +464,37 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* Mobile FAB */}
+      {showFab && (
+        <FloatingAddButton onClick={() => {
+          if (isHabitsView) {
+            setShowAddHabit(true);
+          } else {
+            setShowMobileAdd(true);
+          }
+        }} />
+      )}
+
+      {/* Mobile add task form */}
+      {showMobileAdd && (
+        <AddTaskForm
+          lists={lists}
+          defaultListId={
+            selectedView.startsWith("list-")
+              ? parseInt(selectedView.split("-")[1])
+              : lists[0]?.id
+          }
+          onCreated={loadData}
+          onClose={() => setShowMobileAdd(false)}
+        />
+      )}
+
+      {/* Bottom tab bar */}
+      <BottomTabBar
+        selectedView={selectedView}
+        onSelectView={handleSelectView}
+      />
     </div>
   );
 }
@@ -426,7 +523,7 @@ function AddTaskFromCalendar({ date, lists, onCreated, onClose }: {
   }
 
   return (
-    <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-5 w-80">
+    <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-5 w-80 mx-4">
       <h3 className="text-sm font-medium text-white mb-3">Nuovo task - {date}</h3>
       <input
         autoFocus

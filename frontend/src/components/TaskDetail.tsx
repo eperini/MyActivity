@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Calendar, Flag, List, Repeat, Trash2, X } from "lucide-react";
+import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X } from "lucide-react";
 import type { Task, TaskList, RecurrenceRule } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
 import { getRecurrence, getRecurrencePreview, deleteRecurrence } from "@/lib/api";
@@ -113,20 +113,21 @@ export default function TaskDetail({ task, list, onClose, onUpdate, onDelete }: 
   }
 
   return (
-    <div className="w-80 h-full bg-zinc-900 border-l border-zinc-800 flex flex-col">
+    <div className="fixed inset-0 z-40 bg-zinc-900 flex flex-col md:relative md:inset-auto md:z-auto md:w-80 md:h-full md:border-l md:border-zinc-800">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <button
           onClick={onClose}
           className="text-zinc-400 hover:text-zinc-200 transition-colors"
         >
-          <X size={18} />
+          <ArrowLeft size={20} className="md:hidden" />
+          <X size={18} className="hidden md:block" />
         </button>
         <button
           onClick={() => onDelete(task.id)}
           className="text-zinc-400 hover:text-red-400 transition-colors"
         >
-          <Trash2 size={18} />
+          <Trash2 size={20} className="md:w-[18px] md:h-[18px]" />
         </button>
       </div>
 
