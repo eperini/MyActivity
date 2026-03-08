@@ -51,6 +51,11 @@ services:
       GOOGLE_CREDENTIALS_FILE: /app/google-credentials.json
       GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}
       GOOGLE_SYNC_LIST_ID: ${GOOGLE_SYNC_LIST_ID:-0}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      GOOGLE_DRIVE_CLIENT_ID: ${GOOGLE_DRIVE_CLIENT_ID:-}
+      GOOGLE_DRIVE_CLIENT_SECRET: ${GOOGLE_DRIVE_CLIENT_SECRET:-}
+      GOOGLE_DRIVE_REFRESH_TOKEN: ${GOOGLE_DRIVE_REFRESH_TOKEN:-}
+      BACKUP_KEEP_COUNT: ${BACKUP_KEEP_COUNT:-7}
     ports:
       - "8000:8000"
     volumes:
@@ -76,6 +81,14 @@ services:
       DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db:5432/myactivity
       REDIS_URL: redis://redis:6379/0
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      GOOGLE_DRIVE_CLIENT_ID: ${GOOGLE_DRIVE_CLIENT_ID:-}
+      GOOGLE_DRIVE_CLIENT_SECRET: ${GOOGLE_DRIVE_CLIENT_SECRET:-}
+      GOOGLE_DRIVE_REFRESH_TOKEN: ${GOOGLE_DRIVE_REFRESH_TOKEN:-}
+      BACKUP_KEEP_COUNT: ${BACKUP_KEEP_COUNT:-7}
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/google-credentials.json:/app/google-credentials.json:ro
     networks:
       - internal
     depends_on:
@@ -95,6 +108,12 @@ services:
       DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db:5432/myactivity
       REDIS_URL: redis://redis:6379/0
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      GOOGLE_DRIVE_CLIENT_ID: ${GOOGLE_DRIVE_CLIENT_ID:-}
+      GOOGLE_DRIVE_CLIENT_SECRET: ${GOOGLE_DRIVE_CLIENT_SECRET:-}
+      GOOGLE_DRIVE_REFRESH_TOKEN: ${GOOGLE_DRIVE_REFRESH_TOKEN:-}
+    volumes:
+      - ./backend/google-credentials.json:/app/google-credentials.json:ro
     networks:
       - internal
     depends_on:

@@ -201,6 +201,12 @@ export const getGoogleCalendarConfig = () =>
 export const triggerGoogleSync = () =>
   request<{ pushed: number; pulled: number }>("/google/sync", { method: "POST" });
 
+// Backup
+export const triggerBackup = () =>
+  request<{ detail: string; task_id: string }>("/backup/trigger", { method: "POST" });
+export const listBackups = () =>
+  request<{ backups: { name: string; size: number; created: string }[]; configured: boolean }>("/backup/list");
+
 // Stats
 export const getDashboardStats = () => request<{
   total_tasks: number;

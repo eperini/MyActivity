@@ -85,6 +85,71 @@ def generate_recurring_instances():
 
 
 @celery_app.task
+def backup_database_to_drive():
+    """Esegue pg_dump e carica il backup su Google Drive."""
+    import subprocess
+    import tempfile
+    import gzip
+    import os
+
+    if not settings.GOOGLE_DRIVE_FOLDER_ID:
+        return "GOOGLE_DRIVE_FOLDER_ID non configurato, backup saltato"
+
+    # Build pg connection string from DATABASE_URL
+    # Format: postgresql+asyncpg://user:pass@host:port/dbname
+    db_url = SYNC_DB_URL  # already sync format
+    from urllib.parse import urlparse
+    parsed = urlparse(db_url)
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = parsed.password or ""
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"myactivity_{timestamp}.sql.gz"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        sql_path = os.path.join(tmpdir, "dump.sql")
+        gz_path = os.path.join(tmpdir, filename)
+
+        # pg_dump
+        result = subprocess.run(
+            [
+                "pg_dump",
+                "-h", parsed.hostname or "db",
+                "-p", str(parsed.port or 5432),
+                "-U", parsed.username or "myactivity",
+                "-d", parsed.path.lstrip("/") if parsed.path else "myactivity",
+                "--no-owner",
+                "--no-acl",
+                "-f", sql_path,
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        if result.returncode != 0:
+            return f"pg_dump fallito: {result.stderr}"
+
+        # Compress
+        with open(sql_path, "rb") as f_in:
+            with gzip.open(gz_path, "wb") as f_out:
+                f_out.writelines(f_in)
+
+        file_size = os.path.getsize(gz_path)
+
+        # Upload to Google Drive
+        from app.services.google_drive import upload_backup, rotate_backups
+        file_id = upload_backup(gz_path)
+
+        # Rotate old backups
+        deleted = rotate_backups()
+
+        return f"Backup {filename} ({file_size} bytes) caricato su Drive (id={file_id}), eliminati {deleted} vecchi backup"
+
+
+@celery_app.task
 def check_and_send_notifications():
     """Controlla e invia le notifiche in scadenza."""
     from app.models.notification import Notification

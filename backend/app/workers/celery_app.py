@@ -24,5 +24,10 @@ celery_app.conf.update(
             "task": "app.workers.tasks.generate_recurring_instances",
             "schedule": crontab(hour=0, minute=5),
         },
+        # Backup database su Google Drive ogni giorno alle 03:00
+        "backup-database": {
+            "task": "app.workers.tasks.backup_database_to_drive",
+            "schedule": crontab(hour=3, minute=0),
+        },
     },
 )

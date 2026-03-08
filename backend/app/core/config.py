@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     GOOGLE_CREDENTIALS_FILE: str = "/app/google-credentials.json"
     GOOGLE_CALENDAR_ID: str = ""
     GOOGLE_SYNC_LIST_ID: int = 0
+    GOOGLE_DRIVE_FOLDER_ID: str = ""
+    GOOGLE_DRIVE_CLIENT_ID: str = ""
+    GOOGLE_DRIVE_CLIENT_SECRET: str = ""
+    GOOGLE_DRIVE_REFRESH_TOKEN: str = ""
+    BACKUP_KEEP_COUNT: int = 7
 
     class Config:
         env_file = ".env"

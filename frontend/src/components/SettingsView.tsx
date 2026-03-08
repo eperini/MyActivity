@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync } from "@/lib/api";
+import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive } from "lucide-react";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups } from "@/lib/api";
 
 function getApiUrl(): string {
   if (typeof window === "undefined") return "http://localhost:8000/api";
@@ -20,10 +20,17 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [gcalConfigured, setGcalConfigured] = useState(false);
   const [gcalSyncing, setGcalSyncing] = useState(false);
   const [gcalMessage, setGcalMessage] = useState("");
+  const [backupRunning, setBackupRunning] = useState(false);
+  const [backupMessage, setBackupMessage] = useState("");
+  const [backups, setBackups] = useState<{ name: string; size: number; created: string }[]>([]);
+  const [backupConfigured, setBackupConfigured] = useState(false);
 
   useEffect(() => {
     getGoogleCalendarConfig()
       .then((cfg) => setGcalConfigured(cfg.configured))
+      .catch(() => {});
+    listBackups()
+      .then((res) => { setBackups(res.backups); setBackupConfigured(res.configured); })
       .catch(() => {});
   }, []);
 
@@ -188,6 +195,62 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
         ) : (
           <p className="text-xs text-zinc-500">
             Google Calendar non configurato. Contatta l'amministratore per abilitare la sincronizzazione.
+          </p>
+        )}
+      </div>
+
+      {/* Backup */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+          <HardDrive size={16} />
+          Backup Database
+        </h3>
+        {backupConfigured ? (
+          <>
+            <p className="text-xs text-zinc-500">
+              Backup automatico ogni giorno alle 03:00 su Google Drive. Gli ultimi 7 backup vengono mantenuti.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={async () => {
+                  setBackupRunning(true);
+                  setBackupMessage("");
+                  try {
+                    await triggerBackup();
+                    setBackupMessage("Backup avviato. Potrebbe richiedere qualche minuto.");
+                    // Refresh list after a delay
+                    setTimeout(() => {
+                      listBackups().then((res) => setBackups(res.backups)).catch(() => {});
+                    }, 10000);
+                  } catch (err) {
+                    setBackupMessage("Errore: " + (err instanceof Error ? err.message : "sconosciuto"));
+                  } finally {
+                    setBackupRunning(false);
+                  }
+                }}
+                disabled={backupRunning}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition-colors"
+              >
+                <RefreshCw size={16} className={backupRunning ? "animate-spin" : ""} />
+                {backupRunning ? "In corso..." : "Backup ora"}
+              </button>
+            </div>
+            {backupMessage && <p className="text-xs text-zinc-400">{backupMessage}</p>}
+            {backups.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[10px] text-zinc-600 uppercase tracking-wider">Ultimi backup</span>
+                {backups.slice(0, 5).map((b) => (
+                  <div key={b.name} className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-400">{b.name}</span>
+                    <span className="text-zinc-600">{(b.size / 1024).toFixed(1)} KB</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-zinc-500">
+            Backup su Google Drive non configurato. Imposta GOOGLE_DRIVE_FOLDER_ID nelle variabili d'ambiente.
           </p>
         )}
       </div>
