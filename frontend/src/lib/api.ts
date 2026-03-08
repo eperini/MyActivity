@@ -195,6 +195,12 @@ export async function importTasks(file: File): Promise<{ tasks_imported: number;
   return res.json();
 }
 
+// Google Calendar
+export const getGoogleCalendarConfig = () =>
+  request<{ calendar_id: string; sync_list_id: number; configured: boolean }>("/google/config");
+export const triggerGoogleSync = () =>
+  request<{ pushed: number; pulled: number }>("/google/sync", { method: "POST" });
+
 // Stats
 export const getDashboardStats = () => request<{
   total_tasks: number;

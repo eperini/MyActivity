@@ -29,6 +29,7 @@ export interface Task {
   due_time: string | null;
   parent_id: number | null;
   has_recurrence?: boolean;
+  next_occurrence?: string | null;
 }
 
 export interface RecurrenceRule {

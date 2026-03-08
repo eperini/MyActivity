@@ -47,10 +47,15 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_MAILTO: ${VAPID_MAILTO:-mailto:admin@myactivity.local}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      GOOGLE_CREDENTIALS_FILE: /app/google-credentials.json
+      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}
+      GOOGLE_SYNC_LIST_ID: ${GOOGLE_SYNC_LIST_ID:-0}
     ports:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
+      - ./backend/google-credentials.json:/app/google-credentials.json:ro
     networks:
       - internal
       - frontend

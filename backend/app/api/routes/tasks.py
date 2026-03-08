@@ -1,9 +1,10 @@
 from datetime import date, time
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
@@ -48,24 +49,76 @@ class TaskResponse(BaseModel):
     due_time: time | None
     parent_id: int | None
     has_recurrence: bool = False
+    next_occurrence: date | None = None
 
     class Config:
         from_attributes = True
 
 
+def _should_sync(task) -> bool:
+    """Only sync tasks from the configured sync list."""
+    return (
+        settings.GOOGLE_CALENDAR_ID
+        and settings.GOOGLE_SYNC_LIST_ID
+        and task.list_id == settings.GOOGLE_SYNC_LIST_ID
+        and task.due_date is not None
+    )
+
+
+def _sync_task_to_gcal(task_id: int):
+    """Background task: sync a task to Google Calendar."""
+    if not settings.GOOGLE_CALENDAR_ID:
+        return
+    try:
+        import asyncio
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession as AS
+        from app.services.google_calendar import push_task_to_calendar
+
+        engine = create_async_engine(settings.DATABASE_URL)
+        Session = async_sessionmaker(engine, class_=AS, expire_on_commit=False)
+
+        async def _do():
+            async with Session() as db:
+                task = await db.get(Task, task_id)
+                if task and _should_sync(task):
+                    event_id = push_task_to_calendar(task)
+                    if event_id and event_id != task.google_event_id:
+                        task.google_event_id = event_id
+                        await db.commit()
+            await engine.dispose()
+
+        asyncio.run(_do())
+    except Exception as e:
+        print(f"Google Calendar sync error for task {task_id}: {e}")
+
+
+def _delete_task_from_gcal(event_id: str):
+    """Background task: delete event from Google Calendar."""
+    if not settings.GOOGLE_CALENDAR_ID or not event_id:
+        return
+    try:
+        from app.services.google_calendar import delete_task_from_calendar
+        delete_task_from_calendar(event_id)
+    except Exception as e:
+        print(f"Google Calendar delete error: {e}")
+
+
 async def _enrich_with_recurrence(tasks: list[Task], db: AsyncSession) -> list[dict]:
-    """Add has_recurrence flag to task dicts."""
+    """Add has_recurrence flag and next_occurrence to task dicts."""
     if not tasks:
         return []
     task_ids = [t.id for t in tasks]
     result = await db.execute(
-        select(RecurrenceRule.task_id).where(RecurrenceRule.task_id.in_(task_ids))
+        select(RecurrenceRule.task_id, RecurrenceRule.next_occurrence).where(
+            RecurrenceRule.task_id.in_(task_ids)
+        )
     )
-    recurring_ids = set(result.scalars().all())
+    recurrence_map = {row.task_id: row.next_occurrence for row in result.all()}
     enriched = []
     for t in tasks:
         d = {c.name: getattr(t, c.name) for c in t.__table__.columns}
-        d["has_recurrence"] = t.id in recurring_ids
+        d["has_recurrence"] = t.id in recurrence_map
+        d["next_occurrence"] = recurrence_map.get(t.id)
         enriched.append(d)
     return enriched
 
@@ -108,6 +161,7 @@ async def _check_list_access(list_id: int, user_id: int, db: AsyncSession) -> No
 @router.post("/", response_model=TaskResponse)
 async def create_task(
     data: TaskCreate,
+    background: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -116,6 +170,8 @@ async def create_task(
     db.add(task)
     await db.commit()
     await db.refresh(task)
+    if _should_sync(task):
+        background.add_task(_sync_task_to_gcal, task.id)
     return task
 
 
@@ -123,6 +179,7 @@ async def create_task(
 async def update_task(
     task_id: int,
     data: TaskUpdate,
+    background: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -136,18 +193,24 @@ async def update_task(
 
     await db.commit()
     await db.refresh(task)
+    if _should_sync(task):
+        background.add_task(_sync_task_to_gcal, task.id)
     return task
 
 
 @router.delete("/{task_id}")
 async def delete_task(
     task_id: int,
+    background: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     task = await db.get(Task, task_id)
     if not task or task.created_by != user.id:
         raise HTTPException(status_code=404, detail="Task non trovato")
+    event_id = task.google_event_id
     await db.delete(task)
     await db.commit()
+    if event_id:
+        background.add_task(_delete_task_from_gcal, event_id)
     return {"detail": "Task eliminato"}

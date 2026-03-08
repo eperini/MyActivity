@@ -94,17 +94,26 @@ export default function HomePage() {
     }
   }
 
+  // Effective date for a task (next_occurrence for recurring, due_date otherwise)
+  function effectiveDate(task: Task): string | null {
+    return task.has_recurrence && task.next_occurrence ? task.next_occurrence : task.due_date;
+  }
+
   // Filter tasks based on selected view
   const filteredTasks = tasks.filter((task) => {
     if (task.status === "done" && selectedView !== "completed") return false;
 
     switch (selectedView) {
-      case "today":
-        return task.due_date && isToday(parseISO(task.due_date));
-      case "next7":
-        if (!task.due_date) return false;
-        const diff = differenceInDays(parseISO(task.due_date), new Date());
+      case "today": {
+        const d = effectiveDate(task);
+        return d && isToday(parseISO(d));
+      }
+      case "next7": {
+        const d = effectiveDate(task);
+        if (!d) return false;
+        const diff = differenceInDays(parseISO(d), new Date());
         return diff >= 0 && diff <= 7;
+      }
       case "inbox":
         return task.status !== "done";
       case "completed":
@@ -121,10 +130,11 @@ export default function HomePage() {
   // Count tasks per view
   const activeTasks = tasks.filter((t) => t.status !== "done");
   const taskCounts: Record<string, number> = {
-    today: activeTasks.filter((t) => t.due_date && isToday(parseISO(t.due_date))).length,
+    today: activeTasks.filter((t) => { const d = effectiveDate(t); return d && isToday(parseISO(d)); }).length,
     next7: activeTasks.filter((t) => {
-      if (!t.due_date) return false;
-      const diff = differenceInDays(parseISO(t.due_date), new Date());
+      const d = effectiveDate(t);
+      if (!d) return false;
+      const diff = differenceInDays(parseISO(d), new Date());
       return diff >= 0 && diff <= 7;
     }).length,
     inbox: activeTasks.length,
@@ -230,7 +240,7 @@ export default function HomePage() {
     }
 
     if (isSettingsView) {
-      return <SettingsView />;
+      return <SettingsView onLogout={() => router.push("/login")} />;
     }
 
     if (isHabitsView) {

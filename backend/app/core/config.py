@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     VAPID_PUBLIC_KEY: str = ""
     VAPID_PRIVATE_KEY: str = ""
     VAPID_MAILTO: str = "mailto:admin@myactivity.local"
+    GOOGLE_CREDENTIALS_FILE: str = "/app/google-credentials.json"
+    GOOGLE_CALENDAR_ID: str = ""
+    GOOGLE_SYNC_LIST_ID: int = 0
 
     class Config:
         env_file = ".env"

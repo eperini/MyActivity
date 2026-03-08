@@ -28,14 +28,22 @@ export default function DayCalendar({ tasks, onSelectDate }: DayCalendarProps) {
     (t) => t.due_date && isSameDay(parseISO(t.due_date), currentDate) && t.status !== "done"
   );
 
+  const allDayTasks = dayTasks.filter((t) => !t.due_time);
+  const timedTasks = dayTasks.filter((t) => t.due_time);
+
   const hours = eachHourOfInterval({
     start: addHours(startOfDay(currentDate), 7),
     end: addHours(startOfDay(currentDate), 23),
   });
 
-  const todayLabel = isToday(currentDate)
-    ? "Oggi"
-    : format(currentDate, "d MMMM yyyy", { locale: it });
+  const HOUR_HEIGHT = 48; // h-12 = 48px
+  const START_HOUR = 7;
+
+  function getTaskTop(task: Task): number {
+    if (!task.due_time) return 0;
+    const [h, m] = task.due_time.split(":").map(Number);
+    return (h - START_HOUR) * HOUR_HEIGHT + (m / 60) * HOUR_HEIGHT;
+  }
 
   return (
     <div className="w-72 h-full bg-zinc-900 border-l border-zinc-800 flex flex-col">
@@ -91,10 +99,10 @@ export default function DayCalendar({ tasks, onSelectDate }: DayCalendarProps) {
         </div>
       </div>
 
-      {/* All day tasks */}
-      {dayTasks.length > 0 && (
+      {/* All day tasks (no time) */}
+      {allDayTasks.length > 0 && (
         <div className="px-3 py-2 border-b border-zinc-800/50 space-y-1">
-          {dayTasks.map((task) => (
+          {allDayTasks.map((task) => (
             <div
               key={task.id}
               className="flex items-center gap-2 px-2 py-1.5 rounded text-xs truncate"
@@ -133,6 +141,28 @@ export default function DayCalendar({ tasks, onSelectDate }: DayCalendarProps) {
                     />
                   )}
                 </div>
+              </div>
+            );
+          })}
+
+          {/* Timed tasks overlaid on timeline */}
+          {timedTasks.map((task) => {
+            const top = getTaskTop(task);
+            if (top < 0) return null;
+            const color = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS[4];
+            return (
+              <div
+                key={task.id}
+                className="absolute left-12 right-1 px-2 py-1 rounded text-xs truncate z-20"
+                style={{
+                  top: `${top}px`,
+                  backgroundColor: color + "25",
+                  color,
+                  borderLeft: `2px solid ${color}`,
+                }}
+              >
+                <span className="text-[10px] opacity-70 mr-1">{task.due_time?.slice(0, 5)}</span>
+                {task.title}
               </div>
             );
           })}

@@ -17,3 +17,5 @@ slowapi==0.1.9
 pywebpush==2.0.1
 py-vapid==1.9.2
 python-multipart==0.0.18
+google-api-python-client==2.166.0
+google-auth==2.40.1

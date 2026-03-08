@@ -28,7 +28,8 @@ const PRIORITY_CHECK_COLORS: Record<number, string> = {
 
 export default function TaskItem({ task, list, isSelected, onSelect, onToggle }: TaskItemProps) {
   const isDone = task.status === "done";
-  const overdue = task.due_date ? isOverdue(task.due_date) : false;
+  const displayDate = task.has_recurrence && task.next_occurrence ? task.next_occurrence : task.due_date;
+  const overdue = displayDate ? isOverdue(displayDate) : false;
 
   return (
     <div
@@ -79,13 +80,13 @@ export default function TaskItem({ task, list, isSelected, onSelect, onToggle }:
         {task.has_recurrence && (
           <Repeat size={12} className="text-blue-400" />
         )}
-        {task.due_date && (
+        {displayDate && (
           <span
             className={`text-xs ${
               overdue ? "text-red-400" : "text-zinc-500"
             }`}
           >
-            {formatRelativeDate(task.due_date)}
+            {formatRelativeDate(displayDate)}
           </span>
         )}
       </div>

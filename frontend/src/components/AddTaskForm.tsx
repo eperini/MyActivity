@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Calendar, Flag, List, Repeat, X } from "lucide-react";
 import type { TaskList } from "@/types";
 import { createTask, setRecurrence } from "@/lib/api";
@@ -44,6 +44,8 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
   const [showMore, setShowMore] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const dateButtonRef = useRef<HTMLButtonElement>(null);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
 
   // Recurrence state
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("none");
@@ -124,10 +126,10 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-[15vh]">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-[5vh] sm:pt-[10vh] px-4 overflow-y-auto pb-10">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-lg bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl overflow-hidden"
+        className="w-full max-w-lg bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl overflow-visible"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
@@ -176,10 +178,17 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
             </div>
 
             {/* Due date */}
-            <div className="relative">
+            <div>
               <button
+                ref={dateButtonRef}
                 type="button"
-                onClick={() => setShowDatePicker(!showDatePicker)}
+                onClick={() => {
+                  if (!showDatePicker && dateButtonRef.current) {
+                    const rect = dateButtonRef.current.getBoundingClientRect();
+                    setPickerPos({ top: rect.bottom + 4, left: rect.left });
+                  }
+                  setShowDatePicker(!showDatePicker);
+                }}
                 className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5"
               >
                 <Calendar size={14} className="text-zinc-500" />
@@ -188,17 +197,6 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
                   {dueTime && ` ${dueTime}`}
                 </span>
               </button>
-              {showDatePicker && (
-                <div className="absolute top-10 left-0 z-50">
-                  <DatePicker
-                    value={dueDate || null}
-                    timeValue={dueTime || null}
-                    onChange={(d) => setDueDate(d || "")}
-                    onTimeChange={(t) => setDueTime(t || "")}
-                    onClose={() => setShowDatePicker(false)}
-                  />
-                </div>
-              )}
             </div>
 
             {/* More toggle */}
@@ -372,6 +370,22 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
           </button>
         </div>
       </form>
+
+      {/* DatePicker as fixed overlay to avoid clipping */}
+      {showDatePicker && pickerPos && (
+        <div
+          className="fixed z-[60]"
+          style={{ top: pickerPos.top, left: pickerPos.left }}
+        >
+          <DatePicker
+            value={dueDate || null}
+            timeValue={dueTime || null}
+            onChange={(d) => setDueDate(d || "")}
+            onTimeChange={(t) => setDueTime(t || "")}
+            onClose={() => setShowDatePicker(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

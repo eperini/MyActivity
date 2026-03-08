@@ -1,21 +1,31 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2 } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, exportTasks, exportHabits, importTasks } from "@/lib/api";
+import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar } from "lucide-react";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync } from "@/lib/api";
 
 function getApiUrl(): string {
   if (typeof window === "undefined") return "http://localhost:8000/api";
   return `http://${window.location.hostname}:8000/api`;
 }
 
-export default function SettingsView() {
+export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
   const [pushMessage, setPushMessage] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [importing, setImporting] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [gcalConfigured, setGcalConfigured] = useState(false);
+  const [gcalSyncing, setGcalSyncing] = useState(false);
+  const [gcalMessage, setGcalMessage] = useState("");
+
+  useEffect(() => {
+    getGoogleCalendarConfig()
+      .then((cfg) => setGcalConfigured(cfg.configured))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const supported = "serviceWorker" in navigator && "PushManager" in window;
@@ -28,6 +38,24 @@ export default function SettingsView() {
       });
     }
   }, []);
+
+  function handleLogout() {
+    localStorage.removeItem("token");
+    if (onLogout) {
+      onLogout();
+    } else {
+      window.location.href = "/login";
+    }
+  }
+
+  function handleCopyInvite() {
+    const url = `http://${window.location.hostname}:${window.location.port || 3000}/login`;
+    const text = `Ciao! Ti invito a usare MyActivity per gestire task e abitudini insieme.\n\nRegistrati qui: ${url}\n\nDopo la registrazione, potro condividere le liste con te.`;
+    navigator.clipboard.writeText(text).then(() => {
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    });
+  }
 
   async function handleTogglePush() {
     setPushLoading(true);
@@ -106,6 +134,63 @@ export default function SettingsView() {
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-2xl">
       <h2 className="text-lg font-semibold text-white">Impostazioni</h2>
+
+      {/* Invite family */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+          <UserPlus size={16} />
+          Invita famiglia
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Copia il messaggio di invito e invialo ai tuoi famigliari tramite WhatsApp, Telegram o email. Dopo la registrazione, potrai condividere le liste con loro dal menu contestuale della lista.
+        </p>
+        <button
+          onClick={handleCopyInvite}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium text-white transition-colors"
+        >
+          {inviteCopied ? <Check size={16} /> : <Copy size={16} />}
+          {inviteCopied ? "Copiato!" : "Copia invito"}
+        </button>
+      </div>
+
+      {/* Google Calendar */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+          <Calendar size={16} />
+          Google Calendar
+        </h3>
+        {gcalConfigured ? (
+          <>
+            <p className="text-xs text-zinc-500">
+              I task della lista <span className="text-zinc-300 font-medium">Family</span> vengono sincronizzati automaticamente con il calendario Google condiviso. Usa il pulsante per forzare una sincronizzazione completa.
+            </p>
+            <button
+              onClick={async () => {
+                setGcalSyncing(true);
+                setGcalMessage("");
+                try {
+                  const result = await triggerGoogleSync();
+                  setGcalMessage(`Sincronizzazione completata: ${result.pushed} inviati, ${result.pulled} ricevuti`);
+                } catch (err) {
+                  setGcalMessage("Errore: " + (err instanceof Error ? err.message : "sconosciuto"));
+                } finally {
+                  setGcalSyncing(false);
+                }
+              }}
+              disabled={gcalSyncing}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition-colors"
+            >
+              <RefreshCw size={16} className={gcalSyncing ? "animate-spin" : ""} />
+              {gcalSyncing ? "Sincronizzazione..." : "Sincronizza ora"}
+            </button>
+            {gcalMessage && <p className="text-xs text-zinc-400">{gcalMessage}</p>}
+          </>
+        ) : (
+          <p className="text-xs text-zinc-500">
+            Google Calendar non configurato. Contatta l'amministratore per abilitare la sincronizzazione.
+          </p>
+        )}
+      </div>
 
       {/* Push Notifications */}
       <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
@@ -210,6 +295,17 @@ export default function SettingsView() {
             {importMessage}
           </p>
         )}
+      </div>
+
+      {/* Logout */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5">
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 px-4 py-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-lg text-sm font-medium transition-colors"
+        >
+          <LogOut size={16} />
+          Esci dall'account
+        </button>
       </div>
     </div>
   );
