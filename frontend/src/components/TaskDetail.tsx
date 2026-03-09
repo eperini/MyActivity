@@ -5,6 +5,7 @@ import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X, Tag as TagIcon, Mes
 import type { Task, TaskList, RecurrenceRule, Tag, TaskComment, ListMember } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
 import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getListMembers, updateTask as apiUpdateTask } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
 import DatePicker from "./DatePicker";
@@ -80,6 +81,7 @@ function describeRrule(rrule: string, workdayAdjust: string, workdayTarget: numb
 }
 
 export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDelete, onRefresh }: TaskDetailProps) {
+  const { showToast } = useToast();
   const priority = PRIORITY_LABELS[task.priority] || PRIORITY_LABELS[4];
   const overdue = task.due_date ? isOverdue(task.due_date) : false;
 
@@ -103,9 +105,9 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
 
   useEffect(() => {
-    getTags().then(setAllTags).catch(() => {});
-    getComments(task.id).then(setComments).catch(() => {});
-    getListMembers(task.list_id).then(setMembers).catch(() => {});
+    getTags().then(setAllTags).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento tag"); });
+    getComments(task.id).then(setComments).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento commenti"); });
+    getListMembers(task.list_id).then(setMembers).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento membri"); });
   }, [task.id, task.list_id]);
 
   useEffect(() => {
@@ -129,8 +131,8 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
       await deleteRecurrence(task.id);
       setRecurrence(null);
       setPreviewDates([]);
-    } catch {
-      console.error("Failed to delete recurrence");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore eliminazione ricorrenza");
     }
   }
 

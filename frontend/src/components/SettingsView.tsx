@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob } from "@/lib/api";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
+  const { showToast } = useToast();
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -30,17 +32,17 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   useEffect(() => {
     getGoogleCalendarConfig()
       .then((cfg) => setGcalConfigured(cfg.configured))
-      .catch(() => {});
+      .catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento config Google Calendar"); });
     listBackups()
       .then((res) => { setBackups(res.backups); setBackupConfigured(res.configured); })
-      .catch(() => {});
+      .catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento backup"); });
     getProfile()
       .then((p) => {
         setReportEmail(p.daily_report_email);
         setReportPush(p.daily_report_push);
         setReportTime(p.daily_report_time || "07:00");
       })
-      .catch(() => {});
+      .catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento profilo"); });
   }, []);
 
   useEffect(() => {
@@ -55,8 +57,12 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
     }
   }, []);
 
-  function handleLogout() {
-    localStorage.removeItem("token");
+  async function handleLogout() {
+    try {
+      await logout();
+    } catch {
+      // ignore - cookie may already be gone
+    }
     if (onLogout) {
       onLogout();
     } else {

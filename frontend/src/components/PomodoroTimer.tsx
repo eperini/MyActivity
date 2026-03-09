@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Pause, Play, RotateCcw, SkipForward } from "lucide-react";
 import { createPomodoroSession } from "@/lib/api";
+import { useToast } from "./Toast";
 
 interface PomodoroTimerProps {
   onSessionComplete: () => void;
@@ -17,6 +18,7 @@ const MODES: { key: TimerMode; label: string; minutes: number; color: string }[]
 ];
 
 export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps) {
+  const { showToast } = useToast();
   const [mode, setMode] = useState<TimerMode>("pomodoro");
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
   const [isRunning, setIsRunning] = useState(false);
@@ -55,7 +57,7 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
           session_type: "pomodoro",
         });
       } catch {
-        console.error("Failed to save pomodoro session");
+        showToast("Errore nel salvataggio della sessione");
       }
 
       const newCount = pomosRef.current + 1;

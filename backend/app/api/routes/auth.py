@@ -1,10 +1,11 @@
 from datetime import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.security import hash_password, verify_password, create_access_token
@@ -14,6 +15,19 @@ router = APIRouter()
 
 
 from app.core.limiter import limiter
+
+
+def _set_auth_cookie(response: Response, token: str):
+    """Set HttpOnly auth cookie."""
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=False,  # set True if using HTTPS
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
 
 
 class RegisterRequest(BaseModel):
@@ -49,7 +63,7 @@ class DailyReportPreferences(BaseModel):
 
 @router.post("/register", response_model=TokenResponse)
 @limiter.limit("5/minute")
-async def register(request: Request, data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(request: Request, response: Response, data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     existing = await db.execute(select(User).where(User.email == data.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email gia registrata")
@@ -63,18 +77,29 @@ async def register(request: Request, data: RegisterRequest, db: AsyncSession = D
     await db.commit()
     await db.refresh(user)
 
-    return TokenResponse(access_token=create_access_token(user.id))
+    token = create_access_token(user.id)
+    _set_auth_cookie(response, token)
+    return TokenResponse(access_token=token)
 
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
-async def login(request: Request, data: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, response: Response, data: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Credenziali non valide")
 
-    return TokenResponse(access_token=create_access_token(user.id))
+    token = create_access_token(user.id)
+    _set_auth_cookie(response, token)
+    return TokenResponse(access_token=token)
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear the auth cookie."""
+    response.delete_cookie(key="access_token", path="/")
+    return {"detail": "Logout effettuato"}
 
 
 @router.get("/me", response_model=UserProfileResponse)

@@ -4,6 +4,7 @@ import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Ti
 import { useState, useRef, useEffect } from "react";
 import type { TaskList } from "@/types";
 import { createList, updateList, deleteList } from "@/lib/api";
+import { useToast } from "./Toast";
 
 interface SidebarProps {
   lists: TaskList[];
@@ -34,6 +35,7 @@ const LIST_COLORS = [
 ];
 
 export default function Sidebar({ lists, selectedView, onSelectView, taskCounts, onListCreated, onShareList, isOpen, onClose }: SidebarProps) {
+  const { showToast } = useToast();
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [newListColor, setNewListColor] = useState(LIST_COLORS[0]);
@@ -69,7 +71,7 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
       setShowNewList(false);
       onListCreated();
     } catch {
-      console.error("Failed to create list");
+      showToast("Errore nella creazione della lista");
     }
   }
 
@@ -80,7 +82,7 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
       setEditingList(null);
       onListCreated();
     } catch {
-      console.error("Failed to rename list");
+      showToast("Errore nella modifica della lista");
     }
   }
 
@@ -93,7 +95,7 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
       }
       onListCreated();
     } catch {
-      console.error("Failed to delete list");
+      showToast("Errore nell'eliminazione della lista");
     }
   }
 

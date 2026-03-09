@@ -8,6 +8,7 @@ import {
   isSameDay, isToday, getDaysInMonth,
 } from "date-fns";
 import { it } from "date-fns/locale";
+import { useToast } from "./Toast";
 import type { Habit, HabitStats } from "@/types";
 import { getHabitLogs, getHabitStats, updateHabit } from "@/lib/api";
 
@@ -19,6 +20,7 @@ interface HabitDetailProps {
 }
 
 export default function HabitDetail({ habit, onClose, onDelete, onToggleLog }: HabitDetailProps) {
+  const { showToast } = useToast();
   const [viewMonth, setViewMonth] = useState(new Date());
   const [logDates, setLogDates] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<HabitStats | null>(null);
@@ -80,6 +82,7 @@ export default function HabitDetail({ habit, onClose, onDelete, onToggleLog }: H
       await onToggleLog(habit.id, dayStr);
     } catch {
       setLogDates(prevDates);
+      showToast("Errore nell'aggiornamento dell'abitudine");
     }
   }
 

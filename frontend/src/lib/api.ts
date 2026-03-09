@@ -8,25 +8,18 @@ function getApiUrl(): string {
 }
 const API_URL = getApiUrl();
 
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
-}
-
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
 
   if (res.status === 401) {
-    localStorage.removeItem("token");
-    if (window.location.pathname !== "/login") {
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
       window.location.href = "/login";
     }
     throw new Error("Non autorizzato");
@@ -43,21 +36,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // Auth
 export async function login(email: string, password: string) {
-  const data = await request<{ access_token: string }>("/auth/login", {
+  return request<{ access_token: string }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
-  localStorage.setItem("token", data.access_token);
-  return data;
 }
 
 export async function register(email: string, password: string, display_name: string) {
-  const data = await request<{ access_token: string }>("/auth/register", {
+  return request<{ access_token: string }>("/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password, display_name }),
   });
-  localStorage.setItem("token", data.access_token);
-  return data;
+}
+
+export async function logout() {
+  return request<{ detail: string }>("/auth/logout", { method: "POST" });
 }
 
 // Lists
@@ -178,12 +171,10 @@ export const exportTasks = (fmt: "json" | "csv") =>
 export const exportHabits = (fmt: "json" | "csv") =>
   request<Blob>(`/export/habits?fmt=${fmt}`);
 export async function exportBlob(path: string): Promise<Blob> {
-  const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
   });
   if (res.status === 401) {
-    localStorage.removeItem("token");
     if (window.location.pathname !== "/login") window.location.href = "/login";
     throw new Error("Non autorizzato");
   }
@@ -193,14 +184,17 @@ export async function exportBlob(path: string): Promise<Blob> {
 
 // Import
 export async function importTasks(file: File): Promise<{ tasks_imported: number; errors: string[] }> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch(`${API_URL}/export/import/tasks`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
     body: formData,
   });
+  if (res.status === 401) {
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") window.location.href = "/login";
+    throw new Error("Non autorizzato");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Errore import" }));
     throw new Error(err.detail || "Errore import");

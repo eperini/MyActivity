@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { format } from "date-fns";
 import { createHabit } from "@/lib/api";
+import { useToast } from "./Toast";
 
 interface AddHabitFormProps {
   onCreated: () => void;
@@ -18,6 +19,7 @@ const COLORS = [
 const WEEKDAYS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
 
 export default function AddHabitForm({ onCreated, onClose }: AddHabitFormProps) {
+  const { showToast } = useToast();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(COLORS[0]);
@@ -48,7 +50,7 @@ export default function AddHabitForm({ onCreated, onClose }: AddHabitFormProps) 
       onCreated();
       onClose();
     } catch {
-      console.error("Failed to create habit");
+      showToast("Errore nella creazione dell'abitudine");
     } finally {
       setSubmitting(false);
     }

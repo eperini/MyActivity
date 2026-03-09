@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
+import Providers from "@/components/Providers";
 import "./globals.css";
 
 const geist = Geist({
@@ -37,7 +38,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
       <body className={`${geist.variable} font-sans bg-zinc-950 text-white antialiased`}>
-        {children}
+        <Providers>{children}</Providers>
         <script
           dangerouslySetInnerHTML={{
             __html: `

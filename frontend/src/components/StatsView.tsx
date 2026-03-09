@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getDashboardStats } from "@/lib/api";
+import { useToast } from "./Toast";
 import {
   CheckCircle2, AlertTriangle, Clock, TrendingUp,
   Flame, Target, Timer, BarChart3,
@@ -102,11 +103,12 @@ function BarChart({ data, labelKey, valueKey, secondaryKey, maxBars }: {
 }
 
 export default function StatsView() {
+  const { showToast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDashboardStats().then(setStats).catch(console.error).finally(() => setLoading(false));
+    getDashboardStats().then(setStats).catch(() => showToast("Errore nel caricamento delle statistiche")).finally(() => setLoading(false));
   }, []);
 
   if (loading) {

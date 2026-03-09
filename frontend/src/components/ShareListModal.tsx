@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, UserPlus, Trash2, Crown, Pencil, Eye } from "lucide-react";
 import type { ListMember, TaskList } from "@/types";
 import { getListMembers, addListMember, removeListMember } from "@/lib/api";
+import { useToast } from "./Toast";
 
 interface ShareListModalProps {
   list: TaskList;
@@ -18,6 +19,7 @@ const ROLE_LABELS: Record<string, { label: string; icon: typeof Crown }> = {
 };
 
 export default function ShareListModal({ list, currentUserId, onClose }: ShareListModalProps) {
+  const { showToast } = useToast();
   const [members, setMembers] = useState<ListMember[]>([]);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("edit");
@@ -33,7 +35,7 @@ export default function ShareListModal({ list, currentUserId, onClose }: ShareLi
       const m = await getListMembers(list.id);
       setMembers(m);
     } catch {
-      console.error("Failed to load members");
+      showToast("Errore nel caricamento dei membri");
     }
   }
 
@@ -57,7 +59,7 @@ export default function ShareListModal({ list, currentUserId, onClose }: ShareLi
       await removeListMember(list.id, memberId);
       loadMembers();
     } catch {
-      console.error("Failed to remove member");
+      showToast("Errore nella rimozione del membro");
     }
   }
 

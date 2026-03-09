@@ -6,6 +6,7 @@ import type { TaskList } from "@/types";
 import { createTask, setRecurrence, quickAddTask } from "@/lib/api";
 import DatePicker from "./DatePicker";
 import { formatRelativeDate } from "@/lib/dates";
+import { useToast } from "./Toast";
 
 interface AddTaskFormProps {
   lists: TaskList[];
@@ -35,6 +36,7 @@ const RECURRENCE_OPTIONS: { value: RecurrenceType; label: string }[] = [
 ];
 
 export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }: AddTaskFormProps) {
+  const { showToast } = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [listId, setListId] = useState(defaultListId || lists[0]?.id || 0);
@@ -121,7 +123,7 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
       onCreated();
       onClose();
     } catch {
-      console.error("Failed to create task");
+      showToast("Errore nella creazione del task");
     } finally {
       setSubmitting(false);
     }
@@ -171,7 +173,7 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
                     onCreated();
                     onClose();
                   } catch {
-                    console.error("Quick add failed");
+                    showToast("Errore nel quick add");
                   } finally {
                     setSubmitting(false);
                   }
@@ -205,7 +207,7 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
                     onCreated();
                     onClose();
                   } catch {
-                    console.error("Quick add failed");
+                    showToast("Errore nel quick add");
                   } finally {
                     setSubmitting(false);
                   }

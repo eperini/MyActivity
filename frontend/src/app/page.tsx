@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import type { Task, TaskList, Habit } from "@/types";
 import {
   getTasks, getLists, updateTask, deleteTask,
-  getHabits, getWeekLogs, toggleHabitLog, deleteHabit,
+  getHabits, getWeekLogs, toggleHabitLog, deleteHabit, logout,
 } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import useIsMobile from "@/hooks/useIsMobile";
 import Sidebar from "@/components/Sidebar";
 import TaskListView from "@/components/TaskListView";
@@ -31,6 +32,7 @@ import { isToday, parseISO, differenceInDays } from "date-fns";
 export default function HomePage() {
   const router = useRouter();
   const isMobile = useIsMobile();
+  const { showToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [lists, setLists] = useState<TaskList[]>([]);
   const [selectedView, setSelectedView] = useState("inbox");
@@ -73,17 +75,13 @@ export default function HomePage() {
       setHabits(h);
       setWeekLogs(wl);
     } catch {
-      console.error("Failed to load habits");
+      showToast("Errore nel caricamento delle abitudini");
     }
   }, []);
 
   useEffect(() => {
-    if (!localStorage.getItem("token")) {
-      router.push("/login");
-      return;
-    }
     loadData();
-  }, [loadData, router]);
+  }, [loadData]);
 
   // Load habits when switching to habits view
   useEffect(() => {
@@ -180,7 +178,8 @@ export default function HomePage() {
         setSelectedTask({ ...task, status: newStatus as Task["status"] });
       }
       loadData();
-    } catch {
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore aggiornamento task");
       loadData();
     }
   }
@@ -192,7 +191,8 @@ export default function HomePage() {
         setSelectedTask(updated);
       }
       loadData();
-    } catch {
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore aggiornamento task");
       loadData();
     }
   }
@@ -202,7 +202,8 @@ export default function HomePage() {
       await deleteTask(id);
       setSelectedTask(null);
       loadData();
-    } catch {
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore eliminazione task");
       loadData();
     }
   }
@@ -218,7 +219,8 @@ export default function HomePage() {
     });
     try {
       await toggleHabitLog(habitId, dateStr);
-    } catch {
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore toggle abitudine");
       setWeekLogs(prevLogs);
     }
   }
@@ -228,7 +230,8 @@ export default function HomePage() {
       await deleteHabit(id);
       setSelectedHabit(null);
       loadHabits();
-    } catch {
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore eliminazione abitudine");
       loadHabits();
     }
   }
@@ -512,6 +515,7 @@ function AddTaskFromCalendar({ date, lists, onCreated, onClose }: {
   onCreated: () => void;
   onClose: () => void;
 }) {
+  const { showToast } = useToast();
   const [title, setTitle] = useState("");
   const [listId, setListId] = useState(lists[0]?.id);
   const [priority, setPriority] = useState(4);
@@ -522,7 +526,7 @@ function AddTaskFromCalendar({ date, lists, onCreated, onClose }: {
       await createTask({ title: title.trim(), list_id: listId, due_date: date, priority, status: "todo" } as Parameters<typeof createTask>[0]);
       onCreated();
     } catch {
-      console.error("Failed to create task");
+      showToast("Errore nella creazione del task");
     }
   }
 
