@@ -47,6 +47,19 @@ export interface Task {
   has_recurrence?: boolean;
   next_occurrence?: string | null;
   tags?: Tag[];
+  subtask_count?: number;
+  subtask_done_count?: number;
+}
+
+export interface TaskTemplate {
+  id: number;
+  name: string;
+  title: string;
+  description: string | null;
+  priority: number;
+  subtask_titles: string[] | null;
+  recurrence_config: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export interface RecurrenceRule {

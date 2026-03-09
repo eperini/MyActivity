@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -85,6 +85,16 @@ export const updateTask = (id: number, data: Partial<Task>) =>
 
 export const deleteTask = (id: number) =>
   request<{ detail: string }>(`/tasks/${id}`, { method: "DELETE" });
+
+// Subtasks
+export const getSubtasks = (taskId: number) =>
+  request<Task[]>(`/tasks/${taskId}/subtasks`);
+export const createSubtask = (taskId: number, data: { title: string; priority?: number }) =>
+  request<Task>(`/tasks/${taskId}/subtasks`, { method: "POST", body: JSON.stringify(data) });
+export const toggleSubtask = (taskId: number, subtaskId: number) =>
+  request<Task>(`/tasks/${taskId}/subtasks/${subtaskId}/toggle`, { method: "PATCH" });
+export const reorderSubtasks = (taskId: number, ids: number[]) =>
+  request<{ detail: string }>(`/tasks/${taskId}/subtasks/reorder`, { method: "PATCH", body: JSON.stringify({ ids }) });
 
 // Recurrences
 export const setRecurrence = (taskId: number, data: {
@@ -234,6 +244,15 @@ export const addComment = (taskId: number, text: string) =>
   request<TaskComment>(`/tasks/${taskId}/comments`, { method: "POST", body: JSON.stringify({ text }) });
 export const deleteComment = (taskId: number, commentId: number) =>
   request<{ detail: string }>(`/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" });
+
+// Templates
+export const getTemplates = () => request<TaskTemplate[]>("/templates/");
+export const createTemplateFromTask = (taskId: number, name: string) =>
+  request<TaskTemplate>(`/templates/from-task/${taskId}`, { method: "POST", body: JSON.stringify({ name }) });
+export const deleteTemplate = (id: number) =>
+  request<{ detail: string }>(`/templates/${id}`, { method: "DELETE" });
+export const instantiateTemplate = (templateId: number, data: { list_id: number; due_date?: string; due_time?: string }) =>
+  request<{ id: number; title: string; detail: string }>(`/templates/${templateId}/instantiate`, { method: "POST", body: JSON.stringify(data) });
 
 // Quick add
 export const quickAddTask = (text: string, listId: number) =>

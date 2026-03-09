@@ -1,7 +1,7 @@
-from datetime import date, time
+from datetime import date, time, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel, Field
-from sqlalchemy import select, exists
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -59,18 +59,21 @@ class TaskResponse(BaseModel):
     has_recurrence: bool = False
     next_occurrence: date | None = None
     tags: list[TagResponse] = []
+    subtask_count: int = 0
+    subtask_done_count: int = 0
 
     class Config:
         from_attributes = True
 
 
 def _should_sync(task) -> bool:
-    """Only sync tasks from the configured sync list."""
+    """Only sync top-level tasks from the configured sync list."""
     return (
         settings.GOOGLE_CALENDAR_ID
         and settings.GOOGLE_SYNC_LIST_ID
         and task.list_id == settings.GOOGLE_SYNC_LIST_ID
         and task.due_date is not None
+        and task.parent_id is None
     )
 
 
@@ -158,6 +161,18 @@ async def _enrich_with_recurrence(tasks: list[Task], db: AsyncSession) -> list[d
         )
         names_map = {row.id: row.display_name for row in name_result.all()}
 
+    # Subtask counts
+    subtask_result = await db.execute(
+        select(
+            Task.parent_id,
+            func.count().label("total"),
+            func.count(case((Task.status == TaskStatus.DONE, 1))).label("done"),
+        )
+        .where(Task.parent_id.in_(task_ids))
+        .group_by(Task.parent_id)
+    )
+    subtask_map = {row.parent_id: (row.total, row.done) for row in subtask_result.all()}
+
     enriched = []
     for t in tasks:
         d = {c.name: getattr(t, c.name) for c in t.__table__.columns}
@@ -165,6 +180,9 @@ async def _enrich_with_recurrence(tasks: list[Task], db: AsyncSession) -> list[d
         d["next_occurrence"] = recurrence_map.get(t.id)
         d["tags"] = tags_map.get(t.id, [])
         d["assigned_to_name"] = names_map.get(t.assigned_to) if t.assigned_to else None
+        sc = subtask_map.get(t.id, (0, 0))
+        d["subtask_count"] = sc[0]
+        d["subtask_done_count"] = sc[1]
         enriched.append(d)
     return enriched
 
@@ -182,7 +200,8 @@ async def get_tasks(
     owned_list_ids = select(TaskList.id).where(TaskList.owner_id == user.id)
     member_list_ids = select(ListMember.list_id).where(ListMember.user_id == user.id)
     query = select(Task).where(
-        Task.list_id.in_(owned_list_ids.union(member_list_ids))
+        Task.list_id.in_(owned_list_ids.union(member_list_ids)),
+        Task.parent_id.is_(None),
     )
     if list_id:
         query = query.where(Task.list_id == list_id)
@@ -269,3 +288,109 @@ async def delete_task(
     if event_id:
         background.add_task(_delete_task_from_gcal, event_id)
     return {"detail": "Task eliminato"}
+
+
+# ── Subtask endpoints ──────────────────────────────────────────────
+
+
+class SubtaskCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    priority: int = Field(default=4, ge=1, le=4)
+
+
+async def _get_parent_task(task_id: int, user: User, db: AsyncSession) -> Task:
+    """Get parent task and verify access."""
+    task = await db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task non trovato")
+    await _check_list_access(task.list_id, user.id, db)
+    return task
+
+
+@router.get("/{task_id}/subtasks", response_model=list[TaskResponse])
+async def get_subtasks(
+    task_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    parent = await _get_parent_task(task_id, user, db)
+    result = await db.execute(
+        select(Task)
+        .where(Task.parent_id == parent.id)
+        .order_by(Task.position, Task.id)
+    )
+    subtasks = result.scalars().all()
+    return await _enrich_with_recurrence(subtasks, db)
+
+
+@router.post("/{task_id}/subtasks", response_model=TaskResponse)
+async def create_subtask(
+    task_id: int,
+    data: SubtaskCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    parent = await _get_parent_task(task_id, user, db)
+    # Get next position
+    max_pos = await db.execute(
+        select(func.coalesce(func.max(Task.position), -1))
+        .where(Task.parent_id == parent.id)
+    )
+    next_pos = max_pos.scalar() + 1
+
+    subtask = Task(
+        title=data.title,
+        list_id=parent.list_id,
+        created_by=user.id,
+        parent_id=parent.id,
+        priority=data.priority,
+        position=next_pos,
+    )
+    db.add(subtask)
+    await db.commit()
+    await db.refresh(subtask)
+    return subtask
+
+
+@router.patch("/{task_id}/subtasks/{subtask_id}/toggle", response_model=TaskResponse)
+async def toggle_subtask(
+    task_id: int,
+    subtask_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_parent_task(task_id, user, db)
+    subtask = await db.get(Task, subtask_id)
+    if not subtask or subtask.parent_id != task_id:
+        raise HTTPException(status_code=404, detail="Subtask non trovato")
+
+    if subtask.status == TaskStatus.DONE:
+        subtask.status = TaskStatus.TODO
+        subtask.completed_at = None
+    else:
+        subtask.status = TaskStatus.DONE
+        subtask.completed_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(subtask)
+    return subtask
+
+
+@router.patch("/{task_id}/subtasks/reorder")
+async def reorder_subtasks(
+    task_id: int,
+    data: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_parent_task(task_id, user, db)
+    ids = data.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids richiesti")
+
+    for i, sid in enumerate(ids):
+        subtask = await db.get(Task, sid)
+        if subtask and subtask.parent_id == task_id:
+            subtask.position = i
+    await db.commit()
+    return {"detail": "Riordinato"}

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X, Tag as TagIcon, MessageCircle, UserCircle, Send } from "lucide-react";
+import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X, Tag as TagIcon, MessageCircle, UserCircle, Send, ListChecks, Bookmark, Plus } from "lucide-react";
 import type { Task, TaskList, RecurrenceRule, Tag, TaskComment, ListMember } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
-import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getListMembers, updateTask as apiUpdateTask } from "@/lib/api";
+import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getListMembers, updateTask as apiUpdateTask, getSubtasks, createSubtask, toggleSubtask, deleteTask as apiDeleteTask, createTemplateFromTask } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
@@ -104,10 +104,19 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
   const [members, setMembers] = useState<ListMember[]>([]);
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
 
+  // Subtasks
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+
+  // Template
+  const [showTemplateName, setShowTemplateName] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+
   useEffect(() => {
     getTags().then(setAllTags).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento tag"); });
     getComments(task.id).then(setComments).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento commenti"); });
     getListMembers(task.list_id).then(setMembers).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento membri"); });
+    getSubtasks(task.id).then(setSubtasks).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento subtask"); });
   }, [task.id, task.list_id]);
 
   useEffect(() => {
@@ -147,13 +156,57 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
           <ArrowLeft size={20} className="md:hidden" />
           <X size={18} className="hidden md:block" />
         </button>
-        <button
-          onClick={() => onDelete(task.id)}
-          className="text-zinc-400 hover:text-red-400 transition-colors"
-        >
-          <Trash2 size={20} className="md:w-[18px] md:h-[18px]" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowTemplateName(!showTemplateName)}
+            className="text-zinc-400 hover:text-blue-400 transition-colors"
+            title="Salva come template"
+          >
+            <Bookmark size={18} />
+          </button>
+          <button
+            onClick={() => onDelete(task.id)}
+            className="text-zinc-400 hover:text-red-400 transition-colors"
+          >
+            <Trash2 size={20} className="md:w-[18px] md:h-[18px]" />
+          </button>
+        </div>
       </div>
+
+      {/* Template name prompt */}
+      {showTemplateName && (
+        <div className="px-4 py-2 border-b border-zinc-800 bg-zinc-800/50 flex items-center gap-2">
+          <input
+            autoFocus
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            placeholder="Nome template..."
+            className="flex-1 bg-zinc-900 rounded px-3 py-1.5 text-xs text-zinc-300 outline-none"
+            onKeyDown={async (e) => {
+              if (e.key === "Enter" && templateName.trim()) {
+                try {
+                  await createTemplateFromTask(task.id, templateName.trim());
+                  showToast("Template salvato!", "success");
+                  setShowTemplateName(false);
+                  setTemplateName("");
+                } catch {
+                  showToast("Errore nel salvataggio del template");
+                }
+              }
+              if (e.key === "Escape") {
+                setShowTemplateName(false);
+                setTemplateName("");
+              }
+            }}
+          />
+          <button
+            onClick={() => { setShowTemplateName(false); setTemplateName(""); }}
+            className="text-zinc-500 hover:text-zinc-300"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -311,6 +364,94 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
                   {s === "todo" ? "Da fare" : s === "doing" ? "In corso" : "Fatto"}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Subtasks */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 text-sm">
+              <ListChecks size={16} className="text-zinc-500" />
+              <span className="text-zinc-500 text-xs">
+                Subtask{subtasks.length > 0 && ` (${subtasks.filter(s => s.status === "done").length}/${subtasks.length})`}
+              </span>
+            </div>
+
+            {subtasks.length > 0 && (
+              <div className="ml-7 mb-2">
+                <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all"
+                    style={{ width: `${(subtasks.filter(s => s.status === "done").length / subtasks.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="ml-7 space-y-1">
+              {subtasks.map((sub) => (
+                <div key={sub.id} className="flex items-center gap-2 group/sub">
+                  <button
+                    onClick={async () => {
+                      try {
+                        const updated = await toggleSubtask(task.id, sub.id);
+                        setSubtasks(prev => prev.map(s => s.id === sub.id ? updated : s));
+                        onRefresh?.();
+                      } catch {
+                        showToast("Errore nell'aggiornamento del subtask");
+                      }
+                    }}
+                    className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                      sub.status === "done" ? "bg-zinc-600 border-zinc-600" : "border-zinc-600"
+                    }`}
+                  >
+                    {sub.status === "done" && (
+                      <svg width="8" height="6" viewBox="0 0 10 8" fill="none" className="text-white">
+                        <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </button>
+                  <span className={`flex-1 text-xs ${sub.status === "done" ? "line-through text-zinc-500" : "text-zinc-300"}`}>
+                    {sub.title}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await apiDeleteTask(sub.id);
+                        setSubtasks(prev => prev.filter(s => s.id !== sub.id));
+                        onRefresh?.();
+                      } catch {
+                        showToast("Errore nell'eliminazione del subtask");
+                      }
+                    }}
+                    className="opacity-0 group-hover/sub:opacity-100 text-zinc-600 hover:text-red-400 transition-all"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+
+              {/* Add subtask input */}
+              <div className="flex items-center gap-2">
+                <Plus size={14} className="text-zinc-600 flex-shrink-0" />
+                <input
+                  value={newSubtaskTitle}
+                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                  placeholder="Aggiungi subtask..."
+                  className="flex-1 bg-transparent text-xs text-zinc-300 outline-none placeholder-zinc-600"
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter" && newSubtaskTitle.trim()) {
+                      try {
+                        const sub = await createSubtask(task.id, { title: newSubtaskTitle.trim() });
+                        setSubtasks(prev => [...prev, sub]);
+                        setNewSubtaskTitle("");
+                        onRefresh?.();
+                      } catch {
+                        showToast("Errore nella creazione del subtask");
+                      }
+                    }
+                  }}
+                />
+              </div>
             </div>
           </div>
 

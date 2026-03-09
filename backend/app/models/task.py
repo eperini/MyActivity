@@ -30,7 +30,7 @@ class Task(Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     due_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    parent_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
     google_event_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(

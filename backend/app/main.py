@@ -4,7 +4,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 import app.models  # noqa: F401 - register all models for SQLAlchemy relationships
-from app.api.routes import auth, tasks, lists, habits, recurrences, telegram, pomodoro, push, export, stats, google_calendar, backup, tags, comments, quickadd, shortcut
+from app.api.routes import auth, tasks, lists, habits, recurrences, telegram, pomodoro, push, export, stats, google_calendar, backup, tags, comments, quickadd, shortcut, templates
 from app.core.config import settings
 from app.core.limiter import limiter
 
@@ -39,6 +39,7 @@ app.include_router(tags.router, prefix="/api/tags", tags=["tags"])
 app.include_router(comments.router, prefix="/api", tags=["commenti"])
 app.include_router(quickadd.router, prefix="/api/tasks", tags=["quick-add"])
 app.include_router(shortcut.router, prefix="/api/shortcut", tags=["shortcut"])
+app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
 
 
 @app.get("/api/health")

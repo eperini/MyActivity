@@ -9,10 +9,11 @@ from app.models.pomodoro import PomodoroSession
 from app.models.push_subscription import PushSubscription
 from app.models.tag import Tag, task_tags
 from app.models.comment import Comment
+from app.models.template import TaskTemplate
 
 __all__ = [
     "User", "TaskList", "ListMember", "Task",
     "RecurrenceRule", "TaskInstance", "Notification",
     "Habit", "HabitLog", "PomodoroSession", "PushSubscription",
-    "Tag", "task_tags", "Comment",
+    "Tag", "task_tags", "Comment", "TaskTemplate",
 ]

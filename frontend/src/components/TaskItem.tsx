@@ -89,6 +89,19 @@ export default function TaskItem({ task, list, isSelected, onSelect, onToggle }:
             </span>
           )}
         </div>
+        {(task.subtask_count ?? 0) > 0 && (
+          <div className="flex items-center gap-2 mt-1.5">
+            <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all"
+                style={{ width: `${((task.subtask_done_count ?? 0) / (task.subtask_count ?? 1)) * 100}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-zinc-500">
+              {task.subtask_done_count}/{task.subtask_count}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Recurrence + Due date */}

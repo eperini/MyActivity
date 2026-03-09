@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Calendar, Flag, List, Repeat, X, Zap } from "lucide-react";
-import type { TaskList } from "@/types";
-import { createTask, setRecurrence, quickAddTask } from "@/lib/api";
+import { Calendar, Flag, List, Repeat, X, Zap, Bookmark } from "lucide-react";
+import type { TaskList, TaskTemplate } from "@/types";
+import { createTask, setRecurrence, quickAddTask, getTemplates, instantiateTemplate } from "@/lib/api";
 import DatePicker from "./DatePicker";
 import { formatRelativeDate } from "@/lib/dates";
 import { useToast } from "./Toast";
@@ -48,6 +48,9 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
   const [submitting, setSubmitting] = useState(false);
   const [quickMode, setQuickMode] = useState(false);
   const [quickText, setQuickText] = useState("");
+  const [templateMode, setTemplateMode] = useState(false);
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const dateButtonRef = useRef<HTMLButtonElement>(null);
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -141,13 +144,31 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
             <span className="text-sm font-medium text-zinc-300">Nuovo task</span>
             <button
               type="button"
-              onClick={() => setQuickMode(!quickMode)}
+              onClick={() => { setQuickMode(!quickMode); setTemplateMode(false); }}
               className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
                 quickMode ? "bg-yellow-600/20 text-yellow-400" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
               }`}
             >
               <Zap size={10} />
               Quick
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !templateMode;
+                setTemplateMode(next);
+                setQuickMode(false);
+                if (next && templates.length === 0) {
+                  setLoadingTemplates(true);
+                  getTemplates().then(setTemplates).catch(() => {}).finally(() => setLoadingTemplates(false));
+                }
+              }}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
+                templateMode ? "bg-blue-600/20 text-blue-400" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <Bookmark size={10} />
+              Template
             </button>
           </div>
           <button type="button" onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
@@ -220,8 +241,70 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
           </div>
         )}
 
+        {/* Template mode */}
+        {templateMode && (
+          <div className="px-5 pt-4 pb-2 space-y-2">
+            {loadingTemplates ? (
+              <p className="text-xs text-zinc-500">Caricamento template...</p>
+            ) : templates.length === 0 ? (
+              <p className="text-xs text-zinc-500">Nessun template salvato. Puoi creare un template dal dettaglio di un task.</p>
+            ) : (
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={submitting}
+                    onClick={async () => {
+                      setSubmitting(true);
+                      try {
+                        await instantiateTemplate(t.id, {
+                          list_id: listId,
+                          due_date: undefined,
+                        });
+                        onCreated();
+                        onClose();
+                      } catch {
+                        showToast("Errore nella creazione da template");
+                      } finally {
+                        setSubmitting(false);
+                      }
+                    }}
+                    className="w-full text-left px-3 py-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
+                  >
+                    <div className="text-sm text-zinc-200">{t.title}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] text-zinc-500">{t.name}</span>
+                      {t.subtask_titles && t.subtask_titles.length > 0 && (
+                        <span className="text-[10px] text-zinc-500">{t.subtask_titles.length} subtask</span>
+                      )}
+                      {t.recurrence_config && (
+                        <Repeat size={10} className="text-blue-400" />
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
+                <List size={14} className="text-zinc-500" />
+                <select
+                  value={listId}
+                  onChange={(e) => setListId(Number(e.target.value))}
+                  className="bg-transparent text-xs text-zinc-300 outline-none cursor-pointer"
+                >
+                  {lists.map((l) => (
+                    <option key={l.id} value={l.id} className="bg-zinc-800">{l.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Body - structured form */}
-        {!quickMode && <div className="p-5 space-y-4">
+        {!quickMode && !templateMode && <div className="p-5 space-y-4">
           {/* Title */}
           <input
             autoFocus
@@ -434,7 +517,7 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
         </div>}
 
         {/* Footer */}
-        {!quickMode && <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-800">
+        {!quickMode && !templateMode && <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-800">
           <button
             type="button"
             onClick={onClose}
