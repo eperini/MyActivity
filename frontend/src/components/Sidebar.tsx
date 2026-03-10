@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { TaskList } from "@/types";
 import { createList, updateList, deleteList } from "@/lib/api";
@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { id: "inbox", label: "Inbox", icon: Inbox },
   { id: "calendar", label: "Calendario", icon: CalendarDays },
   { id: "habits", label: "Abitudini", icon: Zap },
+  { id: "kanban", label: "Kanban", icon: Columns3 },
   { id: "eisenhower", label: "Eisenhower", icon: Grid2x2 },
   { id: "pomodoro", label: "Pomodoro", icon: Timer },
   { id: "stats", label: "Statistiche", icon: BarChart3 },

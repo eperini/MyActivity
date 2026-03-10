@@ -24,6 +24,7 @@ import CalendarView from "@/components/CalendarView";
 import ShareListModal from "@/components/ShareListModal";
 import StatsView from "@/components/StatsView";
 import SettingsView from "@/components/SettingsView";
+import KanbanView from "@/components/KanbanView";
 import BottomTabBar from "@/components/BottomTabBar";
 import MobileHeader from "@/components/MobileHeader";
 import FloatingAddButton from "@/components/FloatingAddButton";
@@ -165,6 +166,7 @@ export default function HomePage() {
     pomodoro: "Pomodoro",
     stats: "Statistiche",
     settings: "Impostazioni",
+    kanban: "Kanban",
   };
   const viewTitle = selectedView.startsWith("list-")
     ? lists.find((l) => l.id === parseInt(selectedView.split("-")[1]))?.name || "Lista"
@@ -256,9 +258,10 @@ export default function HomePage() {
   const isCalendarView = selectedView === "calendar";
   const isStatsView = selectedView === "stats";
   const isSettingsView = selectedView === "settings";
+  const isKanbanView = selectedView === "kanban";
 
   // Check if current view is a task list view (needs TaskDetail)
-  const isTaskListView = !isHabitsView && !isEisenhowerView && !isCalendarView && !isStatsView && !isSettingsView && selectedView !== "pomodoro";
+  const isTaskListView = !isHabitsView && !isEisenhowerView && !isCalendarView && !isStatsView && !isSettingsView && !isKanbanView && selectedView !== "pomodoro";
 
   function renderMainContent() {
     if (isStatsView) {
@@ -310,6 +313,32 @@ export default function HomePage() {
             onSessionComplete={() => setPomodoroRefreshKey((k) => k + 1)}
           />
           {!isMobile && <PomodoroHistory refreshKey={pomodoroRefreshKey} />}
+        </>
+      );
+    }
+
+    if (isKanbanView) {
+      return (
+        <>
+          <KanbanView
+            tasks={tasks}
+            lists={lists}
+            onSelectTask={(task) => setSelectedTask(task)}
+            onToggleTask={handleToggle}
+            onUpdateTask={handleUpdate}
+          />
+          {/* Desktop: TaskDetail side panel */}
+          {!isMobile && selectedTask && (
+            <TaskDetail
+              task={selectedTask}
+              list={selectedList}
+              onClose={() => setSelectedTask(null)}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              lists={lists}
+              onRefresh={loadData}
+            />
+          )}
         </>
       );
     }

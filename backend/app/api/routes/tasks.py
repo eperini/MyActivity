@@ -246,7 +246,8 @@ async def create_task(
     await db.refresh(task)
     if _should_sync(task):
         background.add_task(_sync_task_to_gcal, task.id)
-    return task
+    enriched = await _enrich_with_recurrence([task], db)
+    return enriched[0]
 
 
 @router.patch("/{task_id}", response_model=TaskResponse)
@@ -269,7 +270,8 @@ async def update_task(
     await db.refresh(task)
     if _should_sync(task):
         background.add_task(_sync_task_to_gcal, task.id)
-    return task
+    enriched = await _enrich_with_recurrence([task], db)
+    return enriched[0]
 
 
 @router.delete("/{task_id}")
@@ -349,7 +351,8 @@ async def create_subtask(
     db.add(subtask)
     await db.commit()
     await db.refresh(subtask)
-    return subtask
+    enriched = await _enrich_with_recurrence([subtask], db)
+    return enriched[0]
 
 
 @router.patch("/{task_id}/subtasks/{subtask_id}/toggle", response_model=TaskResponse)
@@ -373,7 +376,8 @@ async def toggle_subtask(
 
     await db.commit()
     await db.refresh(subtask)
-    return subtask
+    enriched = await _enrich_with_recurrence([subtask], db)
+    return enriched[0]
 
 
 @router.patch("/{task_id}/subtasks/reorder")
