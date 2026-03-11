@@ -436,6 +436,8 @@ export default function HomePage() {
           onClose={() => setSelectedTask(null)}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
+          lists={lists}
+          onRefresh={loadData}
         />
       )}
 
@@ -476,6 +478,8 @@ export default function HomePage() {
           onClose={() => setSelectedTask(null)}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
+          lists={lists}
+          onRefresh={loadData}
         />
       )}
 

@@ -240,18 +240,28 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
         {/* Meta */}
         <div className="space-y-3">
           {/* List */}
-          {list && (
-            <div className="flex items-center gap-3 text-sm">
-              <List size={16} className="text-zinc-500" />
+          <div className="flex items-center gap-3 text-sm">
+            <List size={16} className="text-zinc-500" />
+            {lists && lists.length > 0 ? (
+              <select
+                value={task.list_id}
+                onChange={(e) => onUpdate(task.id, { list_id: Number(e.target.value) } as Partial<Task>)}
+                className="bg-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-300 outline-none cursor-pointer"
+                style={{ color: list?.color || "#d4d4d8" }}
+              >
+                {lists.map((l) => (
+                  <option key={l.id} value={l.id} style={{ color: l.color }} className="bg-zinc-800">
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+            ) : list && (
               <span className="flex items-center gap-2">
-                <span
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: list.color }}
-                />
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: list.color }} />
                 <span className="text-zinc-300">{list.name}</span>
               </span>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Due date (click to open picker) */}
           <div className="relative">

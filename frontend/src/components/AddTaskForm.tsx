@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Calendar, Flag, List, Repeat, X, Zap, Bookmark } from "lucide-react";
+import { Calendar, List, Repeat, X, Zap, Bookmark } from "lucide-react";
 import type { TaskList, TaskTemplate } from "@/types";
 import { createTask, setRecurrence, quickAddTask, getTemplates, instantiateTemplate } from "@/lib/api";
 import DatePicker from "./DatePicker";
@@ -43,7 +43,6 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
   const [priority, setPriority] = useState(4);
   const [dueDate, setDueDate] = useState("");
   const [dueTime, setDueTime] = useState("");
-  const [showMore, setShowMore] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [quickMode, setQuickMode] = useState(false);
@@ -206,14 +205,15 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
             </p>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
-                <List size={14} className="text-zinc-500" />
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: lists.find(l => l.id === listId)?.color || "#3B82F6" }} />
                 <select
                   value={listId}
                   onChange={(e) => setListId(Number(e.target.value))}
-                  className="bg-transparent text-xs text-zinc-300 outline-none cursor-pointer"
+                  className="bg-transparent text-xs outline-none cursor-pointer"
+                  style={{ color: lists.find(l => l.id === listId)?.color || "#d4d4d8" }}
                 >
                   {lists.map((l) => (
-                    <option key={l.id} value={l.id} className="bg-zinc-800">{l.name}</option>
+                    <option key={l.id} value={l.id} style={{ color: l.color }} className="bg-zinc-800">{l.name}</option>
                   ))}
                 </select>
               </div>
@@ -288,14 +288,15 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
             )}
             <div className="flex items-center gap-2 pt-1">
               <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
-                <List size={14} className="text-zinc-500" />
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: lists.find(l => l.id === listId)?.color || "#3B82F6" }} />
                 <select
                   value={listId}
                   onChange={(e) => setListId(Number(e.target.value))}
-                  className="bg-transparent text-xs text-zinc-300 outline-none cursor-pointer"
+                  className="bg-transparent text-xs outline-none cursor-pointer"
+                  style={{ color: lists.find(l => l.id === listId)?.color || "#d4d4d8" }}
                 >
                   {lists.map((l) => (
-                    <option key={l.id} value={l.id} className="bg-zinc-800">{l.name}</option>
+                    <option key={l.id} value={l.id} style={{ color: l.color }} className="bg-zinc-800">{l.name}</option>
                   ))}
                 </select>
               </div>
@@ -327,14 +328,15 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
           <div className="flex items-center gap-2 flex-wrap">
             {/* List */}
             <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
-              <List size={14} className="text-zinc-500" />
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: lists.find(l => l.id === listId)?.color || "#3B82F6" }} />
               <select
                 value={listId}
                 onChange={(e) => setListId(Number(e.target.value))}
-                className="bg-transparent text-xs text-zinc-300 outline-none cursor-pointer"
+                className="bg-transparent text-xs outline-none cursor-pointer"
+                style={{ color: lists.find(l => l.id === listId)?.color || "#d4d4d8" }}
               >
                 {lists.map((l) => (
-                  <option key={l.id} value={l.id} className="bg-zinc-800">
+                  <option key={l.id} value={l.id} style={{ color: l.color }} className="bg-zinc-800">
                     {l.name}
                   </option>
                 ))}
@@ -363,14 +365,25 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
               </button>
             </div>
 
-            {/* More toggle */}
-            <button
-              type="button"
-              onClick={() => setShowMore(!showMore)}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-            >
-              {showMore ? "Meno" : "Altro..."}
-            </button>
+          </div>
+
+          {/* Priority (always visible) */}
+          <div className="flex gap-2">
+            {PRIORITIES.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => setPriority(p.value)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                  priority === p.value
+                    ? "bg-zinc-700 text-white"
+                    : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800"
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${p.color}`} />
+                {p.label}
+              </button>
+            ))}
           </div>
 
           {/* Recurrence section */}
@@ -488,32 +501,6 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
             )}
           </div>
 
-          {/* Extended options */}
-          {showMore && (
-            <div className="space-y-3 pt-2 border-t border-zinc-800">
-              {/* Priority */}
-              <div>
-                <label className="text-xs text-zinc-500 mb-1.5 block">Priorita</label>
-                <div className="flex gap-2">
-                  {PRIORITIES.map((p) => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => setPriority(p.value)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                        priority === p.value
-                          ? "bg-zinc-700 text-white"
-                          : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800"
-                      }`}
-                    >
-                      <span className={`w-2 h-2 rounded-full ${p.color}`} />
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
         </div>}
 
         {/* Footer */}

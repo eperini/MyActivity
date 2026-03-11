@@ -61,6 +61,10 @@ export const updateList = (id: number, data: { name?: string; color?: string }) 
   request<TaskList>(`/lists/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteList = (id: number) =>
   request<{ detail: string }>(`/lists/${id}`, { method: "DELETE" });
+export const reorderLists = (ids: number[]) =>
+  request<{ detail: string }>("/lists/reorder", { method: "PATCH", body: JSON.stringify({ ids }) });
+export const resetListOrder = () =>
+  request<{ detail: string }>("/lists/reset-order", { method: "PATCH" });
 export const getListMembers = (listId: number) =>
   request<ListMember[]>(`/lists/${listId}/members`);
 export const addListMember = (listId: number, email: string, role = "edit") =>

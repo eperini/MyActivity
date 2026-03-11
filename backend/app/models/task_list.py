@@ -14,6 +14,7 @@ class TaskList(Base):
     color: Mapped[str] = mapped_column(String(7), default="#3B82F6")
     icon: Mapped[str | None] = mapped_column(String(50), nullable=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    position: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

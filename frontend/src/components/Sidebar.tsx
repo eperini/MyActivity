@@ -1,9 +1,9 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3 } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { TaskList } from "@/types";
-import { createList, updateList, deleteList } from "@/lib/api";
+import { createList, updateList, deleteList, reorderLists, resetListOrder } from "@/lib/api";
 import { useToast } from "./Toast";
 
 interface SidebarProps {
@@ -43,6 +43,8 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
   const [contextMenu, setContextMenu] = useState<{ listId: number; x: number; y: number } | null>(null);
   const [editingList, setEditingList] = useState<{ id: number; name: string; color: string } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
+  const [dragListId, setDragListId] = useState<number | null>(null);
+  const [dragOverListId, setDragOverListId] = useState<number | null>(null);
   const contextRef = useRef<HTMLDivElement>(null);
 
   // Close context menu on outside click
@@ -106,6 +108,31 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
     setContextMenu({ listId, x: e.clientX, y: e.clientY });
   }
 
+  async function handleListDrop(targetId: number) {
+    if (dragListId === null || dragListId === targetId) return;
+    const reordered = [...lists];
+    const fromIdx = reordered.findIndex((l) => l.id === dragListId);
+    const toIdx = reordered.findIndex((l) => l.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    try {
+      await reorderLists(reordered.map((l) => l.id));
+      onListCreated();
+    } catch {
+      showToast("Errore nel riordinamento");
+    }
+  }
+
+  async function handleResetOrder() {
+    try {
+      await resetListOrder();
+      onListCreated();
+    } catch {
+      showToast("Errore nel reset ordine");
+    }
+  }
+
   const sidebarContent = (
     <aside className="w-full md:w-56 h-full bg-zinc-900 flex flex-col py-4 text-sm overflow-y-auto">
       {/* Navigation */}
@@ -138,12 +165,21 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
       <div className="mt-6 px-3">
         <div className="flex items-center justify-between px-3 mb-2">
           <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Liste</span>
-          <button
-            onClick={() => setShowNewList(true)}
-            className="text-zinc-500 hover:text-blue-400 transition-colors"
-          >
-            <Plus size={14} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleResetOrder}
+              title="Reset ordine automatico"
+              className="text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              <RotateCcw size={12} />
+            </button>
+            <button
+              onClick={() => setShowNewList(true)}
+              className="text-zinc-500 hover:text-blue-400 transition-colors"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
         </div>
 
         {/* New list form */}
@@ -245,14 +281,21 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
             return (
               <div
                 key={list.id}
-                className={`group flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors cursor-pointer ${
+                draggable
+                onDragStart={() => setDragListId(list.id)}
+                onDragEnd={() => { setDragListId(null); setDragOverListId(null); }}
+                onDragOver={(e) => { e.preventDefault(); setDragOverListId(list.id); }}
+                onDragLeave={() => setDragOverListId(null)}
+                onDrop={(e) => { e.preventDefault(); handleListDrop(list.id); setDragOverListId(null); }}
+                className={`group flex items-center gap-2 px-2 py-3 md:py-2 rounded-lg transition-colors cursor-pointer ${
                   isActive
                     ? "bg-zinc-800 text-white"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-                }`}
+                } ${dragOverListId === list.id && dragListId !== list.id ? "border-t-2 border-blue-500" : ""} ${dragListId === list.id ? "opacity-50" : ""}`}
                 onClick={() => handleNav(`list-${list.id}`)}
                 onContextMenu={(e) => handleContextMenu(e, list.id)}
               >
+                <GripVertical size={12} className="text-zinc-600 flex-shrink-0 cursor-grab" />
                 <span
                   className="w-3 h-3 rounded-full flex-shrink-0"
                   style={{ backgroundColor: list.color }}

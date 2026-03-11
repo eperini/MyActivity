@@ -30,6 +30,7 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=500)
     description: str | None = Field(default=None, max_length=5000)
+    list_id: int | None = None
     priority: int | None = Field(default=None, ge=1, le=4)
     status: TaskStatus | None = None
     due_date: date | None = None
@@ -259,10 +260,14 @@ async def update_task(
     db: AsyncSession = Depends(get_db),
 ):
     task = await db.get(Task, task_id)
-    if not task or task.created_by != user.id:
+    if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
+    await _check_list_access(task.list_id, user.id, db)
 
     update_data = data.model_dump(exclude_unset=True)
+    # If changing list, verify access to new list too
+    if "list_id" in update_data and update_data["list_id"] != task.list_id:
+        await _check_list_access(update_data["list_id"], user.id, db)
     for field, value in update_data.items():
         setattr(task, field, value)
 
@@ -282,8 +287,9 @@ async def delete_task(
     db: AsyncSession = Depends(get_db),
 ):
     task = await db.get(Task, task_id)
-    if not task or task.created_by != user.id:
+    if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
+    await _check_list_access(task.list_id, user.id, db)
     event_id = task.google_event_id
     await db.delete(task)
     await db.commit()

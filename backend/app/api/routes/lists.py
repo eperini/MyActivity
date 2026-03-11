@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -92,7 +92,22 @@ async def get_lists(
     shared = result.scalars().all()
 
     all_lists = {l.id: l for l in [*owned, *shared]}
-    return list(all_lists.values())
+    all_list_objs = list(all_lists.values())
+
+    # Sort: if any list has position > 0, use manual order; otherwise by task count
+    has_manual = any(l.position > 0 for l in all_list_objs)
+    if has_manual:
+        all_list_objs.sort(key=lambda l: l.position)
+    elif all_list_objs:
+        count_result = await db.execute(
+            select(Task.list_id, func.count().label("cnt"))
+            .where(Task.list_id.in_([l.id for l in all_list_objs]), Task.parent_id.is_(None))
+            .group_by(Task.list_id)
+        )
+        counts = {row.list_id: row.cnt for row in count_result.all()}
+        all_list_objs.sort(key=lambda l: counts.get(l.id, 0), reverse=True)
+
+    return all_list_objs
 
 
 @router.post("/", response_model=ListResponse)
@@ -106,6 +121,35 @@ async def create_list(
     await db.commit()
     await db.refresh(task_list)
     return task_list
+
+
+@router.patch("/reorder")
+async def reorder_lists(
+    data: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ids = data.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids richiesti")
+    for i, lid in enumerate(ids):
+        task_list = await db.get(TaskList, lid)
+        if task_list and task_list.owner_id == user.id:
+            task_list.position = i + 1
+    await db.commit()
+    return {"detail": "Riordinato"}
+
+
+@router.patch("/reset-order")
+async def reset_list_order(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(TaskList).where(TaskList.owner_id == user.id))
+    for task_list in result.scalars().all():
+        task_list.position = 0
+    await db.commit()
+    return {"detail": "Ordine resettato"}
 
 
 @router.patch("/{list_id}", response_model=ListResponse)
