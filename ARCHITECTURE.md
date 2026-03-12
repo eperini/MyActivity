@@ -7,9 +7,16 @@
 ### Obiettivi principali
 - Gestione task con ricorrenze avanzate (inclusi pattern lavorativi)
 - Tracking abitudini con streak e statistiche
-- Notifiche proattive via Telegram
+- Notifiche proattive via Telegram, Web Push e Email
 - Matrice di Eisenhower per prioritizzazione visiva
+- Kanban board con drag & drop per gestione stati
 - Timer Pomodoro integrato con storico sessioni
+- Subtask con progress bar e template riutilizzabili
+- Google Calendar sync bidirezionale
+- Google Drive backup automatico
+- Import da TickTick (CSV)
+- Quick add con linguaggio naturale (italiano)
+- iPhone Action Button via iOS Shortcuts
 - Interfaccia in italiano con tema scuro
 
 ---
@@ -24,11 +31,12 @@
 | ORM | SQLAlchemy | 2.0.36 | Async con `asyncpg`, mapped columns, relationship resolution |
 | Migrazioni | Alembic | 1.14.0 | Integrazione SQLAlchemy, autogenerate |
 | Cache/Broker | Redis | 7 (Alpine) | Broker Celery, veloce, persistenza opzionale |
-| Task Queue | Celery | 5.4.0 | Beat scheduler per notifiche e generazione istanze |
-| Autenticazione | PyJWT + bcrypt | - | JWT stateless, bcrypt diretto |
+| Task Queue | Celery | 5.4.0 | Beat scheduler per notifiche, istanze ricorrenti, report, backup |
+| Autenticazione | PyJWT + bcrypt | - | JWT in HttpOnly cookie, bcrypt diretto, API key per shortcuts |
 | Rate Limiting | slowapi | 0.1.9 | Protezione brute-force su auth endpoints |
 | Ricorrenze | python-dateutil | 2.9.0 | Parsing RRULE RFC 5545, calcolo occorrenze |
-| Notifiche | httpx | 0.28.1 | Chiamate HTTP async a Telegram Bot API |
+| Notifiche | httpx + pywebpush | - | Telegram Bot API, Web Push VAPID, Email SMTP |
+| Google | google-api-python-client | - | Calendar sync, Drive backup |
 
 ### Frontend
 | Componente | Tecnologia | Versione | Motivazione |
@@ -43,8 +51,9 @@
 ### Infrastruttura
 | Componente | Tecnologia | Motivazione |
 |---|---|---|
-| Orchestrazione | Docker Compose | 5 servizi, un solo comando per avviare tutto |
+| Orchestrazione | Docker Compose | 6 servizi, un solo comando per avviare tutto |
 | Host | Mac Mini | Self-hosted, sempre acceso, Docker Desktop |
+| Accesso remoto | Tailscale | VPN mesh per accesso da iPhone/altri dispositivi |
 | Variabili | .env | Secrets fuori dal codice, gitignored |
 | Container | Multi-stage, non-root | Sicurezza e dimensioni immagine ridotte |
 
@@ -53,10 +62,10 @@
 ## Architettura dei Servizi
 
 ```
-┌─────────────┐     ┌─────────────┐
-│   Frontend   │────▶│   Backend   │
-│  Next.js     │:3000│   FastAPI   │:8000
-│  (dev mode)  │     │  (uvicorn)  │
+┌─────────────┐     ┌─────────────┐     ┌──────────────┐
+│   Frontend   │────▶│   Backend   │────▶│Google Calendar│
+│  Next.js     │:3000│   FastAPI   │:8000│Google Drive   │
+│  (produzione)│     │  (uvicorn)  │     └──────────────┘
 └─────────────┘     └──────┬──────┘
                            │
               ┌────────────┼────────────┐
@@ -71,21 +80,27 @@
        ┌──────────────┐    ┌──────────────┐
        │ Celery Worker │    │ Celery Beat  │
        │ (notifiche,   │    │ (scheduler   │
-       │  istanze)     │    │  periodico)  │
+       │  istanze,     │    │  periodico)  │
+       │  report,      │    │              │
+       │  backup)      │    │              │
        └──────────────┘    └──────────────┘
+              │
+       ┌──────────────┐
+       │ Telegram Bot │
+       │  (polling)   │
+       └──────────────┘
 ```
 
-### Docker Compose - 5 servizi + 2 reti
+### Docker Compose - 6 servizi
 
-1. **db** - PostgreSQL 16 Alpine, volume persistente, rete `internal` (non esposto sull'host)
-2. **redis** - Redis 7 Alpine, volume `redis_data`, rete `internal` (non esposto sull'host)
+1. **db** - PostgreSQL 16 Alpine, volume persistente, rete `internal`
+2. **redis** - Redis 7 Alpine, volume `redis_data`, rete `internal`
 3. **backend** - FastAPI con uvicorn, porta 8000 esposta, reti `internal` + `frontend`
 4. **celery-worker** - Stesso container del backend, comando `celery worker`, rete `internal`
 5. **celery-beat** - Stesso container, comando `celery beat`, rete `internal`
+6. **telegram-bot** - Bot Telegram in polling, rete `internal`
 
-**Network segmentation**: DB e Redis sono raggiungibili solo dalla rete `internal`. Solo il backend e' esposto sulla rete `frontend` (porta 8000). Questo impedisce accessi diretti ai servizi dati dall'esterno.
-
-Tutti i servizi backend condividono le stesse variabili d'ambiente (DATABASE_URL, REDIS_URL, SECRET_KEY, TELEGRAM_BOT_TOKEN) iniettate dal file `.env`.
+**Network segmentation**: DB e Redis sono raggiungibili solo dalla rete `internal`. Solo il backend e' esposto sulla rete `frontend` (porta 8000).
 
 ---
 
@@ -95,13 +110,11 @@ Tutti i servizi backend condividono le stesse variabili d'ambiente (DATABASE_URL
 myActivity/
 ├── .env                          # Secrets (gitignored)
 ├── .env.example                  # Template variabili
-├── .gitignore
 ├── docker-compose.yml
 ├── ARCHITECTURE.md               # Questo documento
 │
 ├── backend/
-│   ├── Dockerfile                # Multi-stage, non-root user
-│   ├── .dockerignore             # Esclude .env, __pycache__, .git
+│   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── alembic.ini
 │   ├── migrations/
@@ -114,57 +127,89 @@ myActivity/
 │       │   ├── database.py       # Async engine, sessionmaker, Base
 │       │   ├── security.py       # bcrypt hash/verify, PyJWT encode/decode
 │       │   ├── limiter.py        # slowapi rate limiter instance
-│       │   └── deps.py           # get_current_user dependency
+│       │   └── deps.py           # get_current_user (JWT cookie + Bearer + API key)
 │       ├── models/
 │       │   ├── __init__.py       # Import ALL models (relationship resolution)
-│       │   ├── user.py           # User (email, telegram_chat_id)
-│       │   ├── task_list.py      # TaskList + ListMember (roles)
-│       │   ├── task.py           # Task (priority 1-4, status enum)
+│       │   ├── user.py           # User (email, telegram_chat_id, api_key, is_admin)
+│       │   ├── task_list.py      # TaskList (position) + ListMember (roles)
+│       │   ├── task.py           # Task (priority 1-4, status enum, parent_id)
 │       │   ├── recurrence.py     # RecurrenceRule + TaskInstance
 │       │   ├── notification.py   # Notification (channel, offset)
 │       │   ├── habit.py          # Habit + HabitLog
-│       │   └── pomodoro.py       # PomodoroSession
+│       │   ├── pomodoro.py       # PomodoroSession
+│       │   ├── push.py           # PushSubscription (VAPID)
+│       │   ├── tag.py            # Tag + task_tags association
+│       │   ├── comment.py        # Comment
+│       │   └── template.py       # TaskTemplate (JSON subtasks/recurrence)
 │       ├── api/routes/
-│       │   ├── auth.py           # POST /register, /login (rate limited 5/min)
-│       │   ├── lists.py          # CRUD liste
-│       │   ├── tasks.py          # CRUD task + has_recurrence + ownership check
-│       │   ├── recurrences.py    # Set/get/delete ricorrenza + ownership check
-│       │   ├── habits.py         # CRUD abitudini, toggle, logs, stats + ownership check
+│       │   ├── auth.py           # Register, login, logout, profile, API key
+│       │   ├── lists.py          # CRUD liste + reorder + members
+│       │   ├── tasks.py          # CRUD task + subtasks + enrichment
+│       │   ├── recurrences.py    # Set/get/delete ricorrenza
+│       │   ├── habits.py         # CRUD abitudini, toggle, logs, stats
 │       │   ├── pomodoro.py       # Sessioni pomodoro + stats
-│       │   └── telegram.py       # Webhook, link/unlink + HTML escape
+│       │   ├── telegram.py       # Webhook, link/unlink
+│       │   ├── push.py           # VAPID key, subscribe/unsubscribe, test
+│       │   ├── export.py         # Export JSON/CSV + import JSON + import TickTick
+│       │   ├── stats.py          # Dashboard statistiche
+│       │   ├── google_calendar.py # Config + sync manuale
+│       │   ├── backup.py         # Trigger manuale + list backups (admin only)
+│       │   ├── tags.py           # CRUD tag + add/remove da task
+│       │   ├── comments.py       # CRUD commenti su task
+│       │   ├── quickadd.py       # Quick add con linguaggio naturale
+│       │   ├── shortcut.py       # API key endpoint per iOS Shortcuts
+│       │   └── templates.py      # CRUD template + from-task + instantiate
 │       ├── services/
 │       │   ├── recurrence_service.py  # RRULE builder, occorrenze, workday adjust
-│       │   └── telegram_service.py    # send_message async/sync
+│       │   ├── telegram_service.py    # send_message async/sync
+│       │   ├── google_calendar.py     # Push/pull/delete eventi
+│       │   ├── google_drive.py        # Upload backup + rotazione
+│       │   ├── email_service.py       # SMTP Gmail per report
+│       │   └── quickadd_parser.py     # Parser italiano (regex-based)
 │       └── workers/
 │           ├── celery_app.py     # Celery config, beat schedule
-│           └── tasks.py          # generate_recurring_instances, check_notifications
+│           └── tasks.py          # Istanze ricorrenti, notifiche, report, backup
 │
 └── frontend/
     ├── package.json
     ├── next.config.ts
     ├── tsconfig.json
+    ├── public/
+    │   ├── manifest.json         # PWA manifest
+    │   └── sw.js                 # Service worker per push notifications
     └── src/
         ├── app/
-        │   ├── layout.tsx        # Geist font, dark theme, lang="it"
+        │   ├── layout.tsx        # Geist font, dark theme, lang="it", Providers
         │   ├── globals.css       # Tailwind, thin scrollbars
         │   ├── page.tsx          # Dashboard principale (routing viste)
         │   └── login/page.tsx    # Login/Register form
         ├── components/
-        │   ├── Sidebar.tsx       # Navigazione + liste + create lista
-        │   ├── TaskListView.tsx  # Lista task filtrata
-        │   ├── TaskItem.tsx      # Riga task (checkbox, badge, date, recurrence icon)
-        │   ├── TaskDetail.tsx    # Pannello dettaglio task (edit inline)
-        │   ├── AddTaskForm.tsx   # Modal creazione task + ricorrenza
+        │   ├── Sidebar.tsx       # Navigazione + liste + drag & drop reorder
+        │   ├── TaskListView.tsx  # Lista task filtrata + ordinamento
+        │   ├── TaskItem.tsx      # Riga task (checkbox, badge, date, subtask progress)
+        │   ├── TaskDetail.tsx    # Pannello dettaglio (edit, subtask, tag, commenti, template)
+        │   ├── AddTaskForm.tsx   # Creazione task (structured + quick + template)
         │   ├── DatePicker.tsx    # Calendario popup (shortcuts + griglia + orario)
         │   ├── DayCalendar.tsx   # Vista giornaliera con timeline
+        │   ├── CalendarView.tsx  # Calendario mensile con task
+        │   ├── KanbanView.tsx    # Board 3 colonne con drag & drop
+        │   ├── EisenhowerMatrix.tsx # Matrice 2x2 priorita
         │   ├── HabitListView.tsx # Lista abitudini con week strip
         │   ├── HabitDetail.tsx   # Dettaglio abitudine (stats + calendario mensile)
         │   ├── AddHabitForm.tsx  # Modal creazione abitudine
-        │   ├── EisenhowerMatrix.tsx # Matrice 2x2 priorita
         │   ├── PomodoroTimer.tsx # Timer circolare SVG
-        │   └── PomodoroHistory.tsx  # Stats + cronologia sessioni
+        │   ├── PomodoroHistory.tsx # Stats + cronologia sessioni
+        │   ├── ShareListModal.tsx # Condivisione lista con membri
+        │   ├── StatsView.tsx     # Dashboard statistiche
+        │   ├── SettingsView.tsx  # Tutte le impostazioni
+        │   ├── Toast.tsx         # ToastProvider context, auto-dismiss 4s
+        │   ├── BottomTabBar.tsx  # Tab bar mobile (5 tab con ciclo "More")
+        │   ├── MobileHeader.tsx  # Header mobile con hamburger
+        │   └── FloatingAddButton.tsx # FAB mobile
+        ├── hooks/
+        │   └── useIsMobile.ts    # Breakpoint md (768px)
         ├── lib/
-        │   ├── api.ts            # Client HTTP con JWT, 401 guard, 204 handling
+        │   ├── api.ts            # Client HTTP con cookie auth, 401 guard
         │   └── dates.ts          # formatRelativeDate, isOverdue
         └── types/
             └── index.ts          # Interfacce TypeScript
@@ -187,29 +232,34 @@ SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
 
 **Problema**: `passlib` con bcrypt 5.x genera `ValueError: password cannot be longer than 72 bytes`.
 
-**Soluzione**: Uso diretto di `bcrypt.hashpw()` e `bcrypt.checkpw()` in `security.py`, bypassando completamente passlib. JWT gestiti con `PyJWT` (attivamente mantenuto, sostituisce `python-jose` che ha CVE note).
+**Soluzione**: Uso diretto di `bcrypt.hashpw()` e `bcrypt.checkpw()` in `security.py`, bypassando completamente passlib. JWT gestiti con `PyJWT`.
 
-### 3. Import esplicito di tutti i models
+### 3. JWT in HttpOnly Cookie
 
-**Problema**: SQLAlchemy non riesce a risolvere le relationship se i modelli non sono importati.
+**Decisione**: Il JWT viene salvato in un cookie HttpOnly (SameSite=Lax) invece che in localStorage.
 
-**Soluzione**: `models/__init__.py` importa esplicitamente tutti i modelli. `main.py` fa `import app.models` prima di registrare i router.
+**Motivazione**: Protegge da XSS (JavaScript non puo' leggere il token). Il backend supporta dual auth: sia cookie che header Bearer per compatibilita' con API key e testing.
 
-### 4. RRULE RFC 5545 + Workday Adjustment
+### 4. Enrichment pattern per Task
 
-**Problema**: Serve supportare pattern come "primo lunedi dopo il 1 del mese" che RRULE standard non copre.
+**Problema**: SQLAlchemy async causa `MissingGreenlet` se Pydantic tenta di serializzare relationship lazy-loaded.
+
+**Soluzione**: La funzione `_enrich_with_recurrence()` carica in batch: ricorrenze, tag, assigned_to_name, subtask_count/subtask_done_count. Tutti gli endpoint che restituiscono Task passano per questa funzione.
+
+### 5. List access check (owner O membro)
+
+**Decisione**: `_check_list_access()` verifica che l'utente sia owner della lista O membro con ruolo edit/view.
+
+**Motivazione**: Permette ai membri di una lista condivisa di creare, modificare e eliminare task nella lista senza essere owner.
+
+### 6. RRULE RFC 5545 + Workday Adjustment
 
 **Soluzione**: Due livelli:
-1. **RRULE standard** tramite `python-dateutil` per frequenze base (daily, weekly, monthly, yearly)
-2. **Post-processing custom** (`adjust_to_workday()`) che sposta la data calcolata al giorno lavorativo target
+1. **RRULE standard** tramite `python-dateutil` per frequenze base
+2. **Post-processing custom** (`adjust_to_workday()`) che sposta la data al giorno lavorativo target
 
-Parametri aggiuntivi nel model `RecurrenceRule`:
-- `workday_adjust`: "none" | "next" | "prev"
-- `workday_target`: 0-6 (giorno della settimana)
+### 7. Priorita come Eisenhower Quadrants
 
-### 5. Priorita come Eisenhower Quadrants
-
-**Mappatura**:
 | Priorita | Valore | Colore | Quadrante Eisenhower |
 |---|---|---|---|
 | Urgente | 1 | Rosso | Urgente & Importante |
@@ -217,63 +267,51 @@ Parametri aggiuntivi nel model `RecurrenceRule`:
 | Media | 3 | Giallo | Urgente & Non Importante |
 | Bassa | 4 | Grigio | Non Urgente & Non Importante |
 
-Questa mappatura permette alla matrice di Eisenhower di funzionare senza campi aggiuntivi nel database.
+### 8. Route ordering FastAPI
 
-### 6. has_recurrence come campo calcolato
+**Regola**: Le route statiche (`/reorder`, `/reset-order`) devono essere definite PRIMA delle route parametriche (`/{list_id}`) per evitare che FastAPI matchi "reorder" come parametro intero.
 
-**Problema**: Il frontend deve sapere se un task ha una ricorrenza per mostrare l'icona, ma il campo non esiste nel model Task.
+### 9. Ordinamento liste: manuale + automatico
 
-**Soluzione**: L'endpoint `GET /tasks/` fa una query aggiuntiva su `RecurrenceRule` per gli ID dei task restituiti e aggiunge `has_recurrence: bool` al response dict. Nessuna modifica allo schema DB.
+**Logica**: Se almeno una lista ha `position > 0`, tutte le liste vengono ordinate per position (manuale). Altrimenti, vengono ordinate per numero di task (decrescente, automatico). Il reset azzera tutte le position a 0.
 
-### 7. Pomodoro Timer lato client
+### 10. Task defaults
 
-**Decisione**: Il timer gira interamente nel browser con `setInterval`. La sessione viene registrata nel backend solo al completamento.
-
-**Motivazione**: Non serve persistenza durante il timer. Se l'utente chiude il browser, la sessione non viene registrata (comportamento atteso). Il timer usa un singolo interval con `isRunning` come unico dep, e un ref per evitare stale closures su `pomosCompleted`.
-
-### 8. Optimistic UI Updates con rollback
-
-**Pattern**: Per toggle abitudini e date picker, lo stato locale viene aggiornato immediatamente, poi la chiamata API parte in background. In caso di errore, lo stato viene ripristinato.
-
-**Implementazione**:
-- `handleToggleHabitLog`: salva `prevLogs`, aggiorna `weekLogs` localmente, rollback su catch
-- `HabitDetail.handleDayClick`: salva `prevDates`, aggiorna `logDates` localmente, rollback su catch
-- `DatePicker`: usa `localValue` state per riflettere la selezione immediatamente
-- `handleUpdate` in `page.tsx`: usa il task restituito dal server per aggiornare `selectedTask`
-
-### 9. Toggle endpoint per Habit Logs
-
-**Decisione**: `POST /habits/{id}/toggle` crea il log se non esiste, lo elimina se esiste.
-
-**Motivazione**: Semplifica il frontend (un'unica chiamata) e rispecchia il comportamento naturale di un checkbox. Restituisce `{checked: true/false}` per conferma.
+- **Data**: default a "oggi" alla creazione
+- **Assegnazione**: auto-assegnato al creatore se non specificato
+- **Ordinamento**: per data in tutte le viste lista
+- **Vista Oggi/Prossimi 7gg**: include task scaduti (overdue)
 
 ---
 
 ## Sicurezza
 
 ### Autenticazione e Autorizzazione
-- **JWT** con `PyJWT`, `SECRET_KEY` forte (64 char hex) in `.env`
+- **JWT** in HttpOnly cookie, durata 24h, SameSite=Lax
+- **Dual auth**: cookie + Bearer header + API key (X-API-Key)
 - **bcrypt** per hashing password (diretto, min 8 char, max 128 char)
-- **Ownership check** su tutte le route: tasks, ricorrenze, abitudini, pomodoro verificano `created_by == user.id`
-- **List access check**: la creazione task verifica che l'utente sia owner o membro della lista
+- **API key** hashata con SHA-256 nel DB per iOS Shortcuts
+- **List access check**: owner O membro su tutte le operazioni task
+- **IDOR fix**: comments, tags, push subscription verificano accesso
 - **Rate limiting**: `slowapi` 5 req/min su `/auth/login` e `/auth/register`
+- **Backup**: solo admin (is_admin check)
 
 ### Validazione Input
-- **Priority**: `Field(ge=1, le=4)` - solo valori 1-4
-- **Frequency**: `Literal["daily", "weekly", "monthly", "yearly"]`
-- **Password**: `Field(min_length=8, max_length=128)`
-- **Preview count**: `Query(default=10, le=100)` - max 100 occorrenze
+- **Title**: max 500 char
+- **Description**: max 5000 char
+- **Comment**: max 5000 char
+- **Quick add**: max 500 char
+- **Priority**: `Field(ge=1, le=4)`
+- **Tag color**: regex `^#[0-9a-fA-F]{6}$`
+- **Member role**: pattern `^(edit|view)$`
 
 ### Infrastruttura
-- **CORS** limitato a `http://localhost:3000`, metodi e header specifici
-- **`.env`** con secrets escluso dal git, nessun default debole in produzione
+- **CORS** limitato, metodi e header specifici
+- **`.env`** con secrets escluso dal git, SECRET_KEY obbligatorio (startup check)
 - **PostgreSQL e Redis non esposti** sull'host (solo rete Docker interna)
-- **Network segmentation**: rete `internal` per DB/Redis/workers, rete `frontend` per il backend
 - **Container non-root**: utente `app` dedicato
-- **Multi-stage Dockerfile**: build tools esclusi dall'immagine finale
-- **`.dockerignore`**: esclude `.env`, `__pycache__`, `.git`
-- **HTML escape** nei messaggi Telegram (`html.escape()` su contenuti utente)
-- **Exception handling specifico**: `jwt.InvalidTokenError` invece di `except Exception`
+- **HTML escape** nei messaggi Telegram e email report
+- **Toast feedback**: tutte le operazioni mostrano errori all'utente
 
 ---
 
@@ -287,7 +325,11 @@ users
 ├── hashed_password
 ├── display_name
 ├── telegram_chat_id (BIGINT, nullable)
-└── is_admin (BOOLEAN)
+├── is_admin (BOOLEAN)
+├── api_key_hash (nullable, SHA-256)
+├── daily_report_email (BOOLEAN)
+├── daily_report_push (BOOLEAN)
+└── daily_report_time (TIME, nullable)
 ```
 
 ### Task Management
@@ -296,69 +338,88 @@ lists                          tasks
 ├── id (PK)                    ├── id (PK)
 ├── name                       ├── title
 ├── color                      ├── description
-├── icon                       ├── list_id (FK -> lists)
+├── icon                       ├── list_id (FK -> lists, CASCADE)
 ├── owner_id (FK -> users)     ├── created_by (FK -> users)
-│                              ├── assigned_to (FK -> users)
-list_members                   ├── priority (1-4, validated)
-├── list_id (FK)               ├── status (todo/doing/done)
-├── user_id (FK)               ├── due_date
-└── role (owner/edit/view)     ├── due_time
-                               └── parent_id (self-ref, subtasks)
+├── position (INT, default 0)  ├── assigned_to (FK -> users, nullable)
+├── created_at                 ├── priority (1-4)
+│                              ├── status (todo/doing/done)
+list_members                   ├── due_date
+├── id (PK)                    ├── due_time
+├── list_id (FK, CASCADE)      ├── completed_at
+├── user_id (FK, CASCADE)      ├── parent_id (self-ref FK, CASCADE)
+└── role (edit/view)           ├── google_event_id (nullable)
+                               ├── position (INT)
+                               ├── created_at
+                               └── updated_at
+```
+
+### Tags & Commenti
+```
+tags                           task_tags (association)
+├── id (PK)                    ├── task_id (FK)
+├── name                       └── tag_id (FK)
+├── color (#hex)
+└── user_id (FK -> users)      comments
+                               ├── id (PK)
+                               ├── task_id (FK)
+                               ├── user_id (FK)
+                               ├── text
+                               └── created_at
 ```
 
 ### Ricorrenze
 ```
 recurrence_rules               task_instances
 ├── id (PK)                    ├── id (PK)
-├── task_id (FK -> tasks)      ├── task_id (FK -> tasks)
+├── task_id (FK, UNIQUE)       ├── task_id (FK)
 ├── rrule (TEXT)               ├── due_date
 ├── workday_adjust (ENUM)      ├── status (todo/done/skip)
 ├── workday_target (INT)       ├── completed_at
-└── next_occurrence            └── completed_by (FK -> users)
+└── next_occurrence            └── completed_by (FK)
 ```
 
 ### Abitudini
 ```
 habits                         habit_logs
 ├── id (PK)                    ├── id (PK)
-├── name                       ├── habit_id (FK -> habits)
-├── description                ├── user_id (FK -> users)
+├── name                       ├── habit_id (FK)
+├── description                ├── user_id (FK)
 ├── list_id (FK, nullable)     ├── log_date (DATE)
-├── created_by (FK -> users)   ├── value (FLOAT)
+├── created_by (FK)            ├── value (FLOAT)
 ├── frequency_type             └── note
 ├── frequency_days (ARRAY)
 ├── times_per_period
 ├── time_of_day
 ├── start_date / end_date
-├── color
-├── icon
+├── color / icon
 ├── position
 └── is_archived
 ```
 
-### Pomodoro
+### Template, Pomodoro, Notifiche, Push
 ```
-pomodoro_sessions
-├── id (PK)
-├── user_id (FK -> users)
-├── task_id (FK -> tasks, nullable)
-├── started_at (TIMESTAMPTZ)
-├── ended_at (TIMESTAMPTZ)
-├── duration_minutes
-└── session_type (pomodoro/short_break/long_break)
-```
-
-### Notifiche
-```
-notifications
-├── id (PK)
-├── user_id (FK -> users)
-├── task_id (FK, nullable)
-├── habit_id (FK, nullable)
-├── channel (TELEGRAM/EMAIL)
+task_templates                 pomodoro_sessions
+├── id (PK)                    ├── id (PK)
+├── user_id (FK)               ├── user_id (FK)
+├── name                       ├── task_id (FK, nullable)
+├── title                      ├── started_at / ended_at
+├── description                ├── duration_minutes
+├── priority                   └── session_type
+├── subtask_titles (JSON)
+└── recurrence_config (JSON)   push_subscriptions
+                               ├── id (PK)
+notifications                  ├── user_id (FK)
+├── id (PK)                    ├── endpoint
+├── user_id / task_id          ├── p256dh
+├── channel                    └── auth
 ├── offset_minutes
 └── sent_at
 ```
+
+### DB Indexes
+- `tasks`: list_id, created_by, assigned_to, status, due_date, parent_id
+- `notifications`: task_id, user_id, sent_at
+- `comments`: task_id
 
 ---
 
@@ -367,34 +428,75 @@ notifications
 ### Autenticazione (rate limited: 5/min)
 | Metodo | Path | Descrizione |
 |---|---|---|
-| POST | `/api/auth/register` | Registrazione utente (password min 8 char) |
-| POST | `/api/auth/login` | Login, restituisce JWT |
+| POST | `/api/auth/register` | Registrazione utente |
+| POST | `/api/auth/login` | Login, setta JWT cookie |
+| POST | `/api/auth/logout` | Logout, cancella cookie |
+| GET | `/api/auth/me` | Profilo utente |
+| PATCH | `/api/auth/me/preferences` | Aggiorna preferenze report |
+| POST | `/api/auth/me/api-key` | Genera API key |
+| DELETE | `/api/auth/me/api-key` | Revoca API key |
 
 ### Liste
 | Metodo | Path | Descrizione |
 |---|---|---|
-| GET | `/api/lists/` | Tutte le liste dell'utente (proprie + condivise) |
+| GET | `/api/lists/` | Liste utente (proprie + condivise), ordinate |
 | POST | `/api/lists/` | Crea lista |
+| PATCH | `/api/lists/reorder` | Salva ordine manuale |
+| PATCH | `/api/lists/reset-order` | Reset a ordine automatico |
+| PATCH | `/api/lists/{id}` | Aggiorna lista |
+| DELETE | `/api/lists/{id}` | Elimina lista + task |
+| GET | `/api/lists/{id}/members` | Membri della lista |
+| POST | `/api/lists/{id}/members` | Aggiungi membro |
+| PATCH | `/api/lists/{id}/members/{mid}` | Aggiorna ruolo |
+| DELETE | `/api/lists/{id}/members/{mid}` | Rimuovi membro |
 
-### Task (con ownership check)
+### Task (con list access check)
 | Metodo | Path | Descrizione |
 |---|---|---|
-| GET | `/api/tasks/` | Task con filtri (list_id, status) + `has_recurrence` |
-| POST | `/api/tasks/` | Crea task (verifica accesso alla lista) |
-| PATCH | `/api/tasks/{id}` | Aggiorna task (solo owner) |
-| DELETE | `/api/tasks/{id}` | Elimina task (solo owner) |
+| GET | `/api/tasks/` | Task con filtri (list_id, status, tag_id) |
+| POST | `/api/tasks/` | Crea task (auto-assign, default oggi) |
+| PATCH | `/api/tasks/{id}` | Aggiorna task (incluso cambio lista) |
+| DELETE | `/api/tasks/{id}` | Elimina task |
+| GET | `/api/tasks/{id}/subtasks` | Subtask di un task |
+| POST | `/api/tasks/{id}/subtasks` | Crea subtask |
+| PATCH | `/api/tasks/{id}/subtasks/{sid}/toggle` | Toggle subtask done/todo |
+| PATCH | `/api/tasks/{id}/subtasks/reorder` | Riordina subtask |
 
-### Ricorrenze (con ownership check)
+### Ricorrenze
 | Metodo | Path | Descrizione |
 |---|---|---|
-| POST | `/api/tasks/{id}/recurrence` | Imposta/aggiorna ricorrenza (validated frequency) |
+| POST | `/api/tasks/{id}/recurrence` | Imposta ricorrenza (RRULE) |
 | GET | `/api/tasks/{id}/recurrence` | Dettaglio ricorrenza |
 | DELETE | `/api/tasks/{id}/recurrence` | Rimuovi ricorrenza |
-| GET | `/api/tasks/{id}/recurrence/preview` | Anteprima prossime N date (max 100) |
+| GET | `/api/tasks/{id}/recurrence/preview` | Anteprima prossime N date |
 | GET | `/api/tasks/{id}/instances` | Istanze generate |
-| PATCH | `/api/instances/{id}` | Completa istanza |
 
-### Abitudini (con ownership check)
+### Tags
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/tags/` | Tutti i tag utente |
+| POST | `/api/tags/` | Crea tag |
+| PATCH | `/api/tags/{id}` | Aggiorna tag |
+| DELETE | `/api/tags/{id}` | Elimina tag |
+| POST | `/api/tags/tasks/{tid}/tags/{tag_id}` | Aggiungi tag a task |
+| DELETE | `/api/tags/tasks/{tid}/tags/{tag_id}` | Rimuovi tag da task |
+
+### Commenti
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/tasks/{id}/comments` | Commenti di un task |
+| POST | `/api/tasks/{id}/comments` | Aggiungi commento |
+| DELETE | `/api/tasks/{id}/comments/{cid}` | Elimina commento |
+
+### Template
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/templates/` | Tutti i template |
+| POST | `/api/templates/from-task/{id}` | Crea template da task esistente |
+| POST | `/api/templates/{id}/instantiate` | Crea task da template |
+| DELETE | `/api/templates/{id}` | Elimina template |
+
+### Abitudini
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/habits/` | Tutte le abitudini attive |
@@ -402,49 +504,101 @@ notifications
 | PATCH | `/api/habits/{id}` | Modifica abitudine |
 | DELETE | `/api/habits/{id}` | Elimina abitudine |
 | POST | `/api/habits/{id}/toggle` | Toggle check-in per data |
-| POST | `/api/habits/{id}/log` | Registra log manuale |
-| GET | `/api/habits/{id}/logs` | Log mensili (year, month) |
-| GET | `/api/habits/{id}/stats` | Statistiche (streak, rate, totali) |
-| GET | `/api/habits/logs/week` | Log settimanali di tutte le abitudini |
+| GET | `/api/habits/{id}/logs` | Log mensili |
+| GET | `/api/habits/{id}/stats` | Statistiche (streak, rate) |
+| GET | `/api/habits/logs/week` | Log settimanali tutte le abitudini |
 
 ### Pomodoro
 | Metodo | Path | Descrizione |
 |---|---|---|
-| POST | `/api/pomodoro/` | Registra sessione completata |
+| POST | `/api/pomodoro/` | Registra sessione |
 | GET | `/api/pomodoro/` | Ultime 100 sessioni |
 | GET | `/api/pomodoro/stats` | Stats (oggi + totali) |
+
+### Quick Add & Shortcuts
+| Metodo | Path | Descrizione |
+|---|---|---|
+| POST | `/api/tasks/quickadd` | Quick add linguaggio naturale (JWT) |
+| POST | `/api/shortcut/task` | Quick add via API key (iOS Shortcuts) |
+
+### Export/Import
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/export/tasks` | Export task JSON/CSV |
+| GET | `/api/export/habits` | Export abitudini JSON/CSV |
+| POST | `/api/export/import/tasks` | Import task da JSON |
+| POST | `/api/export/import/ticktick` | Import da TickTick CSV backup |
+
+### Notifiche & Push
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/push/vapid-key` | Chiave pubblica VAPID |
+| POST | `/api/push/subscribe` | Registra push subscription |
+| DELETE | `/api/push/subscribe` | Rimuovi push subscription |
+| POST | `/api/push/test` | Invia notifica di test |
+
+### Google Calendar
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/google/config` | Configurazione sync |
+| POST | `/api/google/sync` | Sync manuale bidirezionale |
+
+### Backup (admin only)
+| Metodo | Path | Descrizione |
+|---|---|---|
+| POST | `/api/backup/trigger` | Avvia backup manuale |
+| GET | `/api/backup/list` | Lista ultimi backup |
 
 ### Telegram
 | Metodo | Path | Descrizione |
 |---|---|---|
-| POST | `/api/telegram/webhook` | Riceve messaggi dal bot (HTML escaped) |
+| POST | `/api/telegram/webhook` | Riceve messaggi dal bot |
 | POST | `/api/telegram/link` | Genera codice di collegamento |
 | DELETE | `/api/telegram/unlink` | Scollega account |
 | GET | `/api/telegram/status` | Stato collegamento |
 
-### Sistema
+### Stats & Health
 | Metodo | Path | Descrizione |
 |---|---|---|
+| GET | `/api/stats/dashboard` | Dashboard statistiche complete |
 | GET | `/api/health` | Healthcheck |
 
 ---
 
 ## Viste Frontend
 
-### 1. Inbox / Today / Next 7 Days
-Vista classica a lista: sidebar (navigazione + liste) | lista task filtrata | dettaglio task o calendario giornaliero.
+### 1. Oggi
+Task con scadenza oggi + task scaduti (overdue). Ordinamento per data.
 
-### 2. Vista per Lista
-Stessa struttura, filtrata per `list_id`.
+### 2. Prossimi 7 Giorni
+Task con scadenza entro 7 giorni + task scaduti. Ordinamento per data.
 
-### 3. Abitudini
-Lista abitudini con week strip (pallini cliccabili Lun-Dom) | dettaglio con statistiche e calendario mensile.
+### 3. Inbox
+Tutti i task non completati. Ordinamento per data.
 
-### 4. Matrice di Eisenhower
-Griglia 2x2 che mappa le 4 priorita (solo task non completati). Ogni quadrante raggruppa i task per scadenza (Scaduti > Oggi > Prossimi 7gg > Dopo).
+### 4. Vista per Lista
+Task filtrati per `list_id`, con form di creazione inline.
 
-### 5. Pomodoro
-Timer circolare SVG con progress ring (25/5/15 min) | pannello destro con overview statistiche e cronologia sessioni.
+### 5. Calendario
+Vista mensile con task posizionati sui giorni. Click per creare task su data specifica.
+
+### 6. Kanban Board
+3 colonne (Todo, In Progress, Done) con drag & drop per cambiare stato. Filtro per lista. Card con priorita, data, tag, subtask progress.
+
+### 7. Matrice di Eisenhower
+Griglia 2x2 che mappa le 4 priorita. Ogni quadrante raggruppa i task per scadenza.
+
+### 8. Abitudini
+Lista abitudini con week strip (pallini cliccabili Lun-Dom). Dettaglio con statistiche e calendario mensile.
+
+### 9. Pomodoro
+Timer circolare SVG con progress ring (25/5/15 min). Pannello con statistiche e cronologia sessioni.
+
+### 10. Statistiche
+Dashboard con completion rate, weekly/monthly charts, habits overview, focus hours.
+
+### 11. Impostazioni
+Invito famiglia, Google Calendar, backup, push notifications, report giornaliero, export/import, import TickTick, template, API key, logout.
 
 ---
 
@@ -452,10 +606,28 @@ Timer circolare SVG con progress ring (25/5/15 min) | pannello destro con overvi
 
 | Task | Schedule | Funzione |
 |---|---|---|
-| `generate_recurring_instances` | Ogni giorno alle 00:05 | Genera `TaskInstance` per i prossimi 7 giorni basandosi sulle `RecurrenceRule` |
-| `check_and_send_notifications` | Ogni 60 secondi | Verifica notifiche non inviate e le invia via Telegram |
+| `generate_recurring_instances` | Ogni giorno alle 00:05 | Genera TaskInstance per i prossimi 7 giorni |
+| `check_and_send_notifications` | Ogni 60 secondi | Verifica e invia notifiche (Telegram + Push) |
+| `send_daily_reports` | Ogni 5 minuti | Report giornaliero (email + push + Telegram) |
+| `backup_to_drive` | Ogni giorno alle 03:00 | pg_dump + gzip + upload Google Drive |
 
 Timezone: `Europe/Rome`
+
+---
+
+## Import TickTick
+
+L'endpoint `POST /export/import/ticktick` accetta il CSV di backup di TickTick e importa:
+
+- **Task** con titolo, descrizione, priorita mappata (TT 0→4, 1→1, 3→2, 5→3)
+- **Liste** create automaticamente dal campo "List Name"
+- **Subtask** collegati tramite parentId/taskId
+- **Tag** creati automaticamente con colori ciclici
+- **Ricorrenze** (campo Repeat in formato RRULE)
+- **Stato** mappato (TT 0→todo, 1/2→done, colonna Kanban→doing)
+- **Checklist** convertite (▫→[ ], ▪→[x])
+
+Gestisce UTF-8 BOM e righe metadata iniziali del CSV TickTick.
 
 ---
 
@@ -464,21 +636,19 @@ Timezone: `Europe/Rome`
 ```bash
 # 1. Configura le variabili d'ambiente
 cp .env.example .env
-# Genera secrets forti:
 python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
-python3 -c "import secrets; print('DB_PASSWORD=' + secrets.token_hex(16))"
-# Inserisci i valori generati in .env
 
 # 2. Avvia i servizi Docker
 docker compose up -d
 
-# 3. Esegui le migrazioni (prima volta)
-docker compose exec backend alembic upgrade head
+# 3. Esegui le migrazioni
+docker compose exec -w /app backend alembic upgrade head
 
-# 4. Avvia il frontend (sviluppo)
+# 4. Build e avvia il frontend (produzione)
 cd frontend
 npm install
-npm run dev
+npm run build
+npm run start    # porta 3000
 
 # L'app e' disponibile su http://localhost:3000
 # Le API su http://localhost:8000/api
@@ -489,11 +659,6 @@ npm run dev
 
 ## Sviluppi Futuri
 
-- **Bot Telegram interattivo**: polling o webhook via Cloudflare Tunnel
-- **Multi-utente familiare**: inviti, liste condivise con ruoli
-- **PWA / App mobile**: React Native o Progressive Web App
-- **Drag & drop**: riordinamento task e abitudini
-- **Grafici e statistiche avanzate**: trend settimanali, heatmap annuale abitudini
-- **Backup automatico**: export dati, backup PostgreSQL schedulato
-- **Temi personalizzabili**: oltre al dark theme attuale
-- **Refresh token flow**: access token breve + refresh per maggiore sicurezza
+- Integrazione Obsidian vault (daily note + report periodici)
+- Widget iOS/Android
+- Bot Telegram interattivo (polling o webhook avanzato)
