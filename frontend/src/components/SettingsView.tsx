@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2 } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate } from "@/lib/api";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate } from "@/lib/api";
+import type { TickTickImportResult } from "@/lib/api";
 import type { TaskTemplate } from "@/types";
 import { useToast } from "@/components/Toast";
 
@@ -30,6 +31,8 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [ticktickImporting, setTicktickImporting] = useState(false);
+  const [ticktickMessage, setTicktickMessage] = useState("");
 
   useEffect(() => {
     getGoogleCalendarConfig()
@@ -439,6 +442,55 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
           <p className="text-xs text-zinc-400 flex items-center gap-1">
             <CheckCircle2 size={12} className="text-green-400" />
             {importMessage}
+          </p>
+        )}
+      </div>
+
+      {/* Import TickTick */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+          <Upload size={16} />
+          Importa da TickTick
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Esporta i tuoi task da TickTick (Settings &gt; Backup &gt; Generate Backup) e carica qui il file CSV.
+          Vengono importati: task, subtask, liste, tag, ricorrenze e priorità.
+        </p>
+        <label className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg text-sm text-white cursor-pointer transition-colors">
+          <Upload size={16} />
+          {ticktickImporting ? "Importazione..." : "Scegli file CSV TickTick"}
+          <input
+            type="file"
+            accept=".csv"
+            className="hidden"
+            disabled={ticktickImporting}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setTicktickImporting(true);
+              setTicktickMessage("");
+              try {
+                const res: TickTickImportResult = await importTickTick(file);
+                const parts = [`${res.tasks_imported} task`];
+                if (res.subtasks_imported > 0) parts.push(`${res.subtasks_imported} subtask`);
+                if (res.lists_created > 0) parts.push(`${res.lists_created} liste create`);
+                if (res.tags_created > 0) parts.push(`${res.tags_created} tag`);
+                if (res.recurrences_created > 0) parts.push(`${res.recurrences_created} ricorrenze`);
+                if (res.skipped > 0) parts.push(`${res.skipped} ignorati`);
+                setTicktickMessage(`Importati: ${parts.join(", ")}` + (res.errors.length > 0 ? ` (${res.errors.length} errori)` : ""));
+              } catch (err) {
+                setTicktickMessage("Errore: " + (err instanceof Error ? err.message : "sconosciuto"));
+              } finally {
+                setTicktickImporting(false);
+                e.target.value = "";
+              }
+            }}
+          />
+        </label>
+        {ticktickMessage && (
+          <p className="text-xs text-zinc-400 flex items-center gap-1">
+            <CheckCircle2 size={12} className="text-green-400" />
+            {ticktickMessage}
           </p>
         )}
       </div>

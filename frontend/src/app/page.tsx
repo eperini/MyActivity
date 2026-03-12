@@ -116,13 +116,15 @@ export default function HomePage() {
     switch (selectedView) {
       case "today": {
         const d = effectiveDate(task);
-        return d && isToday(parseISO(d));
+        if (!d) return false;
+        const diff = differenceInDays(parseISO(d), new Date());
+        return diff <= 0; // today + overdue
       }
       case "next7": {
         const d = effectiveDate(task);
         if (!d) return false;
         const diff = differenceInDays(parseISO(d), new Date());
-        return diff >= 0 && diff <= 7;
+        return diff <= 7; // next 7 days + overdue
       }
       case "inbox":
         return task.status !== "done";
@@ -140,12 +142,11 @@ export default function HomePage() {
   // Count tasks per view
   const activeTasks = tasks.filter((t) => t.status !== "done");
   const taskCounts: Record<string, number> = {
-    today: activeTasks.filter((t) => { const d = effectiveDate(t); return d && isToday(parseISO(d)); }).length,
+    today: activeTasks.filter((t) => { const d = effectiveDate(t); if (!d) return false; return differenceInDays(parseISO(d), new Date()) <= 0; }).length,
     next7: activeTasks.filter((t) => {
       const d = effectiveDate(t);
       if (!d) return false;
-      const diff = differenceInDays(parseISO(d), new Date());
-      return diff >= 0 && diff <= 7;
+      return differenceInDays(parseISO(d), new Date()) <= 7;
     }).length,
     inbox: activeTasks.length,
     habits: habits.length,

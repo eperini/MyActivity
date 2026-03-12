@@ -196,6 +196,36 @@ export async function exportBlob(path: string): Promise<Blob> {
   return res.blob();
 }
 
+// Import TickTick
+export interface TickTickImportResult {
+  tasks_imported: number;
+  subtasks_imported: number;
+  lists_created: number;
+  tags_created: number;
+  recurrences_created: number;
+  skipped: number;
+  errors: string[];
+}
+
+export async function importTickTick(file: File): Promise<TickTickImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_URL}/export/import/ticktick`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  if (res.status === 401) {
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") window.location.href = "/login";
+    throw new Error("Non autorizzato");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Errore import" }));
+    throw new Error(err.detail || "Errore import");
+  }
+  return res.json();
+}
+
 // Import
 export async function importTasks(file: File): Promise<{ tasks_imported: number; errors: string[] }> {
   const formData = new FormData();

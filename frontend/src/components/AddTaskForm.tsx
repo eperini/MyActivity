@@ -41,7 +41,7 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
   const [description, setDescription] = useState("");
   const [listId, setListId] = useState(defaultListId || lists[0]?.id || 0);
   const [priority, setPriority] = useState(4);
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueTime, setDueTime] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);

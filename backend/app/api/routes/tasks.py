@@ -241,7 +241,10 @@ async def create_task(
     db: AsyncSession = Depends(get_db),
 ):
     await _check_list_access(data.list_id, user.id, db)
-    task = Task(**data.model_dump(), created_by=user.id)
+    task_data = data.model_dump()
+    if task_data.get("assigned_to") is None:
+        task_data["assigned_to"] = user.id
+    task = Task(**task_data, created_by=user.id)
     db.add(task)
     await db.commit()
     await db.refresh(task)
