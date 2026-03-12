@@ -483,8 +483,12 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
                   #{tag.name}
                   <button
                     onClick={async () => {
-                      await removeTagFromTask(task.id, tag.id);
-                      onRefresh?.();
+                      try {
+                        await removeTagFromTask(task.id, tag.id);
+                        onRefresh?.();
+                      } catch {
+                        showToast("Errore rimozione tag");
+                      }
                     }}
                     className="hover:opacity-70"
                   >
@@ -507,9 +511,13 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
                         <button
                           key={tag.id}
                           onClick={async () => {
-                            await addTagToTask(task.id, tag.id);
-                            setShowTagDropdown(false);
-                            onRefresh?.();
+                            try {
+                              await addTagToTask(task.id, tag.id);
+                              setShowTagDropdown(false);
+                              onRefresh?.();
+                            } catch {
+                              showToast("Errore aggiunta tag");
+                            }
                           }}
                           className="flex items-center gap-2 w-full px-2 py-1 rounded text-xs text-zinc-300 hover:bg-zinc-700"
                         >
@@ -525,14 +533,18 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
                         className="flex-1 bg-zinc-900 rounded px-2 py-1 text-xs text-zinc-300 outline-none"
                         onKeyDown={async (e) => {
                           if (e.key === "Enter" && newTagName.trim()) {
-                            const colors = ["#3b82f6","#ef4444","#22c55e","#f59e0b","#8b5cf6","#ec4899","#06b6d4"];
-                            const color = colors[Math.floor(Math.random() * colors.length)];
-                            const tag = await createTag({ name: newTagName.trim(), color });
-                            await addTagToTask(task.id, tag.id);
-                            setAllTags(prev => [...prev, tag]);
-                            setNewTagName("");
-                            setShowTagDropdown(false);
-                            onRefresh?.();
+                            try {
+                              const colors = ["#3b82f6","#ef4444","#22c55e","#f59e0b","#8b5cf6","#ec4899","#06b6d4"];
+                              const color = colors[Math.floor(Math.random() * colors.length)];
+                              const tag = await createTag({ name: newTagName.trim(), color });
+                              await addTagToTask(task.id, tag.id);
+                              setAllTags(prev => [...prev, tag]);
+                              setNewTagName("");
+                              setShowTagDropdown(false);
+                              onRefresh?.();
+                            } catch {
+                              showToast("Errore creazione tag");
+                            }
                           }
                         }}
                       />
@@ -607,12 +619,28 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
 
           <div className="space-y-2 max-h-48 overflow-y-auto">
             {comments.map(c => (
-              <div key={c.id} className="bg-zinc-800/50 rounded-lg p-2.5 space-y-1">
+              <div key={c.id} className="bg-zinc-800/50 rounded-lg p-2.5 space-y-1 group/comment">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-zinc-300">{c.user_name}</span>
-                  <span className="text-[10px] text-zinc-600">
-                    {c.created_at ? format(parseISO(c.created_at), "d MMM HH:mm", { locale: it }) : ""}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-zinc-600">
+                      {c.created_at ? format(parseISO(c.created_at), "d MMM HH:mm", { locale: it }) : ""}
+                    </span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await deleteComment(task.id, c.id);
+                          setComments(prev => prev.filter(cc => cc.id !== c.id));
+                        } catch {
+                          showToast("Errore eliminazione commento");
+                        }
+                      }}
+                      className="opacity-0 group-hover/comment:opacity-100 text-zinc-600 hover:text-red-400 transition-all"
+                      title="Elimina commento"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
                 <p className="text-xs text-zinc-400">{c.text}</p>
               </div>
@@ -632,6 +660,8 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
                     const c = await addComment(task.id, newComment.trim());
                     setComments(prev => [...prev, c]);
                     setNewComment("");
+                  } catch {
+                    showToast("Errore invio commento");
                   } finally {
                     setSendingComment(false);
                   }
@@ -646,6 +676,8 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
                   const c = await addComment(task.id, newComment.trim());
                   setComments(prev => [...prev, c]);
                   setNewComment("");
+                } catch {
+                  showToast("Errore invio commento");
                 } finally {
                   setSendingComment(false);
                 }

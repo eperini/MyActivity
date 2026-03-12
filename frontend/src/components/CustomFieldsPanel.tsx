@@ -28,6 +28,7 @@ export default function CustomFieldsPanel({ task, projectId, onUpdate }: CustomF
         if (e.message !== "Non autorizzato") showToast("Errore caricamento campi custom");
       })
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   if (loading) return null;
@@ -39,7 +40,8 @@ export default function CustomFieldsPanel({ task, projectId, onUpdate }: CustomF
   }
 
   function handleMultiSelectToggle(key: string, option: string) {
-    const current = (values[key] as string[]) || [];
+    const raw = values[key];
+    const current = Array.isArray(raw) ? raw.filter((o): o is string => typeof o === "string") : [];
     const updated = current.includes(option)
       ? current.filter((o) => o !== option)
       : [...current, option];
@@ -65,39 +67,54 @@ export default function CustomFieldsPanel({ task, projectId, onUpdate }: CustomF
                 {field.is_required && <span className="text-red-400">*</span>}
               </label>
 
-              {field.field_type === "text" && (
+              {field.field_type === "text" && (() => {
+                const val = values[field.field_key];
+                const strVal = typeof val === "string" ? val : "";
+                return (
                 <input
                   type="text"
-                  value={(values[field.field_key] as string) || ""}
+                  value={strVal}
                   onChange={(e) => handleChange(field.field_key, e.target.value)}
                   onBlur={(e) => handleChange(field.field_key, e.target.value)}
                   className="w-full bg-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600 placeholder-zinc-600"
                   placeholder={`Inserisci ${field.name.toLowerCase()}...`}
                 />
-              )}
+                );
+              })()}
 
-              {field.field_type === "number" && (
+              {field.field_type === "number" && (() => {
+                const val = values[field.field_key];
+                const numVal = typeof val === "number" ? val : "";
+                return (
                 <input
                   type="number"
-                  value={(values[field.field_key] as number) ?? ""}
+                  value={numVal}
                   onChange={(e) => handleChange(field.field_key, e.target.value === "" ? null : Number(e.target.value))}
                   className="w-full bg-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600 placeholder-zinc-600"
                   placeholder="0"
                 />
-              )}
+                );
+              })()}
 
-              {field.field_type === "date" && (
+              {field.field_type === "date" && (() => {
+                const val = values[field.field_key];
+                const strVal = typeof val === "string" ? val : "";
+                return (
                 <input
                   type="date"
-                  value={(values[field.field_key] as string) || ""}
+                  value={strVal}
                   onChange={(e) => handleChange(field.field_key, e.target.value || null)}
                   className="w-full bg-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600 [color-scheme:dark]"
                 />
-              )}
+                );
+              })()}
 
-              {field.field_type === "select" && (
+              {field.field_type === "select" && (() => {
+                const val = values[field.field_key];
+                const strVal = typeof val === "string" ? val : "";
+                return (
                 <select
-                  value={(values[field.field_key] as string) || ""}
+                  value={strVal}
                   onChange={(e) => handleChange(field.field_key, e.target.value || null)}
                   className="w-full bg-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600 cursor-pointer"
                 >
@@ -106,12 +123,14 @@ export default function CustomFieldsPanel({ task, projectId, onUpdate }: CustomF
                     <option key={opt} value={opt} className="bg-zinc-800">{opt}</option>
                   ))}
                 </select>
-              )}
+                );
+              })()}
 
               {field.field_type === "multi_select" && (
                 <div className="flex flex-wrap gap-1">
                   {(field.options || []).map((opt) => {
-                    const selected = ((values[field.field_key] as string[]) || []).includes(opt);
+                    const raw = values[field.field_key];
+                    const selected = (Array.isArray(raw) ? raw.filter((o): o is string => typeof o === "string") : []).includes(opt);
                     return (
                       <button
                         key={opt}
@@ -151,19 +170,22 @@ export default function CustomFieldsPanel({ task, projectId, onUpdate }: CustomF
                 </button>
               )}
 
-              {field.field_type === "url" && (
+              {field.field_type === "url" && (() => {
+                const val = values[field.field_key];
+                const strVal = typeof val === "string" ? val : "";
+                return (
                 <div className="flex items-center gap-1">
                   <input
                     type="url"
-                    value={(values[field.field_key] as string) || ""}
+                    value={strVal}
                     onChange={(e) => handleChange(field.field_key, e.target.value)}
                     onBlur={(e) => handleChange(field.field_key, e.target.value)}
                     className="flex-1 bg-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-600 placeholder-zinc-600"
                     placeholder="https://..."
                   />
-                  {(values[field.field_key] as string) ? (
+                  {strVal ? (
                     <a
-                      href={values[field.field_key] as string}
+                      href={strVal}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-zinc-500 hover:text-blue-400 transition-colors flex-shrink-0"
@@ -172,7 +194,8 @@ export default function CustomFieldsPanel({ task, projectId, onUpdate }: CustomF
                     </a>
                   ) : null}
                 </div>
-              )}
+                );
+              })()}
             </div>
           ))}
         </div>

@@ -50,6 +50,7 @@ export default function DependenciesPanel({ taskId, allTasks: externalTasks }: D
         getTasks().then(setLocalTasks).catch(() => {});
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapsed, taskId]);
 
   async function loadDeps() {

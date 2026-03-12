@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.task import Task, TaskStatus
 from app.models.sprint import Sprint, SprintStatus, sprint_tasks
 from app.api.routes.projects import _check_project_access, _check_project_owner
+from app.api.routes.tasks import _check_list_access
 
 router = APIRouter()
 
@@ -237,6 +238,9 @@ async def add_task_to_sprint(
     task = await db.get(Task, data.task_id)
     if not task or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task non trovato in questo progetto")
+
+    # Verify user has access to the task's list
+    await _check_list_access(task.list_id, user.id, db)
 
     # Check if already in sprint
     existing = await db.execute(

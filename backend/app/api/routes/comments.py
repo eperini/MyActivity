@@ -76,6 +76,7 @@ async def add_comment(task_id: int, data: CommentCreate, user: User = Depends(ge
 
 @router.delete("/tasks/{task_id}/comments/{comment_id}")
 async def delete_comment(task_id: int, comment_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await _check_task_access(task_id, user.id, db)
     comment = await db.get(Comment, comment_id)
     if not comment or comment.task_id != task_id:
         raise HTTPException(404, "Commento non trovato")

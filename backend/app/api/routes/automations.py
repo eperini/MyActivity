@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 class AutomationCreate(BaseModel):
-    name: str = Field(max_length=200)
+    name: str = Field(min_length=1, max_length=200)
     trigger_type: TriggerType
     trigger_config: dict = {}
     action_type: ActionType

@@ -376,13 +376,17 @@ def send_daily_reports(self):
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
-def evaluate_automations(self, task_id: int, event: str, payload: dict | None = None):
+def evaluate_automations(self, task_id: int, event: str, payload: dict | None = None, depth: int = 0):
     """
     Evaluate automation rules for a task's project.
     Called after task events (status_changed, task_created, assigned_to_changed, etc.).
     """
     from app.models.task import Task, TaskStatus
     from app.models.automation import AutomationRule, TriggerType, ActionType
+
+    if depth >= 3:
+        logger.warning("Max automation recursion depth reached for task %s (depth=%d)", task_id, depth)
+        return "Max recursion depth reached"
 
     if payload is None:
         payload = {}
@@ -485,6 +489,10 @@ def _execute_action(action_type: str, action_cfg: dict, task, db):
                 parent_id=action_cfg.get("as_subtask") and task.id or None,
             )
             db.add(new_task)
+            # NOTE: Do NOT trigger evaluate_automations on the newly created task.
+            # This prevents infinite recursion (create_task action → task_created
+            # trigger → create_task action → ...). Tasks created by automations
+            # are intentionally excluded from further automation evaluation.
 
     elif action_type == "send_notification":
         message = action_cfg.get("message", f"Automazione attivata per: {task.title}")

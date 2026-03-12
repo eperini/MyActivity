@@ -77,6 +77,14 @@ async def create_custom_field(
 ):
     await _check_project_owner(project_id, user.id, db)
 
+    # Validate options for select/multi_select fields
+    if data.field_type in (FieldType.SELECT, FieldType.MULTI_SELECT):
+        if not data.options or not isinstance(data.options, list) or len(data.options) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="I campi select e multi_select richiedono una lista 'options' non vuota",
+            )
+
     # Check unique field_key within project
     existing = await db.execute(
         select(ProjectCustomField).where(

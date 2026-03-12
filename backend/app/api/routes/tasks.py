@@ -12,6 +12,7 @@ from app.models.task import Task, TaskStatus
 from app.models.task_list import TaskList, ListMember
 from app.models.recurrence import RecurrenceRule
 from app.models.tag import Tag, task_tags
+from app.api.routes.projects import _check_project_access
 
 router = APIRouter()
 
@@ -244,7 +245,13 @@ async def create_task(
     db: AsyncSession = Depends(get_db),
 ):
     await _check_list_access(data.list_id, user.id, db)
+    if data.project_id is not None:
+        await _check_project_access(data.project_id, user.id, db)
     task_data = data.model_dump()
+    if task_data.get("assigned_to") is not None:
+        target_user = await db.get(User, task_data["assigned_to"])
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Utente assegnato non trovato")
     if task_data.get("assigned_to") is None:
         task_data["assigned_to"] = user.id
     task = Task(**task_data, created_by=user.id)
@@ -285,6 +292,12 @@ async def update_task(
     # If changing list, verify access to new list too
     if "list_id" in update_data and update_data["list_id"] != task.list_id:
         await _check_list_access(update_data["list_id"], user.id, db)
+    if "project_id" in update_data and update_data["project_id"] is not None:
+        await _check_project_access(update_data["project_id"], user.id, db)
+    if "assigned_to" in update_data and update_data["assigned_to"] is not None:
+        target_user = await db.get(User, update_data["assigned_to"])
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Utente assegnato non trovato")
     for field, value in update_data.items():
         setattr(task, field, value)
 

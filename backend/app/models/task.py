@@ -24,8 +24,8 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     list_id: Mapped[int] = mapped_column(ForeignKey("lists.id", ondelete="CASCADE"), index=True)
-    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    assigned_to: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    assigned_to: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     priority: Mapped[int] = mapped_column(SmallInteger, default=4)  # 1=urgente+importante, 4=bassa
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.TODO, index=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)

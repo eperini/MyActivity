@@ -48,6 +48,7 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
       }
     }
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   async function handleToggle(task: Task) {
