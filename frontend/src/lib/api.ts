@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -313,6 +313,42 @@ export const updatePreferences = (data: {
   daily_report_push?: boolean;
   daily_report_time?: string;
 }) => request<{ detail: string }>("/auth/me/preferences", { method: "PATCH", body: JSON.stringify(data) });
+
+// Areas
+export const getAreas = () => request<Area[]>("/areas/");
+export const createArea = (data: { name: string; color?: string; icon?: string }) =>
+  request<Area>("/areas/", { method: "POST", body: JSON.stringify(data) });
+export const updateArea = (id: number, data: { name?: string; color?: string; icon?: string }) =>
+  request<Area>(`/areas/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteArea = (id: number) =>
+  request<{ detail: string }>(`/areas/${id}`, { method: "DELETE" });
+export const reorderAreas = (ids: number[]) =>
+  request<{ detail: string }>("/areas/reorder", { method: "PATCH", body: JSON.stringify({ ids }) });
+
+// Projects
+export const getProjects = (params?: { area_id?: number; status?: string; project_type?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.area_id) query.set("area_id", String(params.area_id));
+  if (params?.status) query.set("status", params.status);
+  if (params?.project_type) query.set("project_type", params.project_type);
+  const qs = query.toString();
+  return request<Project[]>(`/projects/${qs ? `?${qs}` : ""}`);
+};
+export const createProject = (data: Partial<Project>) =>
+  request<Project>("/projects/", { method: "POST", body: JSON.stringify(data) });
+export const getProject = (id: number) => request<Project>(`/projects/${id}`);
+export const updateProject = (id: number, data: Partial<Project>) =>
+  request<Project>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteProject = (id: number) =>
+  request<{ detail: string }>(`/projects/${id}`, { method: "DELETE" });
+export const getProjectStats = (id: number) =>
+  request<ProjectStats>(`/projects/${id}/stats`);
+export const getProjectMembers = (id: number) =>
+  request<ProjectMember[]>(`/projects/${id}/members`);
+export const addProjectMember = (id: number, email: string, role = "edit") =>
+  request<ProjectMember>(`/projects/${id}/members`, { method: "POST", body: JSON.stringify({ email, role }) });
+export const removeProjectMember = (projectId: number, memberId: number) =>
+  request<{ detail: string }>(`/projects/${projectId}/members/${memberId}`, { method: "DELETE" });
 
 // Stats
 export const getDashboardStats = () => request<{

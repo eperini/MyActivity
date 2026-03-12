@@ -29,3 +29,4 @@ class User(Base):
 
     owned_lists: Mapped[list["TaskList"]] = relationship(back_populates="owner")
     list_memberships: Mapped[list["ListMember"]] = relationship(back_populates="user")
+    areas: Mapped[list["Area"]] = relationship(back_populates="owner")

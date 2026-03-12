@@ -43,6 +43,7 @@ export interface Task {
   status: TaskStatus;
   due_date: string | null;
   due_time: string | null;
+  project_id: number | null;
   parent_id: number | null;
   has_recurrence?: boolean;
   next_occurrence?: string | null;
@@ -129,4 +130,51 @@ export interface ListMember {
   email: string;
   display_name: string;
   role: string;
+}
+
+// Areas & Projects (v2)
+export type ProjectType = "technical" | "administrative" | "personal";
+export type ProjectStatus = "active" | "on_hold" | "completed" | "archived";
+
+export interface Area {
+  id: number;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  position: number;
+  project_count: number;
+}
+
+export interface Project {
+  id: number;
+  area_id: number | null;
+  name: string;
+  description: string | null;
+  project_type: ProjectType;
+  status: ProjectStatus;
+  color: string | null;
+  icon: string | null;
+  owner_id: number;
+  start_date: string | null;
+  target_date: string | null;
+  client_name: string | null;
+  position: number;
+  task_count: number;
+  completed_count: number;
+}
+
+export interface ProjectMember {
+  id: number;
+  user_id: number;
+  email: string;
+  display_name: string;
+  role: string;
+}
+
+export interface ProjectStats {
+  total_tasks: number;
+  completed_tasks: number;
+  completion_pct: number;
+  overdue_tasks: number;
+  by_priority: Record<string, number>;
 }

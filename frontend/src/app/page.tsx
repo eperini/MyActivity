@@ -25,6 +25,7 @@ import ShareListModal from "@/components/ShareListModal";
 import StatsView from "@/components/StatsView";
 import SettingsView from "@/components/SettingsView";
 import KanbanView from "@/components/KanbanView";
+import ProjectView from "@/components/ProjectView";
 import BottomTabBar from "@/components/BottomTabBar";
 import MobileHeader from "@/components/MobileHeader";
 import FloatingAddButton from "@/components/FloatingAddButton";
@@ -171,6 +172,8 @@ export default function HomePage() {
   };
   const viewTitle = selectedView.startsWith("list-")
     ? lists.find((l) => l.id === parseInt(selectedView.split("-")[1]))?.name || "Lista"
+    : selectedView.startsWith("project-")
+    ? "Progetto"
     : viewTitles[selectedView] || "Task";
 
   async function handleToggle(task: Task) {
@@ -240,7 +243,7 @@ export default function HomePage() {
   }
 
   // Should show FAB?
-  const showFab = ["inbox", "today", "next7", "completed", "habits"].includes(selectedView) || selectedView.startsWith("list-");
+  const showFab = ["inbox", "today", "next7", "completed", "habits"].includes(selectedView) || selectedView.startsWith("list-") || selectedView.startsWith("project-");
 
   if (loading) {
     return (
@@ -260,9 +263,10 @@ export default function HomePage() {
   const isStatsView = selectedView === "stats";
   const isSettingsView = selectedView === "settings";
   const isKanbanView = selectedView === "kanban";
+  const isProjectView = selectedView.startsWith("project-");
 
   // Check if current view is a task list view (needs TaskDetail)
-  const isTaskListView = !isHabitsView && !isEisenhowerView && !isCalendarView && !isStatsView && !isSettingsView && !isKanbanView && selectedView !== "pomodoro";
+  const isTaskListView = !isHabitsView && !isEisenhowerView && !isCalendarView && !isStatsView && !isSettingsView && !isKanbanView && !isProjectView && selectedView !== "pomodoro";
 
   function renderMainContent() {
     if (isStatsView) {
@@ -352,6 +356,31 @@ export default function HomePage() {
           onSelectTask={(task) => { setSelectedTask(task); }}
           onToggleTask={handleToggle}
         />
+      );
+    }
+
+    if (isProjectView) {
+      const projectId = parseInt(selectedView.split("-")[1]);
+      return (
+        <>
+          <ProjectView
+            projectId={projectId}
+            lists={lists}
+            onSelectTask={setSelectedTask}
+            onRefresh={loadData}
+          />
+          {!isMobile && selectedTask && (
+            <TaskDetail
+              task={selectedTask}
+              list={selectedList}
+              onClose={() => setSelectedTask(null)}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              lists={lists}
+              onRefresh={loadData}
+            />
+          )}
+        </>
       );
     }
 

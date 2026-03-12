@@ -11,6 +11,7 @@ import { useToast } from "./Toast";
 interface AddTaskFormProps {
   lists: TaskList[];
   defaultListId?: number;
+  defaultProjectId?: number;
   onCreated: () => void;
   onClose: () => void;
 }
@@ -35,7 +36,7 @@ const RECURRENCE_OPTIONS: { value: RecurrenceType; label: string }[] = [
   { value: "yearly", label: "Ogni anno" },
 ];
 
-export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }: AddTaskFormProps) {
+export default function AddTaskForm({ lists, defaultListId, defaultProjectId, onCreated, onClose }: AddTaskFormProps) {
   const { showToast } = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -99,6 +100,7 @@ export default function AddTaskForm({ lists, defaultListId, onCreated, onClose }
         priority,
         due_date: dueDate || undefined,
         due_time: dueTime || undefined,
+        project_id: defaultProjectId || undefined,
       } as Parameters<typeof createTask>[0]);
 
       // Set recurrence if selected

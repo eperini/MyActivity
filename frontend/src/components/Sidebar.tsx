@@ -1,9 +1,9 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw, FolderOpen, ChevronDown, ChevronRight } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import type { TaskList } from "@/types";
-import { createList, updateList, deleteList, reorderLists, resetListOrder } from "@/lib/api";
+import type { TaskList, Area, Project } from "@/types";
+import { createList, updateList, deleteList, reorderLists, resetListOrder, getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject } from "@/lib/api";
 import { useToast } from "./Toast";
 
 interface SidebarProps {
@@ -45,20 +45,59 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
   const [dragListId, setDragListId] = useState<number | null>(null);
   const [dragOverListId, setDragOverListId] = useState<number | null>(null);
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [expandedAreas, setExpandedAreas] = useState<Set<number | null>>(new Set());
+  // Area/Project CRUD state
+  const [showNewArea, setShowNewArea] = useState(false);
+  const [newAreaName, setNewAreaName] = useState("");
+  const [newAreaColor, setNewAreaColor] = useState(LIST_COLORS[4]); // purple
+  const [showNewProject, setShowNewProject] = useState<number | null | false>(false); // false=hidden, null=no area, number=area_id
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectColor, setNewProjectColor] = useState(LIST_COLORS[8]); // indigo
+  const [editingArea, setEditingArea] = useState<{ id: number; name: string; color: string } | null>(null);
+  const [editingProject, setEditingProject] = useState<{ id: number; name: string; color: string } | null>(null);
+  const [projectContextMenu, setProjectContextMenu] = useState<{ type: "area" | "project"; id: number; x: number; y: number } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: "area" | "project"; id: number; name: string } | null>(null);
   const contextRef = useRef<HTMLDivElement>(null);
+  const projectContextRef = useRef<HTMLDivElement>(null);
 
-  // Close context menu on outside click
+  // Close context menus on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (contextRef.current && !contextRef.current.contains(e.target as Node)) {
         setContextMenu(null);
       }
+      if (projectContextRef.current && !projectContextRef.current.contains(e.target as Node)) {
+        setProjectContextMenu(null);
+      }
     }
-    if (contextMenu) {
+    if (contextMenu || projectContextMenu) {
       document.addEventListener("mousedown", handleClick);
       return () => document.removeEventListener("mousedown", handleClick);
     }
-  }, [contextMenu]);
+  }, [contextMenu, projectContextMenu]);
+
+  // Load areas and projects
+  useEffect(() => {
+    async function loadAreasProjects() {
+      try {
+        const [a, p] = await Promise.all([getAreas(), getProjects()]);
+        setAreas(a);
+        setProjects(p);
+      } catch { /* ignore */ }
+    }
+    loadAreasProjects();
+  }, [lists]); // reload when lists change (onListCreated triggers)
+
+  function toggleArea(areaId: number | null) {
+    setExpandedAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(areaId)) next.delete(areaId);
+      else next.add(areaId);
+      return next;
+    });
+  }
 
   function handleNav(view: string) {
     onSelectView(view);
@@ -131,6 +170,91 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
     } catch {
       showToast("Errore nel reset ordine");
     }
+  }
+
+  async function reloadAreasProjects() {
+    try {
+      const [a, p] = await Promise.all([getAreas(), getProjects()]);
+      setAreas(a);
+      setProjects(p);
+    } catch { /* ignore */ }
+  }
+
+  async function handleCreateArea() {
+    if (!newAreaName.trim()) return;
+    try {
+      await createArea({ name: newAreaName.trim(), color: newAreaColor });
+      setNewAreaName("");
+      setShowNewArea(false);
+      reloadAreasProjects();
+    } catch {
+      showToast("Errore nella creazione dell'area");
+    }
+  }
+
+  async function handleUpdateArea() {
+    if (!editingArea || !editingArea.name.trim()) return;
+    try {
+      await updateArea(editingArea.id, { name: editingArea.name.trim(), color: editingArea.color });
+      setEditingArea(null);
+      reloadAreasProjects();
+    } catch {
+      showToast("Errore nella modifica dell'area");
+    }
+  }
+
+  async function handleDeleteArea(id: number) {
+    try {
+      await deleteArea(id);
+      setDeleteConfirm(null);
+      reloadAreasProjects();
+    } catch {
+      showToast("Errore nell'eliminazione dell'area");
+    }
+  }
+
+  async function handleCreateProject() {
+    if (!newProjectName.trim()) return;
+    try {
+      await createProject({
+        name: newProjectName.trim(),
+        color: newProjectColor,
+        area_id: showNewProject !== false && showNewProject !== null ? showNewProject : undefined,
+      } as Parameters<typeof createProject>[0]);
+      setNewProjectName("");
+      setShowNewProject(false);
+      reloadAreasProjects();
+    } catch {
+      showToast("Errore nella creazione del progetto");
+    }
+  }
+
+  async function handleUpdateProject() {
+    if (!editingProject || !editingProject.name.trim()) return;
+    try {
+      await updateProject(editingProject.id, { name: editingProject.name.trim(), color: editingProject.color });
+      setEditingProject(null);
+      reloadAreasProjects();
+    } catch {
+      showToast("Errore nella modifica del progetto");
+    }
+  }
+
+  async function handleDeleteProject(id: number) {
+    try {
+      await deleteProject(id);
+      setDeleteConfirm(null);
+      if (selectedView === `project-${id}`) onSelectView("inbox");
+      reloadAreasProjects();
+    } catch {
+      showToast("Errore nell'eliminazione del progetto");
+    }
+  }
+
+  function handleProjectContextMenu(e: React.MouseEvent, type: "area" | "project", id: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    setProjectContextMenu({ type, id, x: e.clientX, y: e.clientY });
   }
 
   const sidebarContent = (
@@ -316,6 +440,352 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
         </div>
       </div>
 
+      {/* Projects & Areas */}
+      <div className="mt-6 px-3">
+        <div className="flex items-center justify-between px-3 mb-2">
+          <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Progetti</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { setShowNewArea(true); setShowNewProject(false); }}
+              title="Nuova area"
+              className="text-zinc-500 hover:text-blue-400 transition-colors text-[10px] font-medium px-1"
+            >
+              +Area
+            </button>
+            <button
+              onClick={() => { setShowNewProject(null); setShowNewArea(false); }}
+              title="Nuovo progetto"
+              className="text-zinc-500 hover:text-blue-400 transition-colors"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* New area form */}
+        {showNewArea && (
+          <div className="mb-2 mx-1 p-3 bg-zinc-800 rounded-lg space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                value={newAreaName}
+                onChange={(e) => setNewAreaName(e.target.value)}
+                placeholder="Nome area..."
+                className="flex-1 bg-transparent text-sm text-zinc-200 outline-none placeholder-zinc-600"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateArea();
+                  if (e.key === "Escape") setShowNewArea(false);
+                }}
+              />
+              <button onClick={() => setShowNewArea(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {LIST_COLORS.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => setNewAreaColor(color)}
+                  className={`w-5 h-5 rounded-full transition-all ${
+                    newAreaColor === color ? "ring-2 ring-white ring-offset-1 ring-offset-zinc-800 scale-110" : ""
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+            <button
+              onClick={handleCreateArea}
+              disabled={!newAreaName.trim()}
+              className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded text-xs font-medium text-white transition-colors"
+            >
+              Crea area
+            </button>
+          </div>
+        )}
+
+        {/* New project form (without area) */}
+        {showNewProject !== false && showNewProject === null && (
+          <div className="mb-2 mx-1 p-3 bg-zinc-800 rounded-lg space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="Nome progetto..."
+                className="flex-1 bg-transparent text-sm text-zinc-200 outline-none placeholder-zinc-600"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateProject();
+                  if (e.key === "Escape") { setShowNewProject(false); setNewProjectName(""); }
+                }}
+              />
+              <button onClick={() => { setShowNewProject(false); setNewProjectName(""); }} className="text-zinc-500 hover:text-zinc-300">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {LIST_COLORS.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => setNewProjectColor(color)}
+                  className={`w-5 h-5 rounded-full transition-all ${
+                    newProjectColor === color ? "ring-2 ring-white ring-offset-1 ring-offset-zinc-800 scale-110" : ""
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+            <button
+              onClick={handleCreateProject}
+              disabled={!newProjectName.trim()}
+              className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded text-xs font-medium text-white transition-colors"
+            >
+              Crea progetto
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-0.5">
+          {/* Projects without area */}
+          {projects.filter((p) => !p.area_id).map((project) => {
+            if (editingProject?.id === project.id) {
+              return (
+                <div key={`proj-${project.id}`} className="mx-1 p-2 bg-zinc-800 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2">
+                    <FolderOpen size={14} style={{ color: editingProject.color }} />
+                    <input
+                      autoFocus
+                      value={editingProject.name}
+                      onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
+                      className="flex-1 bg-transparent text-sm text-zinc-200 outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleUpdateProject();
+                        if (e.key === "Escape") setEditingProject(null);
+                      }}
+                    />
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {LIST_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setEditingProject({ ...editingProject, color })}
+                        className={`w-4 h-4 rounded-full transition-all ${
+                          editingProject.color === color ? "ring-2 ring-white ring-offset-1 ring-offset-zinc-800 scale-110" : ""
+                        }`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditingProject(null)} className="flex-1 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300">Annulla</button>
+                    <button onClick={handleUpdateProject} className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white">Salva</button>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <button
+                key={`proj-${project.id}`}
+                onClick={() => handleNav(`project-${project.id}`)}
+                onContextMenu={(e) => handleProjectContextMenu(e, "project", project.id)}
+                className={`group w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                  selectedView === `project-${project.id}`
+                    ? "bg-zinc-800 text-white"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                }`}
+              >
+                <FolderOpen size={16} style={{ color: project.color || "#6366F1" }} />
+                <span className="flex-1 text-left truncate text-sm">{project.name}</span>
+                {project.task_count > 0 && (
+                  <span className="text-xs text-zinc-500 group-hover:hidden">
+                    {project.completed_count}/{project.task_count}
+                  </span>
+                )}
+                <button
+                  onClick={(e) => handleProjectContextMenu(e, "project", project.id)}
+                  className="text-zinc-600 hover:text-zinc-300 hidden group-hover:block"
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              </button>
+            );
+          })}
+
+          {/* Areas with their projects */}
+          {areas.map((area) => {
+            const areaProjects = projects.filter((p) => p.area_id === area.id);
+            const isExpanded = expandedAreas.has(area.id);
+            const isEditingThisArea = editingArea?.id === area.id;
+
+            if (isEditingThisArea) {
+              return (
+                <div key={`area-${area.id}`} className="mx-1 p-2 bg-zinc-800 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: editingArea.color }} />
+                    <input
+                      autoFocus
+                      value={editingArea.name}
+                      onChange={(e) => setEditingArea({ ...editingArea, name: e.target.value })}
+                      className="flex-1 bg-transparent text-sm text-zinc-200 outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleUpdateArea();
+                        if (e.key === "Escape") setEditingArea(null);
+                      }}
+                    />
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {LIST_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setEditingArea({ ...editingArea, color })}
+                        className={`w-4 h-4 rounded-full transition-all ${
+                          editingArea.color === color ? "ring-2 ring-white ring-offset-1 ring-offset-zinc-800 scale-110" : ""
+                        }`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditingArea(null)} className="flex-1 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300">Annulla</button>
+                    <button onClick={handleUpdateArea} className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white">Salva</button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={`area-${area.id}`}>
+                <div
+                  className="group flex items-center gap-2 px-3 py-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors cursor-pointer"
+                  onClick={() => toggleArea(area.id)}
+                  onContextMenu={(e) => handleProjectContextMenu(e, "area", area.id)}
+                >
+                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  <span
+                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                    style={{ backgroundColor: area.color || "#6366F1" }}
+                  />
+                  <span className="flex-1 text-left truncate text-sm font-medium">{area.name}</span>
+                  <span className="text-xs text-zinc-600 group-hover:hidden">{areaProjects.length}</span>
+                  <button
+                    onClick={(e) => handleProjectContextMenu(e, "area", area.id)}
+                    className="text-zinc-600 hover:text-zinc-300 hidden group-hover:block"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                </div>
+                {isExpanded && (
+                  <>
+                    {areaProjects.map((project) => {
+                      if (editingProject?.id === project.id) {
+                        return (
+                          <div key={`proj-${project.id}`} className="mx-1 ml-6 p-2 bg-zinc-800 rounded-lg space-y-2">
+                            <div className="flex items-center gap-2">
+                              <FolderOpen size={14} style={{ color: editingProject.color }} />
+                              <input
+                                autoFocus
+                                value={editingProject.name}
+                                onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
+                                className="flex-1 bg-transparent text-sm text-zinc-200 outline-none"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleUpdateProject();
+                                  if (e.key === "Escape") setEditingProject(null);
+                                }}
+                              />
+                            </div>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {LIST_COLORS.map((color) => (
+                                <button
+                                  key={color}
+                                  onClick={() => setEditingProject({ ...editingProject, color })}
+                                  className={`w-4 h-4 rounded-full transition-all ${
+                                    editingProject.color === color ? "ring-2 ring-white ring-offset-1 ring-offset-zinc-800 scale-110" : ""
+                                  }`}
+                                  style={{ backgroundColor: color }}
+                                />
+                              ))}
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => setEditingProject(null)} className="flex-1 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300">Annulla</button>
+                              <button onClick={handleUpdateProject} className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white">Salva</button>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          key={`proj-${project.id}`}
+                          onClick={() => handleNav(`project-${project.id}`)}
+                          onContextMenu={(e) => handleProjectContextMenu(e, "project", project.id)}
+                          className={`group w-full flex items-center gap-2 pl-8 pr-3 py-1.5 rounded-lg transition-colors ${
+                            selectedView === `project-${project.id}`
+                              ? "bg-zinc-800 text-white"
+                              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                          }`}
+                        >
+                          <FolderOpen size={14} style={{ color: project.color || area.color || "#6366F1" }} />
+                          <span className="flex-1 text-left truncate text-sm">{project.name}</span>
+                          {project.task_count > 0 && (
+                            <span className="text-xs text-zinc-500 group-hover:hidden">
+                              {project.completed_count}/{project.task_count}
+                            </span>
+                          )}
+                          <button
+                            onClick={(e) => handleProjectContextMenu(e, "project", project.id)}
+                            className="text-zinc-600 hover:text-zinc-300 hidden group-hover:block"
+                          >
+                            <MoreHorizontal size={14} />
+                          </button>
+                        </button>
+                      );
+                    })}
+                    {/* New project form inside area */}
+                    {showNewProject !== false && showNewProject === area.id && (
+                      <div className="ml-6 mx-1 p-2 bg-zinc-800 rounded-lg space-y-2 mt-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            autoFocus
+                            value={newProjectName}
+                            onChange={(e) => setNewProjectName(e.target.value)}
+                            placeholder="Nome progetto..."
+                            className="flex-1 bg-transparent text-sm text-zinc-200 outline-none placeholder-zinc-600"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleCreateProject();
+                              if (e.key === "Escape") { setShowNewProject(false); setNewProjectName(""); }
+                            }}
+                          />
+                          <button onClick={() => { setShowNewProject(false); setNewProjectName(""); }} className="text-zinc-500 hover:text-zinc-300">
+                            <X size={14} />
+                          </button>
+                        </div>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {LIST_COLORS.map((color) => (
+                            <button
+                              key={color}
+                              onClick={() => setNewProjectColor(color)}
+                              className={`w-4 h-4 rounded-full transition-all ${
+                                newProjectColor === color ? "ring-2 ring-white ring-offset-1 ring-offset-zinc-800 scale-110" : ""
+                              }`}
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          onClick={handleCreateProject}
+                          disabled={!newProjectName.trim()}
+                          className="w-full py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded text-xs font-medium text-white transition-colors"
+                        >
+                          Crea progetto
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Bottom */}
       <div className="mt-auto px-3 space-y-0.5">
         <button
@@ -404,7 +874,7 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
         </div>
       )}
 
-      {/* Delete confirmation */}
+      {/* Delete list confirmation */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-5 max-w-sm mx-4">
@@ -421,6 +891,92 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
               </button>
               <button
                 onClick={() => handleDeleteList(showDeleteConfirm)}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm text-white"
+              >
+                Elimina
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Project/Area context menu */}
+      {projectContextMenu && (
+        <div
+          ref={projectContextRef}
+          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 z-50 min-w-[140px]"
+          style={{ left: projectContextMenu.x, top: projectContextMenu.y }}
+        >
+          <button
+            onClick={() => {
+              if (projectContextMenu.type === "area") {
+                const area = areas.find((a) => a.id === projectContextMenu.id);
+                if (area) setEditingArea({ id: area.id, name: area.name, color: area.color || "#6366F1" });
+              } else {
+                const proj = projects.find((p) => p.id === projectContextMenu.id);
+                if (proj) setEditingProject({ id: proj.id, name: proj.name, color: proj.color || "#6366F1" });
+              }
+              setProjectContextMenu(null);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+          >
+            <Pencil size={14} />
+            Modifica
+          </button>
+          {projectContextMenu.type === "area" && (
+            <button
+              onClick={() => {
+                setShowNewProject(projectContextMenu.id);
+                setExpandedAreas((prev) => new Set(prev).add(projectContextMenu.id));
+                setProjectContextMenu(null);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+            >
+              <Plus size={14} />
+              Aggiungi progetto
+            </button>
+          )}
+          <button
+            onClick={() => {
+              const item = projectContextMenu.type === "area"
+                ? areas.find((a) => a.id === projectContextMenu.id)
+                : projects.find((p) => p.id === projectContextMenu.id);
+              if (item) setDeleteConfirm({ type: projectContextMenu.type, id: projectContextMenu.id, name: item.name });
+              setProjectContextMenu(null);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-zinc-700 transition-colors"
+          >
+            <Trash2 size={14} />
+            Elimina
+          </button>
+        </div>
+      )}
+
+      {/* Delete area/project confirmation */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-5 max-w-sm mx-4">
+            <h3 className="text-sm font-medium text-white mb-2">
+              Elimina {deleteConfirm.type === "area" ? "area" : "progetto"}
+            </h3>
+            <p className="text-xs text-zinc-400 mb-4">
+              {deleteConfirm.type === "area"
+                ? `L'area "${deleteConfirm.name}" verra eliminata. I progetti al suo interno rimarranno senza area.`
+                : `Il progetto "${deleteConfirm.name}" verra eliminato. I task associati rimarranno nelle loro liste.`
+              }
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm text-zinc-300"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={() => {
+                  if (deleteConfirm.type === "area") handleDeleteArea(deleteConfirm.id);
+                  else handleDeleteProject(deleteConfirm.id);
+                }}
                 className="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm text-white"
               >
                 Elimina
