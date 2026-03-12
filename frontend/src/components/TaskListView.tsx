@@ -34,7 +34,7 @@ export default function TaskListView({
   const [showFilters, setShowFilters] = useState(false);
   const [filterPriority, setFilterPriority] = useState<number | null>(null);
   const [filterList, setFilterList] = useState<number | null>(null);
-  const [sortBy, setSortBy] = useState<SortOption>("priority");
+  const [sortBy, setSortBy] = useState<SortOption>("due_date");
 
   const listMap = Object.fromEntries(lists.map((l) => [l.id, l]));
 
