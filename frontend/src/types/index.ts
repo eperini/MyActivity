@@ -44,6 +44,7 @@ export interface Task {
   due_date: string | null;
   due_time: string | null;
   project_id: number | null;
+  custom_fields?: Record<string, unknown>;
   parent_id: number | null;
   has_recurrence?: boolean;
   next_occurrence?: string | null;
@@ -132,6 +133,21 @@ export interface ListMember {
   role: string;
 }
 
+// Custom Fields
+export type FieldType = 'text' | 'number' | 'date' | 'select' | 'multi_select' | 'boolean' | 'url';
+
+export interface ProjectCustomField {
+  id: number;
+  project_id: number;
+  name: string;
+  field_key: string;
+  field_type: FieldType;
+  options?: string[];
+  default_value?: unknown;
+  is_required: boolean;
+  position: number;
+}
+
 // Areas & Projects (v2)
 export type ProjectType = "technical" | "administrative" | "personal";
 export type ProjectStatus = "active" | "on_hold" | "completed" | "archived";
@@ -177,4 +193,64 @@ export interface ProjectStats {
   completion_pct: number;
   overdue_tasks: number;
   by_priority: Record<string, number>;
+}
+
+// Task Dependencies
+export type DependencyType = 'blocks' | 'relates_to' | 'duplicates';
+
+export interface TaskDependencyItem {
+  id: number;
+  task_id: number;
+  title: string;
+  status: string;
+  dependency_type: DependencyType;
+}
+
+export interface TaskDependencies {
+  blocking: TaskDependencyItem[];
+  blocked_by: TaskDependencyItem[];
+  relates_to: TaskDependencyItem[];
+}
+
+// Sprints
+export type SprintStatus = 'planned' | 'active' | 'completed';
+
+export interface Sprint {
+  id: number;
+  project_id: number;
+  name: string;
+  goal: string | null;
+  start_date: string;
+  end_date: string;
+  status: SprintStatus;
+  task_count: number;
+  completed_count: number;
+}
+
+export interface SprintDetail {
+  sprint: Sprint;
+  tasks: Task[];
+  metrics: {
+    total_tasks: number;
+    completed_tasks: number;
+    completion_pct: number;
+    days_remaining: number;
+  };
+}
+
+// Automation Rules
+export type TriggerType = 'status_changed' | 'due_date_passed' | 'task_created' | 'all_subtasks_done' | 'assigned_to_changed';
+export type ActionType = 'change_status' | 'assign_to' | 'create_task' | 'send_notification' | 'set_field';
+
+export interface AutomationRule {
+  id: number;
+  project_id: number;
+  name: string;
+  is_active: boolean;
+  trigger_type: TriggerType;
+  trigger_config: Record<string, unknown>;
+  action_type: ActionType;
+  action_config: Record<string, unknown>;
+  created_at: string;
+  last_triggered: string | null;
 }

@@ -5,6 +5,8 @@ import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X, Tag as TagIcon, Mes
 import type { Task, TaskList, RecurrenceRule, Tag, TaskComment, ListMember } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
 import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getListMembers, updateTask as apiUpdateTask, getSubtasks, createSubtask, toggleSubtask, deleteTask as apiDeleteTask, createTemplateFromTask } from "@/lib/api";
+import CustomFieldsPanel from "./CustomFieldsPanel";
+import DependenciesPanel from "./DependenciesPanel";
 import { useToast } from "@/components/Toast";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
@@ -583,6 +585,17 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
               )}
             </div>
           </div>
+          {/* Custom Fields */}
+          {task.project_id && (
+            <CustomFieldsPanel
+              task={task}
+              projectId={task.project_id}
+              onUpdate={(customFields) => onUpdate(task.id, { custom_fields: customFields } as Partial<Task>)}
+            />
+          )}
+
+          {/* Dependencies */}
+          <DependenciesPanel taskId={task.id} />
         </div>
 
         {/* Comments */}

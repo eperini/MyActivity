@@ -50,6 +50,9 @@ class Project(Base):
     owner: Mapped["User"] = relationship()
     members: Mapped[list["ProjectMember"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     tasks: Mapped[list["Task"]] = relationship(back_populates="project")
+    custom_fields_def: Mapped[list["ProjectCustomField"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    automations: Mapped[list["AutomationRule"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    sprints: Mapped[list["Sprint"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
 
 class ProjectMember(Base):

@@ -6,7 +6,10 @@ import { getProject, getProjectStats, updateTask, deleteTask, getTasks } from "@
 import { useToast } from "./Toast";
 import TaskItem from "./TaskItem";
 import AddTaskForm from "./AddTaskForm";
-import { Plus, BarChart3 } from "lucide-react";
+import { Plus, BarChart3, Settings2, Zap, CalendarRange } from "lucide-react";
+import CustomFieldEditor from "./CustomFieldEditor";
+import AutomationsView from "./AutomationsView";
+import SprintBoard from "./SprintBoard";
 
 function findList(lists: TaskList[], listId: number) {
   return lists.find((l) => l.id === listId);
@@ -25,6 +28,9 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
   const [stats, setStats] = useState<ProjectStats | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showAddTask, setShowAddTask] = useState(false);
+  const [showFieldEditor, setShowFieldEditor] = useState(false);
+  const [showAutomations, setShowAutomations] = useState(false);
+  const [showSprints, setShowSprints] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -95,6 +101,43 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
             {statusLabels[project.status] || project.status}
           </span>
           <span className="text-xs text-zinc-500">{typeLabels[project.project_type] || project.project_type}</span>
+          <div className="flex-1" />
+          <button
+            onClick={() => { setShowSprints(!showSprints); if (!showSprints) { setShowAutomations(false); setShowFieldEditor(false); } }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-colors ${
+              showSprints
+                ? "bg-zinc-700 text-zinc-200"
+                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+            }`}
+            title="Sprint"
+          >
+            <CalendarRange size={14} />
+            <span className="hidden md:inline">Sprint</span>
+          </button>
+          <button
+            onClick={() => { setShowAutomations(!showAutomations); if (!showAutomations) { setShowFieldEditor(false); setShowSprints(false); } }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-colors ${
+              showAutomations
+                ? "bg-zinc-700 text-zinc-200"
+                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+            }`}
+            title="Automazioni"
+          >
+            <Zap size={14} />
+            <span className="hidden md:inline">Automazioni</span>
+          </button>
+          <button
+            onClick={() => { setShowFieldEditor(!showFieldEditor); if (!showFieldEditor) { setShowAutomations(false); setShowSprints(false); } }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-colors ${
+              showFieldEditor
+                ? "bg-zinc-700 text-zinc-200"
+                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+            }`}
+            title="Gestisci campi custom"
+          >
+            <Settings2 size={14} />
+            <span className="hidden md:inline">Campi</span>
+          </button>
         </div>
         {project.description && (
           <p className="text-sm text-zinc-400 mb-3">{project.description}</p>
@@ -127,6 +170,27 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
           </div>
         )}
       </div>
+
+      {/* Sprint board panel */}
+      {showSprints && (
+        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-900/50">
+          <SprintBoard projectId={projectId} allTasks={tasks} />
+        </div>
+      )}
+
+      {/* Automations panel */}
+      {showAutomations && (
+        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-900/50">
+          <AutomationsView projectId={projectId} />
+        </div>
+      )}
+
+      {/* Custom field editor */}
+      {showFieldEditor && (
+        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-900/50">
+          <CustomFieldEditor projectId={projectId} />
+        </div>
+      )}
 
       {/* Task list */}
       <div className="flex-1 overflow-y-auto px-6 py-4">

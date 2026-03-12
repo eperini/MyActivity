@@ -10,6 +10,7 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task, TaskStatus
 from app.models.project import Project, ProjectMember, ProjectType, ProjectStatus
+from app.models.custom_field import ProjectCustomField, FieldType
 
 router = APIRouter()
 
@@ -79,6 +80,22 @@ class ProjectStatsResponse(BaseModel):
     completion_pct: float
     overdue_tasks: int
     by_priority: dict[str, int]
+
+
+DEFAULT_FIELDS: dict[ProjectType, list[dict]] = {
+    ProjectType.TECHNICAL: [
+        {"name": "Tipo", "field_key": "tipo", "field_type": FieldType.SELECT, "options": ["Bug", "Feature", "Test", "Deploy", "R&D"]},
+        {"name": "Ambiente", "field_key": "ambiente", "field_type": FieldType.SELECT, "options": ["Dev", "Staging", "Produzione"]},
+        {"name": "Ore stimate", "field_key": "ore_stimate", "field_type": FieldType.NUMBER},
+        {"name": "Versione", "field_key": "versione", "field_type": FieldType.TEXT},
+    ],
+    ProjectType.ADMINISTRATIVE: [
+        {"name": "Tipo documento", "field_key": "tipo_documento", "field_type": FieldType.SELECT, "options": ["Fattura", "Verbale", "Contratto", "Scadenza", "Altro"]},
+        {"name": "Stato", "field_key": "stato_doc", "field_type": FieldType.SELECT, "options": ["Bozza", "In approvazione", "Approvato", "Archiviato"]},
+        {"name": "Riferimento", "field_key": "riferimento", "field_type": FieldType.TEXT},
+    ],
+    ProjectType.PERSONAL: [],
+}
 
 
 async def _check_project_access(project_id: int, user_id: int, db: AsyncSession) -> Project:
@@ -178,6 +195,20 @@ async def create_project(
         client_name=data.client_name,
     )
     db.add(project)
+    await db.flush()
+
+    # Auto-create default custom fields based on project_type
+    for position, field_def in enumerate(DEFAULT_FIELDS.get(data.project_type, [])):
+        cf = ProjectCustomField(
+            project_id=project.id,
+            name=field_def["name"],
+            field_key=field_def["field_key"],
+            field_type=field_def["field_type"],
+            options=field_def.get("options"),
+            position=position,
+        )
+        db.add(cf)
+
     await db.commit()
     await db.refresh(project)
     return ProjectResponse(

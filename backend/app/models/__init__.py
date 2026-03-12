@@ -12,6 +12,10 @@ from app.models.comment import Comment
 from app.models.template import TaskTemplate
 from app.models.area import Area
 from app.models.project import Project, ProjectMember
+from app.models.custom_field import ProjectCustomField, FieldType
+from app.models.dependency import TaskDependency, DependencyType
+from app.models.automation import AutomationRule, TriggerType, ActionType
+from app.models.sprint import Sprint, SprintStatus, sprint_tasks
 
 __all__ = [
     "User", "TaskList", "ListMember", "Task",
@@ -19,4 +23,8 @@ __all__ = [
     "Habit", "HabitLog", "PomodoroSession", "PushSubscription",
     "Tag", "task_tags", "Comment", "TaskTemplate",
     "Area", "Project", "ProjectMember",
+    "ProjectCustomField", "FieldType",
+    "TaskDependency", "DependencyType",
+    "AutomationRule", "TriggerType", "ActionType",
+    "Sprint", "SprintStatus", "sprint_tasks",
 ]

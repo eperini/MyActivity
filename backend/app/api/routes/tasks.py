@@ -253,6 +253,12 @@ async def create_task(
     await db.refresh(task)
     if _should_sync(task):
         background.add_task(_sync_task_to_gcal, task.id)
+
+    # Trigger automations for task creation
+    if task.project_id:
+        from app.workers.tasks import evaluate_automations
+        evaluate_automations.delay(task.id, "task_created", {})
+
     enriched = await _enrich_with_recurrence([task], db)
     return enriched[0]
 
@@ -271,6 +277,11 @@ async def update_task(
     await _check_list_access(task.list_id, user.id, db)
 
     update_data = data.model_dump(exclude_unset=True)
+
+    # Track changes for automation triggers
+    old_status = task.status
+    old_assigned_to = task.assigned_to
+
     # If changing list, verify access to new list too
     if "list_id" in update_data and update_data["list_id"] != task.list_id:
         await _check_list_access(update_data["list_id"], user.id, db)
@@ -281,6 +292,21 @@ async def update_task(
     await db.refresh(task)
     if _should_sync(task):
         background.add_task(_sync_task_to_gcal, task.id)
+
+    # Trigger automations if task belongs to a project
+    if task.project_id:
+        from app.workers.tasks import evaluate_automations
+        if "status" in update_data and task.status != old_status:
+            evaluate_automations.delay(
+                task.id, "status_changed",
+                {"old_status": old_status.value, "new_status": task.status.value},
+            )
+        if "assigned_to" in update_data and task.assigned_to != old_assigned_to:
+            evaluate_automations.delay(
+                task.id, "assigned_to_changed",
+                {"old_assigned_to": old_assigned_to, "new_assigned_to": task.assigned_to},
+            )
+
     enriched = await _enrich_with_recurrence([task], db)
     return enriched[0]
 

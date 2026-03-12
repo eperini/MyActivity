@@ -375,6 +375,131 @@ def send_daily_reports(self):
         return f"Report giornaliero inviato a {sent_count} utenti"
 
 
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
+def evaluate_automations(self, task_id: int, event: str, payload: dict | None = None):
+    """
+    Evaluate automation rules for a task's project.
+    Called after task events (status_changed, task_created, assigned_to_changed, etc.).
+    """
+    from app.models.task import Task, TaskStatus
+    from app.models.automation import AutomationRule, TriggerType, ActionType
+
+    if payload is None:
+        payload = {}
+
+    try:
+        with _SessionLocal() as db:
+            task = db.get(Task, task_id)
+            if not task or not task.project_id:
+                return "Task non trovato o senza progetto"
+
+            # Load active rules for this project matching the trigger
+            rules = db.execute(
+                select(AutomationRule).where(
+                    AutomationRule.project_id == task.project_id,
+                    AutomationRule.is_active == True,  # noqa: E712
+                    AutomationRule.trigger_type == event,
+                )
+            ).scalars().all()
+
+            if not rules:
+                return f"Nessuna regola attiva per evento {event}"
+
+            executed = 0
+            for rule in rules:
+                trigger_cfg = rule.trigger_config or {}
+                action_cfg = rule.action_config or {}
+
+                # Check trigger conditions
+                if not _match_trigger(event, trigger_cfg, payload):
+                    continue
+
+                # Execute action
+                _execute_action(rule.action_type, action_cfg, task, db)
+
+                rule.last_triggered = datetime.now(timezone.utc)
+                executed += 1
+
+            db.commit()
+            return f"Eseguite {executed}/{len(rules)} regole per task {task_id}"
+    except Exception as exc:
+        logger.exception("Error evaluating automations for task %s", task_id)
+        raise self.retry(exc=exc)
+
+
+def _match_trigger(event: str, trigger_cfg: dict, payload: dict) -> bool:
+    """Check if the trigger config matches the event payload."""
+    # status_changed: optionally filter by from_status / to_status
+    if event == "status_changed":
+        if "from_status" in trigger_cfg and payload.get("old_status") != trigger_cfg["from_status"]:
+            return False
+        if "to_status" in trigger_cfg and payload.get("new_status") != trigger_cfg["to_status"]:
+            return False
+    # assigned_to_changed: optionally filter by to_user
+    elif event == "assigned_to_changed":
+        if "to_user" in trigger_cfg and payload.get("new_assigned_to") != trigger_cfg["to_user"]:
+            return False
+    # task_created, all_subtasks_done, due_date_passed: no extra filtering needed
+    return True
+
+
+def _execute_action(action_type: str, action_cfg: dict, task, db):
+    """Execute an automation action on the task."""
+    from app.models.task import Task, TaskStatus
+
+    if action_type == "change_status":
+        new_status = action_cfg.get("status")
+        if new_status:
+            try:
+                task.status = TaskStatus(new_status)
+                if task.status == TaskStatus.DONE:
+                    task.completed_at = datetime.now(timezone.utc)
+            except ValueError:
+                logger.warning("Invalid status in automation action: %s", new_status)
+
+    elif action_type == "assign_to":
+        user_id = action_cfg.get("user_id")
+        if user_id is not None:
+            task.assigned_to = user_id
+
+    elif action_type == "set_field":
+        field_name = action_cfg.get("field")
+        field_value = action_cfg.get("value")
+        if field_name and field_name in ("priority", "description"):
+            setattr(task, field_name, field_value)
+        elif field_name:
+            # Custom field
+            cf = dict(task.custom_fields) if task.custom_fields else {}
+            cf[field_name] = field_value
+            task.custom_fields = cf
+
+    elif action_type == "create_task":
+        title = action_cfg.get("title")
+        if title:
+            new_task = Task(
+                title=title,
+                list_id=task.list_id,
+                created_by=task.created_by,
+                project_id=task.project_id,
+                priority=action_cfg.get("priority", 4),
+                parent_id=action_cfg.get("as_subtask") and task.id or None,
+            )
+            db.add(new_task)
+
+    elif action_type == "send_notification":
+        message = action_cfg.get("message", f"Automazione attivata per: {task.title}")
+        user_id = action_cfg.get("user_id") or task.assigned_to or task.created_by
+        if user_id:
+            from app.models.user import User
+            user = db.get(User, user_id)
+            if user and user.telegram_chat_id:
+                try:
+                    from app.services.telegram_service import send_message_sync
+                    send_message_sync(user.telegram_chat_id, f"🤖 <b>Automazione</b>\n\n{message}")
+                except Exception as e:
+                    logger.warning("Failed to send automation notification: %s", e)
+
+
 def _build_report_html(display_name, today, overdue, today_tasks, tomorrow_tasks, emojis):
     """Build HTML email for the daily report."""
     import html

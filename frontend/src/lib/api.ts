@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -349,6 +349,50 @@ export const addProjectMember = (id: number, email: string, role = "edit") =>
   request<ProjectMember>(`/projects/${id}/members`, { method: "POST", body: JSON.stringify({ email, role }) });
 export const removeProjectMember = (projectId: number, memberId: number) =>
   request<{ detail: string }>(`/projects/${projectId}/members/${memberId}`, { method: "DELETE" });
+
+// Custom Fields
+export const getProjectFields = (projectId: number) =>
+  request<ProjectCustomField[]>(`/projects/${projectId}/fields/`);
+export const createProjectField = (projectId: number, data: Partial<ProjectCustomField>) =>
+  request<ProjectCustomField>(`/projects/${projectId}/fields/`, { method: "POST", body: JSON.stringify(data) });
+export const updateProjectField = (projectId: number, fieldId: number, data: Partial<ProjectCustomField>) =>
+  request<ProjectCustomField>(`/projects/${projectId}/fields/${fieldId}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteProjectField = (projectId: number, fieldId: number) =>
+  request<{ detail: string }>(`/projects/${projectId}/fields/${fieldId}`, { method: "DELETE" });
+
+// Dependencies
+export const getTaskDependencies = (taskId: number) =>
+  request<TaskDependencies>(`/tasks/${taskId}/dependencies/`);
+export const addTaskDependency = (taskId: number, relatedTaskId: number, dependencyType: string) =>
+  request<{ id: number }>(`/tasks/${taskId}/dependencies/`, { method: "POST", body: JSON.stringify({ related_task_id: relatedTaskId, dependency_type: dependencyType }) });
+export const removeTaskDependency = (taskId: number, depId: number) =>
+  request<{ detail: string }>(`/tasks/${taskId}/dependencies/${depId}`, { method: "DELETE" });
+
+// Automations
+export const getAutomations = (projectId: number) =>
+  request<AutomationRule[]>(`/projects/${projectId}/automations/`);
+export const createAutomation = (projectId: number, data: Partial<AutomationRule>) =>
+  request<AutomationRule>(`/projects/${projectId}/automations/`, { method: "POST", body: JSON.stringify(data) });
+export const updateAutomation = (projectId: number, ruleId: number, data: Partial<AutomationRule>) =>
+  request<AutomationRule>(`/projects/${projectId}/automations/${ruleId}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteAutomation = (projectId: number, ruleId: number) =>
+  request<{ detail: string }>(`/projects/${projectId}/automations/${ruleId}`, { method: "DELETE" });
+export const toggleAutomation = (projectId: number, ruleId: number) =>
+  request<AutomationRule>(`/projects/${projectId}/automations/${ruleId}/toggle`, { method: "PATCH" });
+
+// Sprints
+export const getSprints = (projectId: number) =>
+  request<Sprint[]>(`/projects/${projectId}/sprints/`);
+export const createSprint = (projectId: number, data: Partial<Sprint>) =>
+  request<Sprint>(`/projects/${projectId}/sprints/`, { method: "POST", body: JSON.stringify(data) });
+export const getSprintDetail = (projectId: number, sprintId: number) =>
+  request<SprintDetail>(`/projects/${projectId}/sprints/${sprintId}`);
+export const updateSprint = (projectId: number, sprintId: number, data: Partial<Sprint>) =>
+  request<Sprint>(`/projects/${projectId}/sprints/${sprintId}`, { method: "PATCH", body: JSON.stringify(data) });
+export const addTaskToSprint = (projectId: number, sprintId: number, taskId: number) =>
+  request<{ detail: string }>(`/projects/${projectId}/sprints/${sprintId}/tasks`, { method: "POST", body: JSON.stringify({ task_id: taskId }) });
+export const removeTaskFromSprint = (projectId: number, sprintId: number, taskId: number) =>
+  request<{ detail: string }>(`/projects/${projectId}/sprints/${sprintId}/tasks/${taskId}`, { method: "DELETE" });
 
 // Stats
 export const getDashboardStats = () => request<{
