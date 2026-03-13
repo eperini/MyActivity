@@ -932,6 +932,79 @@ def _get_report_period(frequency: str) -> tuple[date, date]:
         return last_month_start, last_month_end
 
 
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+def run_tempo_import(self, import_log_id: int, date_from: str, date_to: str, user_id: int):
+    """Celery task for async Tempo import (long periods)."""
+    from app.models.tempo import TempoImportLog
+    from app.services.tempo_import_service import TempoImportService
+
+    try:
+        with _SessionLocal() as db:
+            import_log = db.get(TempoImportLog, import_log_id)
+            if not import_log:
+                return
+
+            svc = TempoImportService(db)
+            try:
+                worklogs = svc._get_chunked_sync(
+                    date.fromisoformat(date_from),
+                    date.fromisoformat(date_to),
+                )
+                import_log.worklogs_found = len(worklogs)
+                db.commit()
+
+                for wl in worklogs:
+                    result = svc._process_worklog(wl)
+                    if result == "created":
+                        import_log.worklogs_created += 1
+                    elif result == "updated":
+                        import_log.worklogs_updated += 1
+                    elif result == "skipped":
+                        import_log.worklogs_skipped += 1
+
+                import_log.status = "ok"
+            except Exception as e:
+                import_log.status = "error"
+                import_log.error_message = str(e)[:500]
+            finally:
+                import_log.completed_at = datetime.now(timezone.utc)
+                db.commit()
+
+    except Exception as exc:
+        logger.error("Tempo import task error: %s", exc)
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+def auto_sync_tempo(self):
+    """Auto-sync Tempo worklogs for previous week. Runs Monday 06:00."""
+    from app.models.user import User
+    from app.services.tempo_import_service import TempoImportService
+
+    if not settings.TEMPO_API_TOKEN:
+        return "Tempo not configured"
+
+    try:
+        with _SessionLocal() as db:
+            today = date.today()
+            last_monday = today - timedelta(days=today.weekday() + 7)
+            last_sunday = last_monday + timedelta(days=6)
+
+            admin = db.execute(
+                select(User).where(User.is_admin == True)
+            ).scalar_one_or_none()
+            if not admin:
+                return "No admin user found"
+
+            svc = TempoImportService(db)
+            log = svc.run_import(last_monday, last_sunday, admin.id)
+            return f"Tempo sync: {log.worklogs_created} created, {log.worklogs_updated} updated, {log.worklogs_skipped} skipped"
+
+    except Exception as exc:
+        logger.error("Auto tempo sync error: %s", exc)
+        raise self.retry(exc=exc)
+
+
 def _send_push_to_subs(subs, title, body, db):
     """Send web push notifications to subscriptions."""
     import json

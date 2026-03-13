@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X } from "lucide-react";
+import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X, Cloud } from "lucide-react";
 import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, getLists } from "@/lib/api";
 import type { TickTickImportResult } from "@/lib/api";
 import type { TaskList, TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
 import { useToast } from "@/components/Toast";
+import TempoSettingsPanel from "@/components/TempoSettingsPanel";
+import TempoUsersPanel from "@/components/TempoUsersPanel";
+import TempoImportPanel from "@/components/TempoImportPanel";
 
 export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const { showToast } = useToast();
@@ -45,6 +48,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [creatingProject, setCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [allLists, setAllLists] = useState<TaskList[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     getGoogleCalendarConfig()
@@ -58,6 +62,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
         setReportEmail(p.daily_report_email);
         setReportPush(p.daily_report_push);
         setReportTime(p.daily_report_time || "07:00");
+        setIsAdmin(p.is_admin);
       })
       .catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento profilo"); });
     getTemplates()
@@ -793,6 +798,26 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
           </button>
         )}
       </div>
+
+      {/* Tempo Cloud — admin only */}
+      {isAdmin && (
+        <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-5">
+          <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+            <Cloud size={16} />
+            Tempo Cloud
+          </h3>
+          <p className="text-xs text-zinc-500">
+            Importa worklogs da Tempo Cloud per avere visibilità completa delle ore di tutto il team nei report.
+          </p>
+          <TempoSettingsPanel />
+          <div className="border-t border-zinc-700/50 pt-4">
+            <TempoImportPanel />
+          </div>
+          <div className="border-t border-zinc-700/50 pt-4">
+            <TempoUsersPanel />
+          </div>
+        </div>
+      )}
 
       {/* API Key for iOS Shortcuts */}
       <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">

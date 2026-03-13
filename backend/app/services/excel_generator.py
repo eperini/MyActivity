@@ -208,14 +208,18 @@ class ExcelGenerator:
         ws = wb.create_sheet("Per persona")
         ws.sheet_view.showGridLines = False
 
-        headers = ["Persona", "Ore lavorate", "Task completati", "Progetti"]
-        col_widths = [25, 15, 16, 40]
+        headers = ["Persona", "Sorgente", "Ore lavorate", "Task completati", "Progetti"]
+        col_widths = [25, 12, 15, 16, 40]
         self._apply_header(ws, 1, headers, col_widths)
 
         for r, person in enumerate(data.persons, start=2):
             fill = self.ALT_FILL if r % 2 == 0 else PatternFill()
+            source_label = {"tempo": "Tempo", "zeno": "Zeno", "both": "Entrambi"}.get(
+                getattr(person, "source", "zeno"), "Zeno"
+            )
             values = [
                 person.display_name,
+                source_label,
                 _fmt_minutes(person.logged_minutes),
                 person.done_tasks,
                 ", ".join(person.projects),

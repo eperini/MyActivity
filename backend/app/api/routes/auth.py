@@ -50,6 +50,7 @@ class UserProfileResponse(BaseModel):
     id: int
     email: str
     display_name: str
+    is_admin: bool = False
     daily_report_email: bool
     daily_report_push: bool
     daily_report_time: str | None
@@ -108,6 +109,7 @@ async def get_profile(user: User = Depends(get_current_user)):
         id=user.id,
         email=user.email,
         display_name=user.display_name,
+        is_admin=user.is_admin,
         daily_report_email=user.daily_report_email,
         daily_report_push=user.daily_report_push,
         daily_report_time=user.daily_report_time.strftime("%H:%M") if user.daily_report_time else "07:00",
@@ -156,3 +158,16 @@ async def update_preferences(
 
     await db.commit()
     return {"detail": "Preferenze aggiornate"}
+
+
+@router.get("/users")
+async def list_users(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all users (admin only) — used for Tempo user linking."""
+    if not user.is_admin:
+        raise HTTPException(403, "Solo admin")
+    result = await db.execute(select(User).order_by(User.display_name))
+    users = result.scalars().all()
+    return [{"id": u.id, "email": u.email, "display_name": u.display_name, "is_admin": u.is_admin} for u in users]

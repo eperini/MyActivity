@@ -175,16 +175,20 @@ class PDFGenerator:
         h2 = ParagraphStyle("H2Pers", parent=styles["Heading2"],
                             fontSize=12, textColor=self.COLOR_DARK, spaceBefore=8)
 
-        rows = [["Persona", "Ore", "Task completati", "Progetti"]]
+        rows = [["Persona", "Sorgente", "Ore", "Task completati", "Progetti"]]
         for person in data.persons:
+            source_label = {"tempo": "Tempo", "zeno": "Zeno", "both": "Entrambi"}.get(
+                getattr(person, "source", "zeno"), "Zeno"
+            )
             rows.append([
                 person.display_name,
+                source_label,
                 _fmt_minutes(person.logged_minutes),
                 str(person.done_tasks),
                 ", ".join(person.projects),
             ])
 
-        t = Table(rows, colWidths=[4 * cm, 3 * cm, 3 * cm, 6.5 * cm])
+        t = Table(rows, colWidths=[3.5 * cm, 2 * cm, 2.5 * cm, 3 * cm, 5.5 * cm])
         t.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), self.COLOR_PRIMARY),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),

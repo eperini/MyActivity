@@ -44,6 +44,11 @@ celery_app.conf.update(
         #     "task": "app.workers.tasks.sync_jira_projects",
         #     "schedule": crontab(minute=f"*/{settings.JIRA_SYNC_INTERVAL_MINUTES}"),
         # },
+        # Sync Tempo: ogni lunedì alle 06:00 (prima dei report settimanali)
+        "auto-sync-tempo": {
+            "task": "app.workers.tasks.auto_sync_tempo",
+            "schedule": crontab(hour=6, minute=0, day_of_week=1),
+        },
         # Report settimanale: ogni lunedì alle 07:00
         "weekly-reports": {
             "task": "app.workers.tasks.send_periodic_reports",

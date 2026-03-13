@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.task import Task
 from app.models.task_list import TaskList, ListMember
 from app.models.time_log import TimeLog
+from app.models.tempo import TempoUser
 from app.models.project import Project
 
 router = APIRouter()
@@ -65,12 +66,13 @@ class TimeLogUpdate(BaseModel):
 class TimeLogOut(BaseModel):
     id: int
     task_id: int
-    user_id: int
+    user_id: int | None
     user_name: str
     logged_at: date
     minutes: int
     formatted: str
     note: str | None
+    source: str = "manual"
     created_at: str
 
     class Config:
@@ -87,8 +89,9 @@ async def get_task_time_logs(
 ):
     await _check_task_access(task_id, user.id, db)
     result = await db.execute(
-        select(TimeLog, User.display_name)
-        .join(User, TimeLog.user_id == User.id)
+        select(TimeLog, User.display_name, TempoUser.display_name)
+        .outerjoin(User, TimeLog.user_id == User.id)
+        .outerjoin(TempoUser, TimeLog.tempo_user_id == TempoUser.id)
         .where(TimeLog.task_id == task_id)
         .order_by(TimeLog.logged_at.desc(), TimeLog.created_at.desc())
     )
@@ -98,14 +101,15 @@ async def get_task_time_logs(
             id=log.id,
             task_id=log.task_id,
             user_id=log.user_id,
-            user_name=name,
+            user_name=user_name or tempo_name or "Utente sconosciuto",
             logged_at=log.logged_at,
             minutes=log.minutes,
             formatted=format_minutes(log.minutes),
             note=log.note,
+            source=log.source or "manual",
             created_at=log.created_at.isoformat(),
         )
-        for log, name in rows
+        for log, user_name, tempo_name in rows
     ]
 
 

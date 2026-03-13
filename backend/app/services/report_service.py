@@ -50,8 +50,10 @@ class ProjectSummary:
 
 @dataclass
 class PersonSummary:
-    user_id: int
+    user_id: int | None
+    tempo_user_id: int | None
     display_name: str
+    source: str  # "zeno" | "tempo" | "both"
     logged_minutes: int
     done_tasks: int
     projects: list[str] = field(default_factory=list)
@@ -98,7 +100,15 @@ def report_data_from_json(d: dict) -> ReportData:
         **{k: v for k, v in p.items() if k != "tasks"},
         tasks=[TaskSummary(**t) for t in p.get("tasks", [])]
     ) for p in d.get("projects", [])]
-    persons = [PersonSummary(**p) for p in d.get("persons", [])]
+    persons = [PersonSummary(
+        user_id=p.get("user_id"),
+        tempo_user_id=p.get("tempo_user_id"),
+        display_name=p["display_name"],
+        source=p.get("source", "zeno"),
+        logged_minutes=p["logged_minutes"],
+        done_tasks=p["done_tasks"],
+        projects=p.get("projects", []),
+    ) for p in d.get("persons", [])]
     time_log_details = [TimeLogDetail(**t) for t in d.get("time_log_details", [])]
     return ReportData(
         title=d["title"],
@@ -346,6 +356,9 @@ class AsyncReportService:
         return result.scalar() or 0
 
     async def _get_persons_summary(self, project_ids, date_from, date_to, project_map):
+        from app.models.tempo import TempoUser
+
+        # Zeno users with logged time
         result = await self.db.execute(
             select(
                 TimeLog.user_id,
@@ -358,12 +371,12 @@ class AsyncReportService:
                 Task.project_id.in_(project_ids),
                 TimeLog.logged_at >= date_from,
                 TimeLog.logged_at <= date_to,
+                TimeLog.user_id.isnot(None),
             )
             .group_by(TimeLog.user_id, User.display_name)
         )
         persons = []
         for uid, name, minutes in result.all():
-            # Count done tasks by user
             done_result = await self.db.execute(
                 select(func.count()).select_from(Task).where(
                     Task.project_id.in_(project_ids),
@@ -373,7 +386,6 @@ class AsyncReportService:
             )
             done_count = done_result.scalar() or 0
 
-            # Projects the user worked on
             proj_result = await self.db.execute(
                 select(Project.name).distinct()
                 .join(Task, Task.project_id == Project.id)
@@ -389,12 +401,57 @@ class AsyncReportService:
 
             persons.append(PersonSummary(
                 user_id=uid,
+                tempo_user_id=None,
                 display_name=name,
+                source="zeno",
                 logged_minutes=minutes or 0,
                 done_tasks=done_count,
                 projects=proj_names,
             ))
-        return persons
+
+        # Tempo ghost users with logged time
+        tempo_result = await self.db.execute(
+            select(
+                TimeLog.tempo_user_id,
+                TempoUser.display_name,
+                func.sum(TimeLog.minutes).label("total_minutes"),
+            )
+            .join(Task, TimeLog.task_id == Task.id)
+            .join(TempoUser, TimeLog.tempo_user_id == TempoUser.id)
+            .where(
+                Task.project_id.in_(project_ids),
+                TimeLog.logged_at >= date_from,
+                TimeLog.logged_at <= date_to,
+                TimeLog.tempo_user_id.isnot(None),
+                TimeLog.user_id.is_(None),
+            )
+            .group_by(TimeLog.tempo_user_id, TempoUser.display_name)
+        )
+        for tuid, name, minutes in tempo_result.all():
+            proj_result = await self.db.execute(
+                select(Project.name).distinct()
+                .join(Task, Task.project_id == Project.id)
+                .join(TimeLog, TimeLog.task_id == Task.id)
+                .where(
+                    Task.project_id.in_(project_ids),
+                    TimeLog.tempo_user_id == tuid,
+                    TimeLog.logged_at >= date_from,
+                    TimeLog.logged_at <= date_to,
+                )
+            )
+            proj_names = [r[0] for r in proj_result.all()]
+
+            persons.append(PersonSummary(
+                user_id=None,
+                tempo_user_id=tuid,
+                display_name=name,
+                source="tempo",
+                logged_minutes=minutes or 0,
+                done_tasks=0,
+                projects=proj_names,
+            ))
+
+        return sorted(persons, key=lambda p: p.logged_minutes, reverse=True)
 
 
 # ── Sync service (for Celery workers) ──────────────────────────────

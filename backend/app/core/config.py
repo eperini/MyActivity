@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     JIRA_EMAIL: str = ""
     JIRA_API_TOKEN: str = ""
     JIRA_SYNC_INTERVAL_MINUTES: int = 15
+    TEMPO_API_TOKEN: str = ""
+    TEMPO_BASE_URL: str = "https://api.tempo.io/4"
+    TEMPO_SYNC_INTERVAL_DAYS: int = 7
+    TEMPO_DEFAULT_IMPORT_FROM: str = "2026-01-01"
 
     class Config:
         env_file = ".env"

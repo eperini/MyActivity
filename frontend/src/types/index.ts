@@ -61,12 +61,13 @@ export interface Task {
 export interface TimeLog {
   id: number;
   task_id: number;
-  user_id: number;
+  user_id: number | null;
   user_name: string;
   logged_at: string;
   minutes: number;
   formatted: string;
   note: string | null;
+  source?: string;
   created_at: string;
 }
 
@@ -355,6 +356,43 @@ export interface ReportGenerateResult {
     total_open_tasks: number;
     avg_completion_pct: number;
   };
+}
+
+// Tempo
+export interface TempoUser {
+  id: number;
+  tempo_account_id: string;
+  display_name: string;
+  email: string | null;
+  zeno_user_id: number | null;
+  is_active: boolean;
+  total_logs: number;
+  total_minutes: number;
+  total_formatted: string;
+}
+
+export interface TempoImportLog {
+  id: number;
+  triggered_by: number | null;
+  period_from: string;
+  period_to: string;
+  status: string;
+  worklogs_found: number;
+  worklogs_created: number;
+  worklogs_updated: number;
+  worklogs_skipped: number;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface TempoConfig {
+  is_configured: boolean;
+  sync_interval_days: number;
+  last_auto_sync_at: string | null;
+  last_auto_sync_status: string | null;
+  total_tempo_users: number;
+  total_imported_logs: number;
 }
 
 export interface AutomationRule {

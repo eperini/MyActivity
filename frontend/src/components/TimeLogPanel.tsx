@@ -172,7 +172,10 @@ export default function TimeLogPanel({ taskId, estimatedMinutes, timeLoggedMinut
               </span>
               <span className="text-zinc-300 w-12 flex-shrink-0">{log.formatted}</span>
               <span className="text-zinc-500 flex-1 truncate">{log.note || ""}</span>
-              <span className="text-[10px] text-zinc-600 flex-shrink-0">{log.user_name}</span>
+              <span className="text-[10px] text-zinc-600 flex-shrink-0 flex items-center gap-1">
+                {log.user_name}
+                {log.source === "tempo" && <span className="px-1 py-0.5 rounded bg-zinc-700 text-zinc-400 text-[8px]">Tempo</span>}
+              </span>
               <button
                 onClick={() => handleDelete(log.id)}
                 className="opacity-0 group-hover/log:opacity-100 text-zinc-600 hover:text-red-400 transition-all flex-shrink-0"

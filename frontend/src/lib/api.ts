@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -303,6 +303,7 @@ export interface UserProfile {
   id: number;
   email: string;
   display_name: string;
+  is_admin: boolean;
   daily_report_email: boolean;
   daily_report_push: boolean;
   daily_report_time: string | null;
@@ -471,6 +472,28 @@ export const deleteReportConfig = (id: number) =>
 
 export const runReportConfigNow = (id: number) =>
   request<{ detail: string }>(`/reports/configs/${id}/run-now`, { method: "POST" });
+
+// Users (admin)
+export const listUsers = () =>
+  request<{ id: number; email: string; display_name: string; is_admin: boolean }[]>("/auth/users");
+
+// Tempo
+export const getTempoConfig = () =>
+  request<TempoConfig>("/tempo/config");
+export const testTempoConnection = () =>
+  request<{ status: string; message: string }>("/tempo/test-connection", { method: "POST" });
+export const getTempoUsers = () =>
+  request<TempoUser[]>("/tempo/users");
+export const linkTempoUser = (id: number, zeno_user_id: number | null) =>
+  request<TempoUser>(`/tempo/users/${id}`, { method: "PATCH", body: JSON.stringify({ zeno_user_id }) });
+export const deactivateTempoUser = (id: number) =>
+  request<TempoUser>(`/tempo/users/${id}/deactivate`, { method: "PATCH" });
+export const triggerTempoImport = (date_from: string, date_to: string) =>
+  request<TempoImportLog>("/tempo/import", { method: "POST", body: JSON.stringify({ date_from, date_to }) });
+export const getTempoImportHistory = () =>
+  request<TempoImportLog[]>("/tempo/import/history");
+export const getTempoImportDetail = (id: number) =>
+  request<TempoImportLog>(`/tempo/import/history/${id}`);
 
 // Stats
 export const getDashboardStats = () => request<{
