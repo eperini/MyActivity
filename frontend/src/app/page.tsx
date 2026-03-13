@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { Task, TaskList, Habit } from "@/types";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import useIsMobile from "@/hooks/useIsMobile";
+import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
 import Sidebar from "@/components/Sidebar";
 import TaskListView from "@/components/TaskListView";
 import TaskDetail from "@/components/TaskDetail";
@@ -33,6 +34,7 @@ import NotificationsPanel from "@/components/NotificationsPanel";
 import BottomTabBar from "@/components/BottomTabBar";
 import MobileHeader from "@/components/MobileHeader";
 import FloatingAddButton from "@/components/FloatingAddButton";
+import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
 import { isToday, parseISO, differenceInDays } from "date-fns";
 
 export default function HomePage() {
@@ -62,6 +64,9 @@ export default function HomePage() {
 
   // Share list
   const [shareList, setShareList] = useState<TaskList | null>(null);
+
+  // Keyboard shortcuts modal
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -251,6 +256,54 @@ export default function HomePage() {
 
   // Should show FAB?
   const showFab = ["inbox", "today", "next7", "completed", "habits"].includes(selectedView) || selectedView.startsWith("list-") || selectedView.startsWith("project-");
+
+  // Keyboard shortcuts
+  const shortcutActions = useMemo(
+    () => ({
+      onNewTask: () => {
+        if (selectedView === "habits") setShowAddHabit(true);
+        else setShowMobileAdd(true);
+      },
+      onClosePanel: () => {
+        if (showShortcuts) { setShowShortcuts(false); return; }
+        if (showMobileAdd) { setShowMobileAdd(false); return; }
+        if (showAddHabit) { setShowAddHabit(false); return; }
+        if (calendarAddDate) { setCalendarAddDate(null); return; }
+        if (shareList) { setShareList(null); return; }
+        if (selectedTask) { setSelectedTask(null); return; }
+        if (selectedHabit) { setSelectedHabit(null); return; }
+      },
+      onToggleSidebar: () => setSidebarOpen((o) => !o),
+      onNavigate: (view: string) => handleSelectView(view),
+      onToggleSelectedTask: () => {
+        if (selectedTask) handleToggle(selectedTask);
+      },
+      onShowHelp: () => setShowShortcuts(true),
+      onSearch: () => {
+        // Focus the search input in TaskListView if visible
+        const searchInput = document.querySelector<HTMLInputElement>(
+          'input[placeholder*="Cerca"]'
+        );
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      },
+      onNextTask: () => {
+        const idx = filteredTasks.findIndex((t) => t.id === selectedTask?.id);
+        const next = filteredTasks[idx + 1] || filteredTasks[0];
+        if (next) setSelectedTask(next);
+      },
+      onPrevTask: () => {
+        const idx = filteredTasks.findIndex((t) => t.id === selectedTask?.id);
+        const prev = filteredTasks[idx - 1] || filteredTasks[filteredTasks.length - 1];
+        if (prev) setSelectedTask(prev);
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedView, selectedTask, selectedHabit, showMobileAdd, showAddHabit, showShortcuts, calendarAddDate, shareList, filteredTasks]
+  );
+  useKeyboardShortcuts(shortcutActions);
 
   if (loading) {
     return (
@@ -585,6 +638,11 @@ export default function HomePage() {
           onCreated={loadData}
           onClose={() => setShowMobileAdd(false)}
         />
+      )}
+
+      {/* Keyboard shortcuts modal */}
+      {showShortcuts && (
+        <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
 
       {/* Bottom tab bar */}

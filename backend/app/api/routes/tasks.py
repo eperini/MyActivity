@@ -469,3 +469,21 @@ async def reorder_subtasks(
             subtask.position = i
     await db.commit()
     return {"detail": "Riordinato"}
+
+
+@router.patch("/reorder")
+async def reorder_tasks(
+    data: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reorder tasks within a list or by status (for kanban)."""
+    ids = data.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids richiesti")
+    for i, tid in enumerate(ids):
+        task = await db.get(Task, tid)
+        if task and task.created_by == user.id:
+            task.position = i
+    await db.commit()
+    return {"detail": "Riordinato"}

@@ -46,8 +46,8 @@ export default function TaskItem({ task, list, isSelected, onSelect, onToggle }:
           e.stopPropagation();
           onToggle(task);
         }}
-        className={`mt-0.5 w-5 h-5 md:w-[18px] md:h-[18px] rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-          isDone ? "bg-zinc-600 border-zinc-600" : PRIORITY_COLORS[task.priority] || PRIORITY_COLORS[4]
+        className={`mt-0.5 w-5 h-5 md:w-[18px] md:h-[18px] rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+          isDone ? "bg-zinc-600 border-zinc-600 animate-check" : PRIORITY_COLORS[task.priority] || PRIORITY_COLORS[4]
         }`}
       >
         {isDone && (

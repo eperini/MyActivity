@@ -42,6 +42,10 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
+              (function(){
+                var t=localStorage.getItem('zeno-theme');
+                if(t)document.documentElement.setAttribute('data-theme',t);
+              })();
               if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/sw.js').catch(() => {});
               }

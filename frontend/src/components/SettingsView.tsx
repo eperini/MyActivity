@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X, Cloud } from "lucide-react";
+import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X, Cloud, Sun, Moon } from "lucide-react";
+import useTheme from "@/hooks/useTheme";
 import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, getLists, linkJiraAccount } from "@/lib/api";
 import type { TickTickImportResult } from "@/lib/api";
 import type { TaskList, TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
@@ -12,6 +13,7 @@ import TempoImportPanel from "@/components/TempoImportPanel";
 
 export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const { showToast } = useToast();
+  const { theme, toggleTheme } = useTheme();
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -892,6 +894,35 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
             Genera API Key
           </button>
         )}
+      </div>
+
+      {/* Tema */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5">
+        <h3 className="text-sm font-medium text-white mb-3">Aspetto</h3>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleTheme}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              theme === "dark"
+                ? "bg-zinc-700 text-white"
+                : "bg-zinc-700/50 text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Moon size={16} />
+            Scuro
+          </button>
+          <button
+            onClick={toggleTheme}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              theme === "light"
+                ? "bg-blue-600 text-white"
+                : "bg-zinc-700/50 text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Sun size={16} />
+            Chiaro
+          </button>
+        </div>
       </div>
 
       {/* Logout */}

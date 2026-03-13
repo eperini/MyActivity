@@ -3,19 +3,133 @@
 @theme inline {
   --font-sans: var(--font-geist);
   --animate-slide-in: slide-in 0.2s ease-out;
+  --animate-fade-in: fade-in 0.15s ease-out;
+  --animate-scale-in: scale-in 0.15s ease-out;
+  --animate-check: check-pop 0.25s ease-out;
 }
 
+/* ─── Theme variables ─── */
+:root {
+  --z-bg-primary: #09090b;
+  --z-bg-secondary: #18181b;
+  --z-bg-card: #27272a;
+  --z-bg-hover: rgba(39, 39, 42, 0.5);
+  --z-text-primary: #ffffff;
+  --z-text-secondary: #a1a1aa;
+  --z-text-muted: #71717a;
+  --z-border: #27272a;
+  --z-border-subtle: rgba(39, 39, 42, 0.5);
+  --z-scrollbar: #3f3f46;
+  --z-selection: #3b82f6;
+}
+
+[data-theme="light"] {
+  --z-bg-primary: #ffffff;
+  --z-bg-secondary: #f4f4f5;
+  --z-bg-card: #e4e4e7;
+  --z-bg-hover: rgba(244, 244, 245, 0.8);
+  --z-text-primary: #09090b;
+  --z-text-secondary: #52525b;
+  --z-text-muted: #a1a1aa;
+  --z-border: #d4d4d8;
+  --z-border-subtle: rgba(212, 212, 216, 0.5);
+  --z-scrollbar: #a1a1aa;
+  --z-selection: #3b82f6;
+}
+
+/* ─── Animations ─── */
 @keyframes slide-in {
   from { transform: translateX(-100%); }
   to { transform: translateX(0); }
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes check-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* ─── Scrollbar ─── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3f3f46 transparent;
+  scrollbar-color: var(--z-scrollbar) transparent;
 }
 
 ::selection {
-  background-color: #3b82f6;
+  background-color: var(--z-selection);
   color: white;
+}
+
+/* ─── Light theme overrides for zinc-based classes ─── */
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Override key background/text patterns used across the app */
+  .bg-zinc-950 { background-color: var(--z-bg-primary) !important; }
+  .bg-zinc-900 { background-color: var(--z-bg-secondary) !important; }
+  .bg-zinc-800 { background-color: var(--z-bg-card) !important; }
+  .bg-zinc-800\/50, .bg-zinc-800\/40, .bg-zinc-800\/30, .bg-zinc-800\/80 {
+    background-color: var(--z-bg-hover) !important;
+  }
+  .bg-zinc-700 { background-color: #d4d4d8 !important; }
+
+  .text-white { color: var(--z-text-primary) !important; }
+  .text-zinc-200, .text-zinc-300 { color: #3f3f46 !important; }
+  .text-zinc-400 { color: var(--z-text-secondary) !important; }
+  .text-zinc-500 { color: var(--z-text-muted) !important; }
+  .text-zinc-600 { color: #a1a1aa !important; }
+  .text-zinc-700 { color: #d4d4d8 !important; }
+
+  .border-zinc-800, .border-zinc-800\/50 { border-color: var(--z-border) !important; }
+  .border-zinc-700 { border-color: #d4d4d8 !important; }
+  .border-zinc-600 { border-color: #a1a1aa !important; }
+
+  .placeholder-zinc-500::placeholder, .placeholder-zinc-600::placeholder {
+    color: #a1a1aa !important;
+  }
+
+  /* Hover states */
+  .hover\:bg-zinc-800:hover { background-color: #e4e4e7 !important; }
+  .hover\:bg-zinc-600:hover { background-color: #d4d4d8 !important; }
+  .hover\:bg-zinc-700:hover { background-color: #d4d4d8 !important; }
+  .hover\:text-white:hover { color: var(--z-text-primary) !important; }
+  .hover\:text-zinc-300:hover { color: #3f3f46 !important; }
+  .hover\:text-zinc-200:hover { color: #27272a !important; }
+
+  /* Ring/focus */
+  .ring-zinc-700 { --tw-ring-color: #d4d4d8 !important; }
+
+  /* Dividers */
+  .divide-zinc-800\/50 > :not(:first-child) { border-color: var(--z-border-subtle) !important; }
+
+  /* Inputs */
+  input, textarea, select {
+    color: var(--z-text-primary);
+  }
+  select option {
+    background-color: var(--z-bg-secondary);
+    color: var(--z-text-primary);
+  }
+
+  /* Scrollbar */
+  & { scrollbar-color: #a1a1aa transparent; }
+
+  /* Modal overlay */
+  .bg-black\/50 { background-color: rgba(0, 0, 0, 0.3) !important; }
+  .bg-black\/60 { background-color: rgba(0, 0, 0, 0.35) !important; }
+}
+
+/* ─── Smooth transitions for theme switching ─── */
+html {
+  transition: background-color 0.2s ease, color 0.2s ease;
 }

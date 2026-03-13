@@ -90,6 +90,9 @@ export const updateTask = (id: number, data: Partial<Task>) =>
 export const deleteTask = (id: number) =>
   request<{ detail: string }>(`/tasks/${id}`, { method: "DELETE" });
 
+export const reorderTasks = (ids: number[]) =>
+  request<{ detail: string }>("/tasks/reorder", { method: "PATCH", body: JSON.stringify({ ids }) });
+
 // Subtasks
 export const getSubtasks = (taskId: number) =>
   request<Task[]>(`/tasks/${taskId}/subtasks`);

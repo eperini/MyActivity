@@ -1,10 +1,27 @@
 "use client";
 
-import { Plus, Search, X, SlidersHorizontal } from "lucide-react";
+import { Plus, Search, X, SlidersHorizontal, GripVertical } from "lucide-react";
 import { useState, useMemo } from "react";
 import type { Task, TaskList } from "@/types";
 import TaskItem from "./TaskItem";
 import AddTaskForm from "./AddTaskForm";
+import { reorderTasks } from "@/lib/api";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface TaskListViewProps {
   title: string;
@@ -17,7 +34,61 @@ interface TaskListViewProps {
   onTaskCreated: () => void;
 }
 
-type SortOption = "priority" | "due_date" | "title";
+type SortOption = "priority" | "due_date" | "title" | "manual";
+
+function SortableTaskItem({
+  task,
+  list,
+  isSelected,
+  onSelect,
+  onToggle,
+  isDraggable,
+}: {
+  task: Task;
+  list?: TaskList;
+  isSelected: boolean;
+  onSelect: (task: Task) => void;
+  onToggle: (task: Task) => void;
+  isDraggable: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id, disabled: !isDraggable });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center">
+      {isDraggable && (
+        <div
+          {...attributes}
+          {...listeners}
+          className="flex-shrink-0 px-1 cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400 touch-none"
+        >
+          <GripVertical size={14} />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <TaskItem
+          task={task}
+          list={list}
+          isSelected={isSelected}
+          onSelect={onSelect}
+          onToggle={onToggle}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function TaskListView({
   title,
@@ -39,6 +110,12 @@ export default function TaskListView({
   const listMap = Object.fromEntries(lists.map((l) => [l.id, l]));
 
   const hasActiveFilters = searchQuery || filterPriority !== null || filterList !== null;
+  const isManualSort = sortBy === "manual";
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const filteredAndSorted = useMemo(() => {
     let result = [...tasks];
@@ -64,21 +141,25 @@ export default function TaskListView({
     }
 
     // Sort
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case "priority":
-          return a.priority - b.priority;
-        case "due_date":
-          if (!a.due_date && !b.due_date) return 0;
-          if (!a.due_date) return 1;
-          if (!b.due_date) return -1;
-          return a.due_date.localeCompare(b.due_date);
-        case "title":
-          return a.title.localeCompare(b.title);
-        default:
-          return 0;
-      }
-    });
+    if (sortBy === "manual") {
+      result.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    } else {
+      result.sort((a, b) => {
+        switch (sortBy) {
+          case "priority":
+            return a.priority - b.priority;
+          case "due_date":
+            if (!a.due_date && !b.due_date) return 0;
+            if (!a.due_date) return 1;
+            if (!b.due_date) return -1;
+            return a.due_date.localeCompare(b.due_date);
+          case "title":
+            return a.title.localeCompare(b.title);
+          default:
+            return 0;
+        }
+      });
+    }
 
     return result;
   }, [tasks, searchQuery, filterPriority, filterList, sortBy]);
@@ -89,12 +170,37 @@ export default function TaskListView({
     setFilterList(null);
   }
 
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = filteredAndSorted.findIndex((t) => t.id === active.id);
+    const newIndex = filteredAndSorted.findIndex((t) => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Reorder locally
+    const reordered = [...filteredAndSorted];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+
+    // Persist to backend
+    try {
+      await reorderTasks(reordered.map((t) => t.id));
+      onTaskCreated(); // triggers loadData refresh
+    } catch {
+      // Refresh on error
+      onTaskCreated();
+    }
+  }
+
   const PRIORITY_OPTIONS = [
     { value: 1, label: "Urgente", color: "bg-red-600" },
     { value: 2, label: "Alta", color: "bg-orange-600" },
     { value: 3, label: "Media", color: "bg-yellow-600" },
     { value: 4, label: "Bassa", color: "bg-zinc-600" },
   ];
+
+  const taskIds = filteredAndSorted.map((t) => t.id);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-zinc-950">
@@ -183,6 +289,7 @@ export default function TaskListView({
               onChange={(e) => setSortBy(e.target.value as SortOption)}
               className="bg-zinc-800 text-[10px] text-zinc-400 rounded px-2 py-1 outline-none"
             >
+              <option value="manual">Ordina: Manuale</option>
               <option value="priority">Ordina: Priorita</option>
               <option value="due_date">Ordina: Scadenza</option>
               <option value="title">Ordina: Nome</option>
@@ -217,18 +324,27 @@ export default function TaskListView({
             )}
           </div>
         ) : (
-          <div className="divide-y divide-zinc-800/50">
-            {filteredAndSorted.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                list={listMap[task.list_id]}
-                isSelected={selectedTask?.id === task.id}
-                onSelect={onSelectTask}
-                onToggle={onToggleTask}
-              />
-            ))}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+              <div className="divide-y divide-zinc-800/50">
+                {filteredAndSorted.map((task) => (
+                  <SortableTaskItem
+                    key={task.id}
+                    task={task}
+                    list={listMap[task.list_id]}
+                    isSelected={selectedTask?.id === task.id}
+                    onSelect={onSelectTask}
+                    onToggle={onToggleTask}
+                    isDraggable={isManualSort}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
