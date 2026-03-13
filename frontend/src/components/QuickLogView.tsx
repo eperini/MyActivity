@@ -5,6 +5,7 @@ import { Zap, Clock, Search, ExternalLink, Plus, X, ChevronDown } from "lucide-r
 import type { QuickLogProject, Epic } from "@/types";
 import { getQuickLogEpics, createEpicTimeLog } from "@/lib/api";
 import { useToast } from "./Toast";
+import { DateInput } from "./DatePicker";
 
 const DURATION_SHORTCUTS = [
   { label: "1h", hours: 1, mins: 0 },
@@ -241,12 +242,7 @@ export default function QuickLogView() {
                       {isOpen && (
                         <div className="ml-6 mr-3 mb-3 bg-zinc-800/70 rounded-xl p-4 space-y-3 border border-zinc-700/50">
                           <div className="flex items-center gap-3 flex-wrap">
-                            <input
-                              type="date"
-                              value={logDate}
-                              onChange={e => setLogDate(e.target.value)}
-                              className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500"
-                            />
+                            <DateInput value={logDate} onChange={setLogDate} />
                             <div className="flex items-center gap-1.5">
                               <input
                                 type="number"

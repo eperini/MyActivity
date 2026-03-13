@@ -18,6 +18,8 @@ interface DatePickerProps {
   onChange: (date: string | null) => void;
   onTimeChange?: (time: string | null) => void;
   onClose: () => void;
+  hideShortcuts?: boolean;
+  hideTime?: boolean;
 }
 
 function nextMonday(): Date {
@@ -32,7 +34,7 @@ function firstOfNextMonth(): Date {
   return startOfMonth(addMonths(d, 1));
 }
 
-export default function DatePicker({ value, timeValue, onChange, onTimeChange, onClose }: DatePickerProps) {
+export default function DatePicker({ value, timeValue, onChange, onTimeChange, onClose, hideShortcuts, hideTime }: DatePickerProps) {
   const [localValue, setLocalValue] = useState(value);
   const selected = localValue ? parseISO(localValue) : null;
   const [viewMonth, setViewMonth] = useState(selected || new Date());
@@ -85,10 +87,10 @@ export default function DatePicker({ value, timeValue, onChange, onTimeChange, o
   return (
     <div
       ref={ref}
-      className="w-64 bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl overflow-hidden z-50"
+      className="w-80 bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl overflow-hidden z-50"
     >
       {/* Quick shortcuts */}
-      <div className="flex items-center justify-around px-4 py-3 border-b border-zinc-800">
+      {!hideShortcuts && <div className="flex items-center justify-around px-4 py-3 border-b border-zinc-800">
         <button
           type="button"
           onClick={() => handleQuick(new Date())}
@@ -125,7 +127,7 @@ export default function DatePicker({ value, timeValue, onChange, onTimeChange, o
           <Moon size={18} />
           <span className="text-[9px]">Mese pross.</span>
         </button>
-      </div>
+      </div>}
 
       {/* Month header */}
       <div className="flex items-center justify-between px-4 py-2">
@@ -177,7 +179,7 @@ export default function DatePicker({ value, timeValue, onChange, onTimeChange, o
               key={day.toISOString()}
               type="button"
               onClick={() => selectDate(day)}
-              className={`w-8 h-8 mx-auto rounded-full text-xs flex items-center justify-center transition-colors ${
+              className={`w-9 h-9 mx-auto rounded-full text-sm flex items-center justify-center transition-colors ${
                 isSelected
                   ? "bg-blue-600 text-white"
                   : today
@@ -194,7 +196,7 @@ export default function DatePicker({ value, timeValue, onChange, onTimeChange, o
       </div>
 
       {/* Time section */}
-      <div className="border-t border-zinc-800">
+      {!hideTime && <div className="border-t border-zinc-800">
         <button
           type="button"
           onClick={() => setShowTime(!showTime)}
@@ -226,7 +228,7 @@ export default function DatePicker({ value, timeValue, onChange, onTimeChange, o
             )}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Footer */}
       <div className="flex items-center gap-2 px-4 py-3 border-t border-zinc-800">
@@ -245,6 +247,42 @@ export default function DatePicker({ value, timeValue, onChange, onTimeChange, o
           OK
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Compact date input that opens the custom DatePicker as a dropdown */
+export function DateInput({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const [open, setOpen] = useState(false);
+
+  const displayDate = (() => {
+    try {
+      return format(parseISO(value), "d MMM yyyy", { locale: it });
+    } catch {
+      return value;
+    }
+  })();
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={className || "bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500 transition-colors text-left min-w-[130px]"}
+      >
+        {displayDate}
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50">
+          <DatePicker
+            value={value}
+            onChange={(d) => { if (d) onChange(d); setOpen(false); }}
+            onClose={() => setOpen(false)}
+            hideShortcuts
+            hideTime
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { getTimeLogs, createTimeLog, deleteTimeLog, skipTempoPush, pushLogNow } 
 import { useToast } from "./Toast";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
+import { DateInput } from "./DatePicker";
 
 interface TimeLogPanelProps {
   taskId: number;
@@ -186,12 +187,7 @@ export default function TimeLogPanel({ taskId, estimatedMinutes, timeLoggedMinut
       {showForm && (
         <div className="ml-7 bg-zinc-800/50 rounded-xl p-4 space-y-3 border border-zinc-700/50">
           <div className="flex items-center gap-3 flex-wrap">
-            <input
-              type="date"
-              value={logDate}
-              onChange={(e) => setLogDate(e.target.value)}
-              className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500"
-            />
+            <DateInput value={logDate} onChange={setLogDate} />
             <div className="flex items-center gap-1.5">
               <input
                 type="number"
