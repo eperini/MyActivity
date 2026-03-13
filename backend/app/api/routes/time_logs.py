@@ -13,6 +13,7 @@ from app.models.task_list import TaskList, ListMember
 from app.models.time_log import TimeLog
 from app.models.tempo import TempoUser
 from app.models.project import Project
+from app.models.epic import Epic
 
 router = APIRouter()
 
@@ -213,8 +214,8 @@ async def get_weekly_time(
     week_start = today - timedelta(days=today.weekday())  # Monday
     week_end = week_start + timedelta(days=6)  # Sunday
 
-    # All logs for the week
-    result = await db.execute(
+    # All logs for the week (task logs + epic logs)
+    task_result = await db.execute(
         select(TimeLog, Task.title, Task.project_id)
         .join(Task, TimeLog.task_id == Task.id)
         .where(
@@ -224,13 +225,23 @@ async def get_weekly_time(
         )
         .order_by(TimeLog.logged_at)
     )
-    rows = result.all()
+    epic_result = await db.execute(
+        select(TimeLog, Epic.name, Epic.project_id)
+        .join(Epic, TimeLog.epic_id == Epic.id)
+        .where(
+            TimeLog.user_id == user.id,
+            TimeLog.logged_at >= week_start,
+            TimeLog.logged_at <= week_end,
+        )
+        .order_by(TimeLog.logged_at)
+    )
+    rows = task_result.all() + epic_result.all()
 
     total_minutes = sum(log.minutes for log, _, _ in rows)
 
     # Group by project
     by_project: dict[int | None, dict] = {}
-    for log, task_title, project_id in rows:
+    for log, item_title, project_id in rows:
         if project_id not in by_project:
             by_project[project_id] = {
                 "project_id": project_id,
@@ -241,7 +252,8 @@ async def get_weekly_time(
         by_project[project_id]["minutes"] += log.minutes
         by_project[project_id]["logs"].append({
             "task_id": log.task_id,
-            "task_title": task_title,
+            "epic_id": log.epic_id,
+            "task_title": item_title,
             "minutes": log.minutes,
             "logged_at": log.logged_at.isoformat(),
             "note": log.note,
@@ -300,20 +312,35 @@ async def get_time_report(
 ):
     target_user_id = user_id or user.id
 
-    query = (
+    # Task logs
+    task_query = (
         select(TimeLog, Task.title, Task.project_id)
         .join(Task, TimeLog.task_id == Task.id)
         .where(TimeLog.user_id == target_user_id)
     )
     if project_id:
-        query = query.where(Task.project_id == project_id)
+        task_query = task_query.where(Task.project_id == project_id)
     if date_from:
-        query = query.where(TimeLog.logged_at >= date_from)
+        task_query = task_query.where(TimeLog.logged_at >= date_from)
     if date_to:
-        query = query.where(TimeLog.logged_at <= date_to)
+        task_query = task_query.where(TimeLog.logged_at <= date_to)
 
-    result = await db.execute(query.order_by(TimeLog.logged_at))
-    rows = result.all()
+    # Epic logs
+    epic_query = (
+        select(TimeLog, Epic.name, Epic.project_id)
+        .join(Epic, TimeLog.epic_id == Epic.id)
+        .where(TimeLog.user_id == target_user_id)
+    )
+    if project_id:
+        epic_query = epic_query.where(Epic.project_id == project_id)
+    if date_from:
+        epic_query = epic_query.where(TimeLog.logged_at >= date_from)
+    if date_to:
+        epic_query = epic_query.where(TimeLog.logged_at <= date_to)
+
+    task_result = await db.execute(task_query.order_by(TimeLog.logged_at))
+    epic_result = await db.execute(epic_query.order_by(TimeLog.logged_at))
+    rows = task_result.all() + epic_result.all()
 
     total_minutes = sum(log.minutes for log, _, _ in rows)
 
@@ -348,14 +375,17 @@ async def get_time_report(
         ]
     elif group_by == "task":
         grouped = {}
-        task_names = {}
+        item_names = {}
         for log, title, _ in rows:
-            grouped[log.task_id] = grouped.get(log.task_id, 0) + log.minutes
-            task_names[log.task_id] = title
+            # Use task_id or "epic-{epic_id}" as key
+            key = log.task_id if log.task_id else f"epic-{log.epic_id}"
+            grouped[key] = grouped.get(key, 0) + log.minutes
+            item_names[key] = title
         items = [
             {
-                "task_id": k,
-                "task_title": task_names[k],
+                "task_id": k if isinstance(k, int) else None,
+                "epic_id": int(k.split("-")[1]) if isinstance(k, str) and k.startswith("epic-") else None,
+                "task_title": item_names[k],
                 "minutes": v,
                 "formatted": format_minutes(v),
             }

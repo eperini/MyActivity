@@ -130,6 +130,49 @@ class JiraService:
             )
 
 
+    async def get_project_epics(self, project_key: str) -> list[dict]:
+        """Fetch all Epics for a Jira project."""
+        jql = f"project = {project_key} AND issuetype = Epic ORDER BY created ASC"
+        params = {
+            "jql": jql,
+            "maxResults": 200,
+            "fields": "summary,description,status,priority,duedate,updated",
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.base_url}/rest/api/3/search/jql",
+                headers=self.headers,
+                params=params,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json().get("issues", [])
+
+    async def create_epic(
+        self, project_key: str, name: str, description: str = ""
+    ) -> dict:
+        """Create an Epic on Jira."""
+        epic_name_field = getattr(settings, "JIRA_EPIC_NAME_FIELD", "customfield_10011")
+        payload = {
+            "fields": {
+                "project": {"key": project_key},
+                "summary": name,
+                "issuetype": {"name": "Epic"},
+                epic_name_field: name,
+                "description": _to_adf(description),
+            }
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self.base_url}/rest/api/3/issue",
+                headers=self.headers,
+                json=payload,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+
 class JiraServiceSync:
     """Sync Jira client for Celery workers."""
 
@@ -149,6 +192,24 @@ class JiraServiceSync:
             "jql": jql,
             "maxResults": 100,
             "fields": "summary,description,status,priority,assignee,duedate,updated,issuetype",
+        }
+        with httpx.Client() as client:
+            resp = client.get(
+                f"{self.base_url}/rest/api/3/search/jql",
+                headers=self.headers,
+                params=params,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json().get("issues", [])
+
+    def get_project_epics_sync(self, project_key: str) -> list[dict]:
+        """Fetch all Epics for a Jira project (sync version)."""
+        jql = f"project = {project_key} AND issuetype = Epic ORDER BY created ASC"
+        params = {
+            "jql": jql,
+            "maxResults": 200,
+            "fields": "summary,description,status,priority,duedate,updated",
         }
         with httpx.Client() as client:
             resp = client.get(

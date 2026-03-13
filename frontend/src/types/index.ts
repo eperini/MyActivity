@@ -60,7 +60,8 @@ export interface Task {
 
 export interface TimeLog {
   id: number;
-  task_id: number;
+  task_id: number | null;
+  epic_id?: number;
   user_id: number | null;
   user_name: string;
   logged_at: string;
@@ -423,6 +424,37 @@ export interface TempoConfig {
   last_auto_sync_status: string | null;
   total_tempo_users: number;
   total_imported_logs: number;
+}
+
+// Epics
+export type EpicStatus = 'todo' | 'in_progress' | 'done';
+
+export interface Epic {
+  id: number;
+  project_id: number;
+  name: string;
+  description?: string;
+  status: EpicStatus;
+  color?: string;
+  start_date?: string;
+  target_date?: string;
+  completed_at?: string;
+  jira_issue_key?: string;
+  jira_url?: string;
+  jira_synced_at?: string;
+  position: number;
+  total_logged_minutes: number;
+  total_logged_formatted: string;
+  last_log_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuickLogProject {
+  project_id: number;
+  project_name: string;
+  jira_key: string;
+  epics: Epic[];
 }
 
 export interface AutomationRule {

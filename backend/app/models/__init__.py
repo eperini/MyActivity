@@ -20,6 +20,7 @@ from app.models.time_log import TimeLog, TimeLogDeleted
 from app.models.jira import JiraConfig
 from app.models.report import ReportConfig, ReportHistory, ReportType, ReportFrequency
 from app.models.tempo import TempoUser, TempoImportLog, TempoPushLog
+from app.models.epic import Epic, EpicStatus
 
 __all__ = [
     "User", "TaskList", "ListMember", "Task",
@@ -35,4 +36,5 @@ __all__ = [
     "JiraConfig",
     "ReportConfig", "ReportHistory", "ReportType", "ReportFrequency",
     "TempoUser", "TempoImportLog", "TempoPushLog",
+    "Epic", "EpicStatus",
 ]

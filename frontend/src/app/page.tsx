@@ -28,6 +28,7 @@ import KanbanView from "@/components/KanbanView";
 import WeeklyTimeReport from "@/components/WeeklyTimeReport";
 import ReportsView from "@/components/ReportsView";
 import ProjectView from "@/components/ProjectView";
+import QuickLogView from "@/components/QuickLogView";
 import BottomTabBar from "@/components/BottomTabBar";
 import MobileHeader from "@/components/MobileHeader";
 import FloatingAddButton from "@/components/FloatingAddButton";
@@ -173,6 +174,7 @@ export default function HomePage() {
     kanban: "Kanban",
     timereport: "Report Ore",
     reports: "Report",
+    quicklog: "Quick Log",
   };
   const viewTitle = selectedView.startsWith("list-")
     ? lists.find((l) => l.id === parseInt(selectedView.split("-")[1]))?.name || "Lista"
@@ -269,10 +271,11 @@ export default function HomePage() {
   const isKanbanView = selectedView === "kanban";
   const isTimeReportView = selectedView === "timereport";
   const isReportsView = selectedView === "reports";
+  const isQuickLogView = selectedView === "quicklog";
   const isProjectView = selectedView.startsWith("project-");
 
   // Check if current view is a task list view (needs TaskDetail)
-  const isTaskListView = !isHabitsView && !isEisenhowerView && !isCalendarView && !isStatsView && !isSettingsView && !isKanbanView && !isTimeReportView && !isReportsView && !isProjectView && selectedView !== "pomodoro";
+  const isTaskListView = !isHabitsView && !isEisenhowerView && !isCalendarView && !isStatsView && !isSettingsView && !isKanbanView && !isTimeReportView && !isReportsView && !isQuickLogView && !isProjectView && selectedView !== "pomodoro";
 
   function renderMainContent() {
     if (isStatsView) {
@@ -330,6 +333,10 @@ export default function HomePage() {
 
     if (isTimeReportView) {
       return <WeeklyTimeReport />;
+    }
+
+    if (isQuickLogView) {
+      return <QuickLogView />;
     }
 
     if (isReportsView) {

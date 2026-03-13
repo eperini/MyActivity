@@ -371,7 +371,10 @@ async def get_tempo_push_pending(
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
-    result = await db.execute(
+    from app.models.epic import Epic
+
+    # Logs on tasks
+    task_result = await db.execute(
         select(TimeLog, Task.title, Task.jira_issue_key)
         .join(Task, TimeLog.task_id == Task.id)
         .where(
@@ -380,13 +383,24 @@ async def get_tempo_push_pending(
         )
         .order_by(TimeLog.logged_at.desc())
     )
-    rows = result.all()
+    # Logs on epics
+    epic_result = await db.execute(
+        select(TimeLog, Epic.name, Epic.jira_issue_key)
+        .join(Epic, TimeLog.epic_id == Epic.id)
+        .where(
+            TimeLog.source == "manual",
+            TimeLog.tempo_push_status.in_(["pending", "error"]),
+        )
+        .order_by(TimeLog.logged_at.desc())
+    )
+
     logs = []
-    for log, task_title, jira_key in rows:
+    for log, title, jira_key in task_result.all():
         logs.append({
             "log_id": log.id,
             "task_id": log.task_id,
-            "task_title": task_title,
+            "epic_id": None,
+            "task_title": title,
             "jira_issue_key": jira_key,
             "logged_at": log.logged_at.isoformat() if log.logged_at else None,
             "minutes": log.minutes,
@@ -394,6 +408,20 @@ async def get_tempo_push_pending(
             "error": log.tempo_push_error,
             "has_jira": bool(jira_key),
         })
+    for log, name, jira_key in epic_result.all():
+        logs.append({
+            "log_id": log.id,
+            "task_id": None,
+            "epic_id": log.epic_id,
+            "task_title": f"[Epic] {name}",
+            "jira_issue_key": jira_key,
+            "logged_at": log.logged_at.isoformat() if log.logged_at else None,
+            "minutes": log.minutes,
+            "status": log.tempo_push_status,
+            "error": log.tempo_push_error,
+            "has_jira": bool(jira_key),
+        })
+    logs.sort(key=lambda x: x["logged_at"] or "", reverse=True)
     return {"total": len(logs), "logs": logs}
 
 
@@ -428,15 +456,28 @@ async def push_log_now(
     if not log:
         raise HTTPException(404, "Log non trovato")
 
-    task = await db.get(Task, log.task_id)
-    if not task:
-        raise HTTPException(404, "Task non trovato")
+    # Determine the entity (task or epic) and its jira_issue_key
+    from app.models.epic import Epic
+    entity = None
+    entity_project_id = None
+    if log.task_id:
+        entity = await db.get(Task, log.task_id)
+        if not entity:
+            raise HTTPException(404, "Task non trovato")
+        entity_project_id = entity.project_id
+    elif log.epic_id:
+        entity = await db.get(Epic, log.epic_id)
+        if not entity:
+            raise HTTPException(404, "Epic non trovato")
+        entity_project_id = entity.project_id
+    else:
+        raise HTTPException(400, "Log non collegato a task o epic")
 
-    # If task has no jira_issue_key, try to create the issue on Jira
-    if not task.jira_issue_key:
+    # If entity has no jira_issue_key, try to create on Jira
+    if not entity.jira_issue_key:
         from app.models.jira import JiraConfig
         config_result = await db.execute(
-            select(JiraConfig).where(JiraConfig.zeno_project_id == task.project_id)
+            select(JiraConfig).where(JiraConfig.zeno_project_id == entity_project_id)
         )
         config = config_result.scalar_one_or_none()
         if not config:
@@ -445,18 +486,25 @@ async def push_log_now(
         from app.services.jira_service import JiraService
         try:
             jira = JiraService()
-            result = await jira.create_issue(
-                config.jira_project_key,
-                {
-                    "title": task.title,
-                    "description": task.description,
-                    "priority": task.priority,
-                    "due_date": str(task.due_date) if task.due_date else None,
-                },
-            )
-            task.jira_issue_key = result["key"]
-            task.jira_issue_id = result["id"]
-            task.jira_url = f"{settings.JIRA_BASE_URL}/browse/{result['key']}"
+            if log.task_id:
+                result = await jira.create_issue(
+                    config.jira_project_key,
+                    {
+                        "title": entity.title,
+                        "description": entity.description,
+                        "priority": entity.priority,
+                        "due_date": str(entity.due_date) if entity.due_date else None,
+                    },
+                )
+            else:
+                result = await jira.create_epic(
+                    config.jira_project_key,
+                    name=entity.name,
+                    description=entity.description or "",
+                )
+            entity.jira_issue_key = result["key"]
+            entity.jira_issue_id = result["id"]
+            entity.jira_url = f"{settings.JIRA_BASE_URL}/browse/{result['key']}"
             await db.flush()
         except Exception as e:
             raise HTTPException(502, f"Errore creazione issue Jira: {e}")
@@ -479,7 +527,7 @@ async def push_log_now(
             )
         else:
             result = await tempo.create_worklog(
-                jira_issue_key=task.jira_issue_key,
+                jira_issue_key=entity.jira_issue_key,
                 author_account_id=user.jira_account_id,
                 started_date=log.logged_at,
                 time_spent_seconds=log.minutes * 60,
@@ -495,7 +543,7 @@ async def push_log_now(
         return {
             "log_id": log.id,
             "tempo_worklog_id": log.tempo_worklog_id,
-            "jira_issue_key": task.jira_issue_key,
+            "jira_issue_key": entity.jira_issue_key,
             "status": "pushed",
         }
     except Exception as e:

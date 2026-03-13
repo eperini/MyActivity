@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.models.task import Task
+from app.models.epic import Epic
 from app.models.user import User
 from app.models.time_log import TimeLog, TimeLogDeleted
 from app.models.tempo import TempoPushLog
@@ -73,9 +74,15 @@ class TempoPushService:
         )
 
     def _push_single_log(self, log: TimeLog) -> str:
-        task = self.db.get(Task, log.task_id)
+        # Determine jira_issue_key from task or epic
+        if log.task_id:
+            entity = self.db.get(Task, log.task_id)
+        elif log.epic_id:
+            entity = self.db.get(Epic, log.epic_id)
+        else:
+            return "skipped"
 
-        if not task or not task.jira_issue_key:
+        if not entity or not entity.jira_issue_key:
             return "skipped"
 
         user = self.db.get(User, log.user_id) if log.user_id else None
@@ -102,7 +109,7 @@ class TempoPushService:
                 return "updated"
             else:
                 result = self.tempo.create_worklog_sync(
-                    jira_issue_key=task.jira_issue_key,
+                    jira_issue_key=entity.jira_issue_key,
                     author_account_id=user.jira_account_id,
                     started_date=log.logged_at,
                     time_spent_seconds=time_spent_seconds,

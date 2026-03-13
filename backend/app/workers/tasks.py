@@ -681,12 +681,22 @@ def sync_single_jira_config(self, config_id: int):
         raise self.retry(exc=exc)
 
 
+def _map_epic_status_from_jira(jira_status: str) -> str:
+    mapping = {
+        "to do": "todo", "open": "todo", "backlog": "todo",
+        "in progress": "in_progress",
+        "done": "done", "closed": "done",
+    }
+    return mapping.get(jira_status.lower(), "todo")
+
+
 def _sync_single_jira(db, config):
-    """Sync a single Jira project → Zeno."""
+    """Sync a single Jira project → Zeno (issues + epics)."""
     import time as time_module
     from app.models.task import Task, TaskStatus
     from app.models.task_list import TaskList
     from app.models.project import Project
+    from app.models.epic import Epic
     from app.services.jira_service import (
         JiraServiceSync, map_priority_from_jira, map_status_from_jira, extract_adf_text,
     )
@@ -712,6 +722,9 @@ def _sync_single_jira(db, config):
         return
 
     for issue in issues:
+        # Skip Epics from task sync — they are handled separately below
+        if issue["fields"].get("issuetype", {}).get("name") == "Epic":
+            continue
         fields = issue["fields"]
         existing = db.execute(
             select(Task).where(Task.jira_issue_key == issue["key"])
@@ -773,6 +786,68 @@ def _sync_single_jira(db, config):
         time_module.sleep(0.1)
 
     db.flush()
+
+    # Sync Epics
+    try:
+        epics_data = jira.get_project_epics_sync(config.jira_project_key)
+        for epic_data in epics_data:
+            _sync_single_epic(db, config, epic_data, extract_adf_text)
+            time_module.sleep(0.1)
+        db.flush()
+    except Exception as e:
+        logger.warning("Epic sync error for %s: %s", config.jira_project_key, e)
+
+
+def _sync_single_epic(db, config, epic_data: dict, extract_adf_text):
+    """Upsert a Jira Epic into Zeno."""
+    from app.models.epic import Epic
+
+    fields = epic_data["fields"]
+    jira_key = epic_data["key"]
+
+    existing = db.execute(
+        select(Epic).where(Epic.jira_issue_key == jira_key)
+    ).scalar_one_or_none()
+
+    due_str = fields.get("duedate")
+    target_date_val = None
+    if due_str:
+        try:
+            target_date_val = date.fromisoformat(due_str)
+        except (ValueError, TypeError):
+            pass
+
+    mapped = {
+        "name": fields["summary"],
+        "description": extract_adf_text(fields.get("description")),
+        "status": _map_epic_status_from_jira(fields["status"]["name"]),
+        "target_date": target_date_val,
+        "jira_issue_key": jira_key,
+        "jira_issue_id": epic_data["id"],
+        "jira_url": f"{settings.JIRA_BASE_URL}/browse/{jira_key}",
+        "jira_synced_at": datetime.now(timezone.utc),
+    }
+
+    if existing:
+        last_synced = existing.jira_synced_at or datetime.min.replace(tzinfo=timezone.utc)
+        local_updated = existing.updated_at
+        if local_updated.tzinfo is None:
+            local_updated = local_updated.replace(tzinfo=timezone.utc)
+        if local_updated <= last_synced:
+            for k, v in mapped.items():
+                setattr(existing, k, v)
+    else:
+        new_epic = Epic(
+            **mapped,
+            project_id=config.zeno_project_id,
+            created_by=config.user_id,
+        )
+        db.add(new_epic)
+        try:
+            db.flush()
+        except Exception:
+            db.rollback()
+            logger.debug("Skipping duplicate epic %s", jira_key)
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=60)

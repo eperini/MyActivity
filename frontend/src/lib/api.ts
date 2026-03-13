@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig, TempoPushLog, TempoPendingLog } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig, TempoPushLog, TempoPendingLog, Epic, QuickLogProject } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -506,6 +506,32 @@ export const skipTempoPush = (logId: number) =>
   request<{ detail: string }>(`/time-logs/${logId}/skip-tempo`, { method: "PATCH" });
 export const pushLogNow = (logId: number) =>
   request<{ log_id: number; tempo_worklog_id: number; jira_issue_key: string; status: string }>(`/time-logs/${logId}/push-now`, { method: "PATCH" });
+
+// Epics
+export const getProjectEpics = (projectId: number) =>
+  request<Epic[]>(`/projects/${projectId}/epics`);
+export const createEpic = (projectId: number, data: { name: string; description?: string; color?: string; push_to_jira?: boolean }) =>
+  request<Epic>(`/projects/${projectId}/epics`, { method: "POST", body: JSON.stringify(data) });
+export const updateEpic = (projectId: number, epicId: number, data: Record<string, unknown>) =>
+  request<Epic>(`/projects/${projectId}/epics/${epicId}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteEpic = (projectId: number, epicId: number) =>
+  request<{ detail: string }>(`/projects/${projectId}/epics/${epicId}`, { method: "DELETE" });
+export const pushEpicToJira = (projectId: number, epicId: number) =>
+  request<Epic>(`/projects/${projectId}/epics/${epicId}/push-jira`, { method: "POST" });
+export const getEpicTimeLogs = (epicId: number) =>
+  request<TimeLog[]>(`/epics/${epicId}/time`);
+export const createEpicTimeLog = (epicId: number, data: { minutes: number; logged_at: string; note?: string }) =>
+  request<TimeLog>(`/epics/${epicId}/time`, { method: "POST", body: JSON.stringify(data) });
+export const deleteEpicTimeLog = (epicId: number, logId: number) =>
+  request<{ detail: string }>(`/epics/${epicId}/time/${logId}`, { method: "DELETE" });
+export const getQuickLogEpics = (params?: { status?: string; project_id?: number; only_with_jira?: boolean }) => {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.project_id) query.set("project_id", String(params.project_id));
+  if (params?.only_with_jira) query.set("only_with_jira", "true");
+  const qs = query.toString();
+  return request<QuickLogProject[]>(`/quick-log/epics${qs ? `?${qs}` : ""}`);
+};
 
 // Stats
 export const getDashboardStats = () => request<{

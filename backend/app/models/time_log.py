@@ -10,8 +10,11 @@ class TimeLog(Base):
     __tablename__ = "time_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    task_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    task_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True
+    )
+    epic_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("epics.id", ondelete="CASCADE"), nullable=True
     )
     user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True
@@ -41,6 +44,7 @@ class TimeLog(Base):
     )
 
     task = relationship("Task", back_populates="time_logs")
+    epic = relationship("Epic", back_populates="time_logs")
     user = relationship("User")
     tempo_user = relationship("TempoUser", back_populates="time_logs")
 
