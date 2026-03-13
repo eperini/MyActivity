@@ -21,7 +21,7 @@ const TAB_VIEWS: Record<string, string[]> = {
   calendar: ["calendar"],
   eisenhower: ["eisenhower"],
   habits: ["habits", "pomodoro"],
-  _more: ["stats", "settings", "kanban"],
+  _more: ["stats", "settings", "kanban", "timereport"],
 };
 
 function getActiveTab(selectedView: string): string {
@@ -39,7 +39,7 @@ export default function BottomTabBar({ selectedView, onSelectView }: BottomTabBa
   function handleTap(tabId: string) {
     if (tabId === "_more") {
       // Cycle between stats, settings, kanban
-      const moreViews = ["stats", "settings", "kanban"];
+      const moreViews = ["stats", "settings", "kanban", "timereport"];
       const idx = moreViews.indexOf(selectedView);
       onSelectView(moreViews[(idx + 1) % moreViews.length]);
       return;

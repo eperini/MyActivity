@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -393,6 +393,36 @@ export const addTaskToSprint = (projectId: number, sprintId: number, taskId: num
   request<{ detail: string }>(`/projects/${projectId}/sprints/${sprintId}/tasks`, { method: "POST", body: JSON.stringify({ task_id: taskId }) });
 export const removeTaskFromSprint = (projectId: number, sprintId: number, taskId: number) =>
   request<{ detail: string }>(`/projects/${projectId}/sprints/${sprintId}/tasks/${taskId}`, { method: "DELETE" });
+
+// Time Logs
+export const getTimeLogs = (taskId: number) =>
+  request<TimeLog[]>(`/tasks/${taskId}/time`);
+export const createTimeLog = (taskId: number, data: { minutes: number; logged_at?: string; note?: string }) =>
+  request<TimeLog>(`/tasks/${taskId}/time`, { method: "POST", body: JSON.stringify(data) });
+export const updateTimeLog = (taskId: number, logId: number, data: { minutes?: number; logged_at?: string; note?: string }) =>
+  request<TimeLog>(`/tasks/${taskId}/time/${logId}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteTimeLog = (taskId: number, logId: number) =>
+  request<{ detail: string }>(`/tasks/${taskId}/time/${logId}`, { method: "DELETE" });
+export const getWeeklyTime = () =>
+  request<WeeklyTimeData>("/time/week");
+
+// Jira
+export const getJiraConfigs = () =>
+  request<JiraConfig[]>("/jira/config");
+export const createJiraConfig = (data: { jira_project_key: string; zeno_project_id: number }) =>
+  request<JiraConfig>("/jira/config", { method: "POST", body: JSON.stringify(data) });
+export const updateJiraConfig = (id: number, data: { sync_enabled?: boolean }) =>
+  request<JiraConfig>(`/jira/config/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteJiraConfig = (id: number) =>
+  request<{ detail: string }>(`/jira/config/${id}`, { method: "DELETE" });
+export const triggerJiraSync = (configId: number) =>
+  request<{ detail: string }>(`/jira/config/${configId}/sync`, { method: "POST" });
+export const getJiraProjects = () =>
+  request<{ projects: JiraProject[] }>("/jira/projects");
+export const pushTaskToJira = (taskId: number) =>
+  request<{ jira_key: string; jira_url: string }>(`/tasks/${taskId}/jira/push`, { method: "POST" });
+export const unlinkTaskFromJira = (taskId: number) =>
+  request<{ detail: string }>(`/tasks/${taskId}/jira/unlink`, { method: "DELETE" });
 
 // Stats
 export const getDashboardStats = () => request<{

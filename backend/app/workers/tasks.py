@@ -538,6 +538,234 @@ def _build_report_html(display_name, today, overdue, today_tasks, tomorrow_tasks
     """
 
 
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+def send_weekly_time_report(self):
+    """Invia report ore settimanale (venerdì alle 18:00)."""
+    from app.models.user import User
+    from app.models.time_log import TimeLog
+    from app.models.task import Task
+    from app.models.project import Project
+    from app.models.push_subscription import PushSubscription
+
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    try:
+        with _SessionLocal() as db:
+            users = db.execute(select(User)).scalars().all()
+            for u in users:
+                rows = db.execute(
+                    select(TimeLog, Task.title, Task.project_id)
+                    .join(Task, TimeLog.task_id == Task.id)
+                    .where(
+                        TimeLog.user_id == u.id,
+                        TimeLog.logged_at >= week_start,
+                        TimeLog.logged_at <= week_end,
+                    )
+                ).all()
+                if not rows:
+                    continue
+
+                total = sum(log.minutes for log, _, _ in rows)
+
+                # Group by project
+                by_proj: dict[int | None, int] = {}
+                for log, _, pid in rows:
+                    by_proj[pid] = by_proj.get(pid, 0) + log.minutes
+
+                proj_names = {}
+                proj_ids = [p for p in by_proj if p is not None]
+                if proj_ids:
+                    prows = db.execute(
+                        select(Project.id, Project.name).where(Project.id.in_(proj_ids))
+                    ).all()
+                    proj_names = {r.id: r.name for r in prows}
+
+                def fmt(m):
+                    h, r = divmod(m, 60)
+                    return f"{h}h {r}m" if h and r else f"{h}h" if h else f"{r}m"
+
+                lines = [f"📊 Report ore settimana {week_start.strftime('%d/%m')} - {week_end.strftime('%d/%m')}"]
+                lines.append(f"Totale: {fmt(total)}")
+                lines.append("")
+                for pid, mins in sorted(by_proj.items(), key=lambda x: x[1], reverse=True):
+                    pname = proj_names.get(pid, "Senza progetto") if pid else "Senza progetto"
+                    lines.append(f"  • {pname}: {fmt(mins)}")
+
+                msg = "\n".join(lines)
+
+                # Telegram
+                if u.telegram_chat_id:
+                    try:
+                        from app.services.telegram_service import send_telegram_message
+                        send_telegram_message(u.telegram_chat_id, msg)
+                    except Exception as e:
+                        logger.warning("Weekly report Telegram error for user %s: %s", u.id, e)
+
+                # Push
+                subs = db.execute(
+                    select(PushSubscription).where(PushSubscription.user_id == u.id)
+                ).scalars().all()
+                if subs:
+                    _send_push_to_subs(subs, "Report ore settimanale", f"Totale: {fmt(total)}", db)
+
+                db.commit()
+
+        logger.info("Weekly time report sent")
+    except Exception as exc:
+        logger.error("Weekly time report error: %s", exc)
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+def sync_jira_projects(self):
+    """Sync all enabled Jira project mappings."""
+    from app.models.jira import JiraConfig
+
+    if not settings.JIRA_BASE_URL:
+        return
+
+    try:
+        with _SessionLocal() as db:
+            configs = db.execute(
+                select(JiraConfig).where(JiraConfig.sync_enabled == True)
+            ).scalars().all()
+
+            for config in configs:
+                try:
+                    config.last_sync_status = "running"
+                    db.commit()
+                    _sync_single_jira(db, config)
+                    config.last_sync_status = "ok"
+                    config.last_sync_at = datetime.now(timezone.utc)
+                    config.last_sync_error = None
+                except Exception as e:
+                    logger.warning("Jira sync error for config %s: %s", config.id, e)
+                    config.last_sync_status = "error"
+                    config.last_sync_error = str(e)[:500]
+                finally:
+                    db.commit()
+
+        logger.info("Jira sync completed for %d configs", len(configs))
+    except Exception as exc:
+        logger.error("Jira sync error: %s", exc)
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
+def sync_single_jira_config(self, config_id: int):
+    """Sync a single Jira config (triggered manually)."""
+    from app.models.jira import JiraConfig
+
+    try:
+        with _SessionLocal() as db:
+            config = db.get(JiraConfig, config_id)
+            if not config:
+                return
+            try:
+                config.last_sync_status = "running"
+                db.commit()
+                _sync_single_jira(db, config)
+                config.last_sync_status = "ok"
+                config.last_sync_at = datetime.now(timezone.utc)
+                config.last_sync_error = None
+            except Exception as e:
+                logger.warning("Jira sync error for config %s: %s", config.id, e)
+                config.last_sync_status = "error"
+                config.last_sync_error = str(e)[:500]
+            finally:
+                db.commit()
+    except Exception as exc:
+        logger.error("Jira single sync error: %s", exc)
+        raise self.retry(exc=exc)
+
+
+def _sync_single_jira(db, config):
+    """Sync a single Jira project → Zeno."""
+    import time as time_module
+    from app.models.task import Task, TaskStatus
+    from app.models.task_list import TaskList
+    from app.models.project import Project
+    from app.services.jira_service import (
+        JiraServiceSync, map_priority_from_jira, map_status_from_jira, extract_adf_text,
+    )
+
+    jira = JiraServiceSync()
+    issues = jira.get_project_issues(
+        project_key=config.jira_project_key,
+        updated_after=config.last_sync_at,
+    )
+
+    # Find a list_id for new tasks: use the first list owned by the user
+    project = db.get(Project, config.zeno_project_id)
+    if not project:
+        return
+
+    list_result = db.execute(
+        select(TaskList.id).where(TaskList.owner_id == config.user_id).limit(1)
+    )
+    default_list_id = list_result.scalar()
+    if not default_list_id:
+        return
+
+    for issue in issues:
+        fields = issue["fields"]
+        existing = db.execute(
+            select(Task).where(Task.jira_issue_key == issue["key"])
+        ).scalar_one_or_none()
+
+        jira_status = map_status_from_jira(fields["status"]["name"])
+        jira_priority = map_priority_from_jira(
+            fields.get("priority", {}).get("name", "Medium")
+        )
+        due_str = fields.get("duedate")
+        due_date_val = None
+        if due_str:
+            try:
+                due_date_val = date.fromisoformat(due_str)
+            except (ValueError, TypeError):
+                pass
+
+        mapped = {
+            "title": fields["summary"],
+            "description": extract_adf_text(fields.get("description")),
+            "priority": jira_priority,
+            "due_date": due_date_val,
+            "jira_issue_key": issue["key"],
+            "jira_issue_id": issue["id"],
+            "jira_url": f"{settings.JIRA_BASE_URL}/browse/{issue['key']}",
+            "jira_synced_at": datetime.now(timezone.utc),
+        }
+
+        if existing:
+            # Conflict resolution: if local was modified after last sync, skip
+            last_synced = existing.jira_synced_at or datetime.min.replace(tzinfo=timezone.utc)
+            local_updated = existing.updated_at
+            if local_updated.tzinfo is None:
+                local_updated = local_updated.replace(tzinfo=timezone.utc)
+            if local_updated <= last_synced:
+                for k, v in mapped.items():
+                    setattr(existing, k, v)
+                # Map status separately (it's an enum)
+                existing.status = TaskStatus(jira_status)
+        else:
+            new_task = Task(
+                **mapped,
+                status=TaskStatus(jira_status),
+                list_id=default_list_id,
+                project_id=config.zeno_project_id,
+                created_by=config.user_id,
+                assigned_to=config.user_id,
+            )
+            db.add(new_task)
+
+        # Rate limit: small delay between issues
+        time_module.sleep(0.1)
+
+    db.flush()
+
+
 def _send_push_to_subs(subs, title, body, db):
     """Send web push notifications to subscriptions."""
     import json

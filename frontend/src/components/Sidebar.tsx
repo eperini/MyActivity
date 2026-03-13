@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { id: "kanban", label: "Kanban", icon: Columns3 },
   { id: "eisenhower", label: "Eisenhower", icon: Grid2x2 },
   { id: "pomodoro", label: "Pomodoro", icon: Timer },
+  { id: "timereport", label: "Report Ore", icon: Timer },
   { id: "stats", label: "Statistiche", icon: BarChart3 },
   { id: "settings", label: "Impostazioni", icon: Settings },
 ];

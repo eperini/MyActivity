@@ -16,6 +16,8 @@ from app.models.custom_field import ProjectCustomField, FieldType
 from app.models.dependency import TaskDependency, DependencyType
 from app.models.automation import AutomationRule, TriggerType, ActionType
 from app.models.sprint import Sprint, SprintStatus, sprint_tasks
+from app.models.time_log import TimeLog
+from app.models.jira import JiraConfig
 
 __all__ = [
     "User", "TaskList", "ListMember", "Task",
@@ -27,4 +29,6 @@ __all__ = [
     "TaskDependency", "DependencyType",
     "AutomationRule", "TriggerType", "ActionType",
     "Sprint", "SprintStatus", "sprint_tasks",
+    "TimeLog",
+    "JiraConfig",
 ]

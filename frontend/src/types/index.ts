@@ -51,6 +51,48 @@ export interface Task {
   tags?: Tag[];
   subtask_count?: number;
   subtask_done_count?: number;
+  estimated_minutes?: number | null;
+  time_logged_minutes?: number;
+  time_logged_formatted?: string;
+  jira_issue_key?: string | null;
+  jira_url?: string | null;
+}
+
+export interface TimeLog {
+  id: number;
+  task_id: number;
+  user_id: number;
+  user_name: string;
+  logged_at: string;
+  minutes: number;
+  formatted: string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface WeeklyTimeData {
+  week_start: string;
+  week_end: string;
+  total_minutes: number;
+  total_formatted: string;
+  by_project: {
+    project_id: number | null;
+    project_name: string;
+    minutes: number;
+    formatted: string;
+    logs: {
+      task_id: number;
+      task_title: string;
+      minutes: number;
+      logged_at: string;
+      note: string | null;
+    }[];
+  }[];
+  by_day: {
+    date: string;
+    minutes: number;
+    formatted: string;
+  }[];
 }
 
 export interface TaskTemplate {
@@ -241,6 +283,24 @@ export interface SprintDetail {
 // Automation Rules
 export type TriggerType = 'status_changed' | 'due_date_passed' | 'task_created' | 'all_subtasks_done' | 'assigned_to_changed';
 export type ActionType = 'change_status' | 'assign_to' | 'create_task' | 'send_notification' | 'set_field';
+
+// Jira Sync
+export interface JiraConfig {
+  id: number;
+  jira_project_key: string;
+  zeno_project_id: number;
+  zeno_project_name: string | null;
+  sync_enabled: boolean;
+  last_sync_at: string | null;
+  last_sync_status: string | null;
+  last_sync_error: string | null;
+  task_count_synced: number;
+}
+
+export interface JiraProject {
+  key: string;
+  name: string;
+}
 
 export interface AutomationRule {
   id: number;

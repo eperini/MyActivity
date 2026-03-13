@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X, Tag as TagIcon, MessageCircle, UserCircle, Send, ListChecks, Bookmark, Plus } from "lucide-react";
+import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X, Tag as TagIcon, MessageCircle, UserCircle, Send, ListChecks, Bookmark, Plus, ExternalLink, Link2, Unlink } from "lucide-react";
 import type { Task, TaskList, RecurrenceRule, Tag, TaskComment, ListMember } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
-import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getListMembers, updateTask as apiUpdateTask, getSubtasks, createSubtask, toggleSubtask, deleteTask as apiDeleteTask, createTemplateFromTask } from "@/lib/api";
+import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getListMembers, updateTask as apiUpdateTask, getSubtasks, createSubtask, toggleSubtask, deleteTask as apiDeleteTask, createTemplateFromTask, pushTaskToJira, unlinkTaskFromJira } from "@/lib/api";
 import CustomFieldsPanel from "./CustomFieldsPanel";
 import DependenciesPanel from "./DependenciesPanel";
+import TimeLogPanel from "./TimeLogPanel";
 import { useToast } from "@/components/Toast";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
@@ -606,8 +607,21 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
             />
           )}
 
+          {/* Time Tracking */}
+          <TimeLogPanel
+            taskId={task.id}
+            estimatedMinutes={task.estimated_minutes}
+            timeLoggedMinutes={task.time_logged_minutes}
+            onRefresh={onRefresh}
+          />
+
           {/* Dependencies */}
           <DependenciesPanel taskId={task.id} />
+
+          {/* Jira */}
+          {task.project_id && (
+            <JiraSection task={task} onRefresh={onRefresh} />
+          )}
         </div>
 
         {/* Comments */}
@@ -689,6 +703,84 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function JiraSection({ task, onRefresh }: { task: Task; onRefresh?: () => void }) {
+  const { showToast } = useToast();
+  const [pushing, setPushing] = useState(false);
+
+  async function handlePush() {
+    setPushing(true);
+    try {
+      const result = await pushTaskToJira(task.id);
+      showToast(`Sincronizzato: ${result.jira_key}`, "success");
+      onRefresh?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore push Jira");
+    } finally {
+      setPushing(false);
+    }
+  }
+
+  async function handleUnlink() {
+    try {
+      await unlinkTaskFromJira(task.id);
+      showToast("Task scollegato da Jira", "success");
+      onRefresh?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore unlink Jira");
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3 text-sm">
+        <Link2 size={16} className="text-zinc-500" />
+        <span className="text-zinc-500 text-xs">Jira</span>
+      </div>
+      <div className="ml-7 space-y-2">
+        {task.jira_issue_key ? (
+          <>
+            <div className="flex items-center gap-2">
+              <a
+                href={task.jira_url || "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+              >
+                {task.jira_issue_key}
+                <ExternalLink size={10} />
+              </a>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePush}
+                disabled={pushing}
+                className="px-2 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-xs text-white transition-colors"
+              >
+                {pushing ? "Sincronizzazione..." : "Push su Jira"}
+              </button>
+              <button
+                onClick={handleUnlink}
+                className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs text-zinc-400 transition-colors flex items-center gap-1"
+              >
+                <Unlink size={10} />
+                Scollega
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            onClick={handlePush}
+            disabled={pushing}
+            className="px-2 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-xs text-white transition-colors"
+          >
+            {pushing ? "Creazione..." : "Crea issue su Jira"}
+          </button>
+        )}
       </div>
     </div>
   );

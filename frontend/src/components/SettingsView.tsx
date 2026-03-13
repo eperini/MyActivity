@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2 } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate } from "@/lib/api";
+import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X } from "lucide-react";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects } from "@/lib/api";
 import type { TickTickImportResult } from "@/lib/api";
-import type { TaskTemplate } from "@/types";
+import type { TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
 import { useToast } from "@/components/Toast";
 
 export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
@@ -33,6 +33,14 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [ticktickImporting, setTicktickImporting] = useState(false);
   const [ticktickMessage, setTicktickMessage] = useState("");
+  // Jira
+  const [jiraConfigs, setJiraConfigs] = useState<JiraConfig[]>([]);
+  const [jiraProjects, setJiraProjects] = useState<JiraProject[]>([]);
+  const [zenoProjects, setZenoProjects] = useState<Project[]>([]);
+  const [showJiraAdd, setShowJiraAdd] = useState(false);
+  const [newJiraKey, setNewJiraKey] = useState("");
+  const [newZenoProjectId, setNewZenoProjectId] = useState<number | "">("");
+  const [jiraLoading, setJiraLoading] = useState(false);
 
   useEffect(() => {
     getGoogleCalendarConfig()
@@ -51,6 +59,12 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
     getTemplates()
       .then(setTemplates)
       .catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento template"); });
+    getJiraConfigs()
+      .then(setJiraConfigs)
+      .catch(() => {});
+    getProjects()
+      .then(setZenoProjects)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -534,6 +548,165 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* Jira Sync */}
+      <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+        <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+          <Link2 size={16} />
+          Jira Sync
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Collega progetti Jira a progetti Zeno per sincronizzare automaticamente i task.
+        </p>
+
+        {jiraConfigs.length > 0 && (
+          <div className="space-y-2">
+            {jiraConfigs.map((cfg) => (
+              <div key={cfg.id} className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2">
+                <div className="flex-1">
+                  <div className="text-xs text-zinc-300">
+                    <span className="font-mono font-medium">{cfg.jira_project_key}</span>
+                    <span className="text-zinc-500 mx-1">→</span>
+                    {cfg.zeno_project_name || `Progetto #${cfg.zeno_project_id}`}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                      cfg.last_sync_status === "ok" ? "bg-green-400" :
+                      cfg.last_sync_status === "error" ? "bg-red-400" :
+                      cfg.last_sync_status === "running" ? "bg-yellow-400" :
+                      "bg-zinc-600"
+                    }`} />
+                    <span className="text-[10px] text-zinc-500">
+                      {cfg.last_sync_status === "ok" ? "OK" :
+                       cfg.last_sync_status === "error" ? "Errore" :
+                       cfg.last_sync_status === "running" ? "In corso" :
+                       "Mai sincronizzato"}
+                      {cfg.task_count_synced > 0 && ` · ${cfg.task_count_synced} task`}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await triggerJiraSync(cfg.id);
+                        showToast("Sync avviato", "success");
+                        setTimeout(() => getJiraConfigs().then(setJiraConfigs).catch(() => {}), 5000);
+                      } catch { showToast("Errore avvio sync"); }
+                    }}
+                    className="p-1.5 text-zinc-500 hover:text-blue-400 transition-colors"
+                    title="Sincronizza ora"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await deleteJiraConfig(cfg.id);
+                        setJiraConfigs(prev => prev.filter(c => c.id !== cfg.id));
+                        showToast("Mapping eliminato", "success");
+                      } catch { showToast("Errore eliminazione mapping"); }
+                    }}
+                    className="p-1.5 text-zinc-600 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showJiraAdd ? (
+          <div className="bg-zinc-900 rounded-lg p-3 space-y-3">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-[10px] text-zinc-500 block mb-1">Progetto Jira</label>
+                {jiraProjects.length > 0 ? (
+                  <select
+                    value={newJiraKey}
+                    onChange={(e) => setNewJiraKey(e.target.value)}
+                    className="w-full bg-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none"
+                  >
+                    <option value="">Seleziona...</option>
+                    {jiraProjects.map(p => (
+                      <option key={p.key} value={p.key}>{p.key} - {p.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={newJiraKey}
+                    onChange={(e) => setNewJiraKey(e.target.value.toUpperCase())}
+                    placeholder="es. VE"
+                    className="w-full bg-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none placeholder-zinc-600"
+                  />
+                )}
+              </div>
+              <div className="flex-1">
+                <label className="text-[10px] text-zinc-500 block mb-1">Progetto Zeno</label>
+                <select
+                  value={newZenoProjectId}
+                  onChange={(e) => setNewZenoProjectId(e.target.value ? Number(e.target.value) : "")}
+                  className="w-full bg-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none"
+                >
+                  <option value="">Seleziona...</option>
+                  {zenoProjects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!newJiraKey || !newZenoProjectId) return;
+                  setJiraLoading(true);
+                  try {
+                    const cfg = await createJiraConfig({ jira_project_key: newJiraKey, zeno_project_id: Number(newZenoProjectId) });
+                    setJiraConfigs(prev => [...prev, cfg]);
+                    setShowJiraAdd(false);
+                    setNewJiraKey("");
+                    setNewZenoProjectId("");
+                    showToast("Mapping creato", "success");
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : "Errore creazione mapping");
+                  } finally {
+                    setJiraLoading(false);
+                  }
+                }}
+                disabled={jiraLoading || !newJiraKey || !newZenoProjectId}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded text-xs text-white transition-colors"
+              >
+                {jiraLoading ? "..." : "Salva"}
+              </button>
+              <button
+                onClick={() => { setShowJiraAdd(false); setNewJiraKey(""); setNewZenoProjectId(""); }}
+                className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300 transition-colors"
+              >
+                Annulla
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={async () => {
+              setShowJiraAdd(true);
+              if (jiraProjects.length === 0) {
+                try {
+                  const res = await getJiraProjects();
+                  setJiraProjects(res.projects);
+                } catch {
+                  // Jira not configured or error, user can type manually
+                }
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-xs text-zinc-300 transition-colors"
+          >
+            <Plus size={14} />
+            Aggiungi mapping
+          </button>
         )}
       </div>
 

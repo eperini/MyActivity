@@ -12,6 +12,7 @@ from app.models.task import Task, TaskStatus
 from app.models.task_list import TaskList, ListMember
 from app.models.recurrence import RecurrenceRule
 from app.models.tag import Tag, task_tags
+from app.models.time_log import TimeLog
 from app.api.routes.projects import _check_project_access
 
 router = APIRouter()
@@ -39,6 +40,7 @@ class TaskUpdate(BaseModel):
     due_time: time | None = None
     assigned_to: int | None = None
     project_id: int | None = None
+    estimated_minutes: int | None = None
 
 
 class TagResponse(BaseModel):
@@ -66,6 +68,11 @@ class TaskResponse(BaseModel):
     tags: list[TagResponse] = []
     subtask_count: int = 0
     subtask_done_count: int = 0
+    estimated_minutes: int | None = None
+    time_logged_minutes: int = 0
+    time_logged_formatted: str = ""
+    jira_issue_key: str | None = None
+    jira_url: str | None = None
 
     class Config:
         from_attributes = True
@@ -166,6 +173,14 @@ async def _enrich_with_recurrence(tasks: list[Task], db: AsyncSession) -> list[d
         )
         names_map = {row.id: row.display_name for row in name_result.all()}
 
+    # Time logged per task
+    time_result = await db.execute(
+        select(TimeLog.task_id, func.sum(TimeLog.minutes).label("total"))
+        .where(TimeLog.task_id.in_(task_ids))
+        .group_by(TimeLog.task_id)
+    )
+    time_map = {row.task_id: row.total for row in time_result.all()}
+
     # Subtask counts
     subtask_result = await db.execute(
         select(
@@ -188,6 +203,11 @@ async def _enrich_with_recurrence(tasks: list[Task], db: AsyncSession) -> list[d
         sc = subtask_map.get(t.id, (0, 0))
         d["subtask_count"] = sc[0]
         d["subtask_done_count"] = sc[1]
+        logged = time_map.get(t.id, 0)
+        d["time_logged_minutes"] = logged
+        h, m = divmod(logged, 60)
+        d["time_logged_formatted"] = f"{h}h {m}m" if h and m else f"{h}h" if h else f"{m}m" if logged else ""
+        d["estimated_minutes"] = t.estimated_minutes
         enriched.append(d)
     return enriched
 

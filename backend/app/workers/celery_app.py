@@ -34,5 +34,15 @@ celery_app.conf.update(
             "task": "app.workers.tasks.backup_database_to_drive",
             "schedule": crontab(hour=3, minute=0),
         },
+        # Report ore settimanale (venerdì alle 18:00)
+        "weekly-time-report": {
+            "task": "app.workers.tasks.send_weekly_time_report",
+            "schedule": crontab(hour=18, minute=0, day_of_week=5),
+        },
+        # Sync Jira projects (every N minutes)
+        "sync-jira-projects": {
+            "task": "app.workers.tasks.sync_jira_projects",
+            "schedule": crontab(minute=f"*/{settings.JIRA_SYNC_INTERVAL_MINUTES}"),
+        },
     },
 )

@@ -1,6 +1,6 @@
 "use client";
 
-import { Repeat } from "lucide-react";
+import { Repeat, Clock, ExternalLink } from "lucide-react";
 import type { Task, TaskList } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
 
@@ -104,8 +104,26 @@ export default function TaskItem({ task, list, isSelected, onSelect, onToggle }:
         )}
       </div>
 
-      {/* Recurrence + Due date */}
+      {/* Jira + Time + Recurrence + Due date */}
       <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+        {task.jira_issue_key && (
+          <a
+            href={task.jira_url || "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-0.5 text-[10px] text-blue-400 hover:text-blue-300"
+          >
+            <ExternalLink size={9} />
+            {task.jira_issue_key}
+          </a>
+        )}
+        {(task.time_logged_minutes ?? 0) > 0 && (
+          <span className="flex items-center gap-0.5 text-[10px] text-emerald-400">
+            <Clock size={10} />
+            {task.time_logged_formatted}
+          </span>
+        )}
         {task.has_recurrence && (
           <Repeat size={12} className="text-blue-400" />
         )}

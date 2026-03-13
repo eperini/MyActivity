@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     GOOGLE_DRIVE_CLIENT_SECRET: str = ""
     GOOGLE_DRIVE_REFRESH_TOKEN: str = ""
     BACKUP_KEEP_COUNT: int = 7
+    JIRA_BASE_URL: str = ""
+    JIRA_EMAIL: str = ""
+    JIRA_API_TOKEN: str = ""
+    JIRA_SYNC_INTERVAL_MINUTES: int = 15
 
     class Config:
         env_file = ".env"
