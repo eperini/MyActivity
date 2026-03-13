@@ -10,6 +10,8 @@ from app.models.user import User
 from app.models.task import Task, TaskStatus
 from app.models.habit import Habit, HabitLog
 from app.models.pomodoro import PomodoroSession
+from app.models.time_log import TimeLog
+from app.models.project import Project
 
 router = APIRouter()
 
@@ -34,12 +36,31 @@ class HabitOverview(BaseModel):
     current_streak: int
 
 
+class HeatmapDay(BaseModel):
+    date: str
+    count: int
+
+
+class ProjectStat(BaseModel):
+    id: int
+    name: str
+    color: str
+    task_count: int
+    completed_count: int
+
+
 class DashboardStats(BaseModel):
     # Task counts
     total_tasks: int
     completed_tasks: int
     overdue_tasks: int
     due_today: int
+    # Today/Week specifics
+    completed_today: int
+    completed_this_week: int
+    hours_tracked_today: float
+    hours_tracked_this_week: float
+    streak_days: int
     # Productivity
     completion_rate: float
     avg_daily_completed: float
@@ -47,6 +68,10 @@ class DashboardStats(BaseModel):
     weekly: list[WeekDay]
     # Monthly trend (last 6 months)
     monthly: list[MonthStat]
+    # Heatmap (last 365 days)
+    heatmap: list[HeatmapDay]
+    # By project
+    by_project: list[ProjectStat]
     # Top habits
     habits_overview: list[HabitOverview]
     # Pomodoro
@@ -250,6 +275,95 @@ async def get_dashboard_stats(
     )
     focus_sessions_week = result.scalar() or 0
 
+    # --- Completed today / this week ---
+    result = await db.execute(
+        select(func.count(Task.id)).where(
+            Task.created_by == user.id,
+            Task.status == TaskStatus.DONE,
+            func.date(Task.completed_at) == today,
+        )
+    )
+    completed_today = result.scalar() or 0
+
+    week_start_mon = today - timedelta(days=today.weekday())
+    result = await db.execute(
+        select(func.count(Task.id)).where(
+            Task.created_by == user.id,
+            Task.status == TaskStatus.DONE,
+            func.date(Task.completed_at) >= week_start_mon,
+        )
+    )
+    completed_this_week = result.scalar() or 0
+
+    # --- Time tracked today / this week ---
+    result = await db.execute(
+        select(func.coalesce(func.sum(TimeLog.minutes), 0)).where(
+            TimeLog.user_id == user.id,
+            func.date(TimeLog.logged_at) == today,
+        )
+    )
+    hours_tracked_today = round((result.scalar() or 0) / 60, 1)
+
+    result = await db.execute(
+        select(func.coalesce(func.sum(TimeLog.minutes), 0)).where(
+            TimeLog.user_id == user.id,
+            func.date(TimeLog.logged_at) >= week_start_mon,
+        )
+    )
+    hours_tracked_this_week = round((result.scalar() or 0) / 60, 1)
+
+    # --- Heatmap (last 365 days) ---
+    year_ago = today - timedelta(days=364)
+    result = await db.execute(
+        select(
+            func.date(Task.completed_at).label("d"),
+            func.count(Task.id),
+        ).where(
+            Task.created_by == user.id,
+            Task.status == TaskStatus.DONE,
+            func.date(Task.completed_at) >= year_ago,
+            func.date(Task.completed_at) <= today,
+        ).group_by(text("d"))
+    )
+    heatmap_map = {d: c for d, c in result.all()}
+    heatmap = []
+    for i in range(365):
+        d = year_ago + timedelta(days=i)
+        heatmap.append(HeatmapDay(date=d.isoformat(), count=heatmap_map.get(d, 0)))
+
+    # Streak: consecutive days with at least 1 task completed
+    streak_days = 0
+    check_date = today
+    while heatmap_map.get(check_date, 0) > 0:
+        streak_days += 1
+        check_date -= timedelta(days=1)
+
+    # --- By project ---
+    result = await db.execute(
+        select(
+            Task.project_id,
+            func.count(Task.id).label("total"),
+            func.count(Task.id).filter(Task.status == TaskStatus.DONE).label("completed"),
+        ).where(
+            Task.created_by == user.id,
+            Task.project_id.isnot(None),
+        ).group_by(Task.project_id)
+    )
+    project_counts = {pid: (total, done) for pid, total, done in result.all()}
+
+    by_project = []
+    if project_counts:
+        result = await db.execute(
+            select(Project).where(Project.id.in_(project_counts.keys()))
+        )
+        for p in result.scalars().all():
+            total, done = project_counts.get(p.id, (0, 0))
+            by_project.append(ProjectStat(
+                id=p.id, name=p.name, color=p.color or "#6366F1",
+                task_count=total, completed_count=done,
+            ))
+        by_project.sort(key=lambda x: x.task_count, reverse=True)
+
     # --- Priority breakdown (already 1 query) ---
     result = await db.execute(
         select(Task.priority, func.count(Task.id)).where(
@@ -266,10 +380,17 @@ async def get_dashboard_stats(
         completed_tasks=completed_tasks,
         overdue_tasks=overdue_tasks,
         due_today=due_today,
+        completed_today=completed_today,
+        completed_this_week=completed_this_week,
+        hours_tracked_today=hours_tracked_today,
+        hours_tracked_this_week=hours_tracked_this_week,
+        streak_days=streak_days,
         completion_rate=completion_rate,
         avg_daily_completed=avg_daily,
         weekly=weekly,
         monthly=monthly,
+        heatmap=heatmap,
+        by_project=by_project,
         habits_overview=habits_overview,
         total_focus_hours=total_focus_hours,
         focus_sessions_this_week=focus_sessions_week,
