@@ -1,9 +1,11 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw, FolderOpen, ChevronDown, ChevronRight, FileBarChart, Bell } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw, FolderOpen, ChevronDown, ChevronRight, FileBarChart, Bell, RefreshCw } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { TaskList, Area, Project } from "@/types";
-import { createList, updateList, deleteList, reorderLists, resetListOrder, getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject, getUnreadNotificationCount } from "@/lib/api";
+import { createList, updateList, deleteList, reorderLists, resetListOrder, getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject, getUnreadNotificationCount, getJiraConfigs, triggerJiraSync, importJiraUsers, getJiraUserMappings, mapJiraUser } from "@/lib/api";
+import type { JiraUserMapping } from "@/lib/api";
+import type { JiraConfig } from "@/types";
 import { useToast } from "./Toast";
 
 interface SidebarProps {
@@ -64,6 +66,12 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
   const [editingProject, setEditingProject] = useState<{ id: number; name: string; color: string } | null>(null);
   const [projectContextMenu, setProjectContextMenu] = useState<{ type: "area" | "project"; id: number; x: number; y: number } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: "area" | "project"; id: number; name: string } | null>(null);
+  const [jiraConfigs, setJiraConfigs] = useState<JiraConfig[]>([]);
+  const [syncingJira, setSyncingJira] = useState<number | null>(null);
+  const [jiraUserModal, setJiraUserModal] = useState<{ configId: number; projectName: string } | null>(null);
+  const [jiraUserMappings, setJiraUserMappings] = useState<JiraUserMapping[]>([]);
+  const [jiraUsersLoading, setJiraUsersLoading] = useState(false);
+  const [zenoUsers, setZenoUsers] = useState<{ id: number; display_name: string; email: string }[]>([]);
   const contextRef = useRef<HTMLDivElement>(null);
   const projectContextRef = useRef<HTMLDivElement>(null);
 
@@ -87,9 +95,10 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
   useEffect(() => {
     async function loadAreasProjects() {
       try {
-        const [a, p] = await Promise.all([getAreas(), getProjects()]);
+        const [a, p, jc] = await Promise.all([getAreas(), getProjects(), getJiraConfigs().catch(() => [] as JiraConfig[])]);
         setAreas(a);
         setProjects(p);
+        setJiraConfigs(jc);
       } catch { /* ignore */ }
     }
     loadAreasProjects();
@@ -991,6 +1000,76 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
               </select>
             </div>
           )}
+          {projectContextMenu.type === "project" && (() => {
+            const jc = jiraConfigs.find((c) => c.zeno_project_id === projectContextMenu.id);
+            if (!jc) return null;
+            return (
+              <>
+              <button
+                onClick={async () => {
+                  setSyncingJira(jc.id);
+                  setProjectContextMenu(null);
+                  try {
+                    await triggerJiraSync(jc.id);
+                    showToast("Sincronizzazione Jira avviata", "success");
+                    // Poll sync status until done
+                    const poll = setInterval(async () => {
+                      try {
+                        const configs = await getJiraConfigs();
+                        const updated = configs.find((c) => c.id === jc.id);
+                        if (updated && updated.last_sync_status !== "running") {
+                          clearInterval(poll);
+                          setSyncingJira(null);
+                          setJiraConfigs(configs);
+                          if (updated.last_sync_status === "ok") {
+                            showToast("Sincronizzazione Jira terminata", "success");
+                          } else {
+                            showToast(`Errore sync: ${updated.last_sync_error || "errore sconosciuto"}`);
+                          }
+                        }
+                      } catch {
+                        clearInterval(poll);
+                        setSyncingJira(null);
+                      }
+                    }, 2000);
+                    // Safety timeout: stop polling after 60s
+                    setTimeout(() => { clearInterval(poll); setSyncingJira(null); }, 60000);
+                  } catch {
+                    showToast("Errore nella sincronizzazione Jira");
+                    setSyncingJira(null);
+                  }
+                }}
+                disabled={syncingJira === jc.id}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-400 hover:bg-zinc-700 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={syncingJira === jc.id ? "animate-spin" : ""} />
+                Sincronizza con Jira
+              </button>
+              <button
+                onClick={async () => {
+                  const proj = projects.find((p) => p.id === projectContextMenu!.id);
+                  setJiraUserModal({ configId: jc.id, projectName: proj?.name || "" });
+                  setProjectContextMenu(null);
+                  setJiraUsersLoading(true);
+                  try {
+                    await importJiraUsers(jc.id);
+                    const data = await getJiraUserMappings(jc.id);
+                    setJiraUserMappings(data.mappings);
+                    setZenoUsers(data.zeno_users);
+                  } catch {
+                    showToast("Errore caricamento utenti Jira");
+                  } finally {
+                    setJiraUsersLoading(false);
+                  }
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-400 hover:bg-zinc-700 transition-colors"
+              >
+                <Users size={14} />
+                Gestisci utenti Jira
+              </button>
+            </>
+            );
+          })()}
           <button
             onClick={() => {
               const item = projectContextMenu.type === "area"
@@ -1035,6 +1114,75 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
                 className="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm text-white"
               >
                 Elimina
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Jira User Mapping Modal */}
+      {jiraUserModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-5 max-w-lg mx-4 w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-white">
+                Utenti Jira — {jiraUserModal.projectName}
+              </h3>
+              <button onClick={() => setJiraUserModal(null)} className="text-zinc-500 hover:text-zinc-300">
+                <X size={16} />
+              </button>
+            </div>
+            {jiraUsersLoading ? (
+              <p className="text-xs text-zinc-400">Caricamento utenti...</p>
+            ) : jiraUserMappings.length === 0 ? (
+              <p className="text-xs text-zinc-400">Nessun utente trovato nel progetto Jira</p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[10px] text-zinc-500 mb-2">
+                  Associa ogni utente Jira a un utente Zeno per mantenere le assegnazioni durante il sync.
+                </p>
+                {jiraUserMappings.map((m) => (
+                  <div key={m.id} className="flex items-center gap-3 bg-zinc-900 rounded-lg px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-zinc-200 truncate">{m.jira_display_name}</div>
+                      {m.jira_email && <div className="text-[10px] text-zinc-500 truncate">{m.jira_email}</div>}
+                    </div>
+                    <span className="text-[10px] text-zinc-600">→</span>
+                    <select
+                      value={m.zeno_user_id ?? ""}
+                      onChange={async (e) => {
+                        const zenoId = e.target.value ? Number(e.target.value) : null;
+                        try {
+                          await mapJiraUser(jiraUserModal.configId, m.jira_account_id, zenoId);
+                          setJiraUserMappings((prev) =>
+                            prev.map((x) =>
+                              x.id === m.id
+                                ? { ...x, zeno_user_id: zenoId, zeno_user_name: zenoUsers.find((u) => u.id === zenoId)?.display_name || null }
+                                : x
+                            )
+                          );
+                          showToast("Mapping aggiornato", "success");
+                        } catch {
+                          showToast("Errore aggiornamento mapping");
+                        }
+                      }}
+                      className="bg-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 outline-none min-w-[140px]"
+                    >
+                      <option value="">Non mappato</option>
+                      {zenoUsers.map((u) => (
+                        <option key={u.id} value={u.id}>{u.display_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setJiraUserModal(null)}
+                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm text-zinc-300"
+              >
+                Chiudi
               </button>
             </div>
           </div>

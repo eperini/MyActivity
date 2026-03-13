@@ -44,6 +44,26 @@ class JiraService:
             resp.raise_for_status()
             return [{"key": p["key"], "name": p["name"]} for p in resp.json()]
 
+    async def get_project_members(self, project_key: str) -> list[dict]:
+        """Fetch users assignable to issues in a Jira project."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.base_url}/rest/api/3/user/assignable/search",
+                headers=self.headers,
+                params={"project": project_key, "maxResults": 200},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return [
+                {
+                    "accountId": u["accountId"],
+                    "displayName": u.get("displayName", ""),
+                    "emailAddress": u.get("emailAddress"),
+                }
+                for u in resp.json()
+                if u.get("accountType") == "atlassian"
+            ]
+
     async def get_project_issues(
         self, project_key: str, updated_after: datetime | None = None
     ) -> list[dict]:

@@ -141,7 +141,7 @@ function QuadrantPanel({
                 {/* Tasks in group */}
                 {group.tasks.map((task) => {
                   const isDone = task.status === "done";
-                  const list = listMap[task.list_id];
+                  const list = task.list_id ? listMap[task.list_id] : undefined;
                   const overdue = task.due_date ? isOverdue(task.due_date) : false;
 
                   return (

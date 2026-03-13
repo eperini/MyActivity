@@ -322,12 +322,14 @@ def send_daily_reports(self):
             ).scalars().all()
             list_ids.update(member_of)
 
-            if not list_ids:
-                continue
+            from sqlalchemy import or_
 
-            # Query tasks
+            # Query tasks (from lists + project-only tasks owned by user)
             base_q = select(Task).where(
-                Task.list_id.in_(list_ids),
+                or_(
+                    Task.list_id.in_(list_ids) if list_ids else False,
+                    Task.list_id.is_(None) & (Task.created_by == user.id),
+                ),
                 Task.status != TaskStatus.DONE,
             )
 
@@ -373,7 +375,10 @@ def send_daily_reports(self):
             # Tasks due in next 3 days (beyond tomorrow)
             upcoming_tasks = db.execute(
                 select(Task).where(
-                    Task.list_id.in_(list_ids),
+                    or_(
+                        Task.list_id.in_(list_ids) if list_ids else False,
+                        Task.list_id.is_(None) & (Task.created_by == user.id),
+                    ),
                     Task.status != TaskStatus.DONE,
                     Task.due_date == day_after_tomorrow,
                 )
@@ -786,6 +791,7 @@ def _sync_single_jira(db, config):
     from app.models.task_list import TaskList
     from app.models.project import Project
     from app.models.epic import Epic
+    from app.models.jira import JiraUserMapping
     from app.services.jira_service import (
         JiraServiceSync, map_priority_from_jira, map_status_from_jira, extract_adf_text,
     )
@@ -795,20 +801,24 @@ def _sync_single_jira(db, config):
         project_key=config.jira_project_key,
         updated_after=config.last_sync_at,
     )
+    logger.info("Jira sync for %s: fetched %d issues (updated_after=%s)",
+                config.jira_project_key, len(issues), config.last_sync_at)
+    for issue in issues:
+        itype = issue["fields"].get("issuetype", {}).get("name", "?")
+        logger.info("  Issue %s: type=%s, summary=%s", issue["key"], itype, issue["fields"].get("summary", "")[:60])
 
-    # Find a list_id for new tasks: use configured list or first list owned by user
+    # Find a list_id for new tasks: use configured list if set, otherwise None (project-only)
     project = db.get(Project, config.zeno_project_id)
     if not project:
         return
 
     default_list_id = config.default_list_id
-    if not default_list_id:
-        list_result = db.execute(
-            select(TaskList.id).where(TaskList.owner_id == config.user_id).limit(1)
-        )
-        default_list_id = list_result.scalar()
-    if not default_list_id:
-        return
+
+    # Load Jira → Zeno user mappings
+    user_mappings_rows = db.execute(
+        select(JiraUserMapping).where(JiraUserMapping.config_id == config.id)
+    ).scalars().all()
+    jira_to_zeno = {m.jira_account_id: m.zeno_user_id for m in user_mappings_rows if m.zeno_user_id}
 
     for issue in issues:
         # Skip Epics from task sync — they are handled separately below
@@ -831,6 +841,11 @@ def _sync_single_jira(db, config):
             except (ValueError, TypeError):
                 pass
 
+        # Resolve assigned_to via user mapping
+        assignee = fields.get("assignee")
+        jira_assignee_id = assignee.get("accountId") if assignee else None
+        assigned_to = jira_to_zeno.get(jira_assignee_id, config.user_id) if jira_assignee_id else config.user_id
+
         mapped = {
             "title": fields["summary"],
             "description": extract_adf_text(fields.get("description")),
@@ -851,8 +866,8 @@ def _sync_single_jira(db, config):
             if local_updated <= last_synced:
                 for k, v in mapped.items():
                     setattr(existing, k, v)
-                # Map status separately (it's an enum)
                 existing.status = TaskStatus(jira_status)
+                existing.assigned_to = assigned_to
         else:
             new_task = Task(
                 **mapped,
@@ -860,7 +875,7 @@ def _sync_single_jira(db, config):
                 list_id=default_list_id,
                 project_id=config.zeno_project_id,
                 created_by=config.user_id,
-                assigned_to=config.user_id,
+                assigned_to=assigned_to,
             )
             db.add(new_task)
             try:

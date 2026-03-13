@@ -39,3 +39,31 @@ class JiraConfig(Base):
         Index("idx_jira_config_user", "user_id"),
         Index("idx_jira_config_enabled", "sync_enabled"),
     )
+
+    user_mappings: Mapped[list["JiraUserMapping"]] = relationship(
+        back_populates="config", cascade="all, delete-orphan"
+    )
+
+
+class JiraUserMapping(Base):
+    """Maps a Jira account to a Zeno user for a specific JiraConfig."""
+    __tablename__ = "jira_user_mappings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    config_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("jira_config.id", ondelete="CASCADE"), nullable=False
+    )
+    jira_account_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    jira_display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    jira_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    zeno_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    config = relationship("JiraConfig", back_populates="user_mappings")
+    zeno_user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("config_id", "jira_account_id", name="uq_jira_user_mapping"),
+        Index("idx_jira_user_mapping_config", "config_id"),
+    )

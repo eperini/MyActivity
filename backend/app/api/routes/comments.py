@@ -18,20 +18,14 @@ class CommentCreate(BaseModel):
 
 
 async def _check_task_access(task_id: int, user_id: int, db: AsyncSession) -> Task:
-    """Verify user has access to the task (owns it or is member of its list)."""
+    """Verify user has access to the task (owns it or is member of its list/project)."""
+    from app.api.routes.tasks import _check_task_access as _check_access
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(404, "Task non trovato")
     if task.created_by == user_id:
         return task
-    task_list = await db.get(TaskList, task.list_id)
-    if task_list and task_list.owner_id == user_id:
-        return task
-    member = await db.execute(
-        select(ListMember).where(ListMember.list_id == task.list_id, ListMember.user_id == user_id)
-    )
-    if not member.scalar_one_or_none():
-        raise HTTPException(403, "Non hai accesso a questo task")
+    await _check_access(task, user_id, db)
     return task
 
 

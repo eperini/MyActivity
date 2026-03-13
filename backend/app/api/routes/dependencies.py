@@ -8,7 +8,7 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task
 from app.models.dependency import TaskDependency, DependencyType
-from app.api.routes.tasks import _check_list_access
+from app.api.routes.tasks import _check_task_access
 
 router = APIRouter()
 
@@ -37,7 +37,7 @@ async def _get_task_with_access(task_id: int, user: User, db: AsyncSession) -> T
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
-    await _check_list_access(task.list_id, user.id, db)
+    await _check_task_access(task, user.id, db)
     return task
 
 

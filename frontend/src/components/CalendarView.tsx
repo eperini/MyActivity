@@ -189,7 +189,7 @@ export default function CalendarView({ tasks, lists, onSelectTask, onSelectDate,
                 {/* Tasks */}
                 <div className="space-y-0.5">
                   {dayTasks.slice(0, maxShown).map((task) => {
-                    const list = listMap[task.list_id];
+                    const list = task.list_id ? listMap[task.list_id] : undefined;
                     return (
                       <div
                         key={task.id}
@@ -254,7 +254,7 @@ export default function CalendarView({ tasks, lists, onSelectTask, onSelectDate,
             ) : (
               <div className="py-1">
                 {selectedDayTasks.map((task) => {
-                  const list = listMap[task.list_id];
+                  const list = task.list_id ? listMap[task.list_id] : undefined;
                   const isDone = task.status === "done";
                   return (
                     <div

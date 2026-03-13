@@ -171,3 +171,59 @@ async def list_users(
     result = await db.execute(select(User).order_by(User.display_name))
     users = result.scalars().all()
     return [{"id": u.id, "email": u.email, "display_name": u.display_name, "is_admin": u.is_admin} for u in users]
+
+
+class AdminUserUpdate(BaseModel):
+    display_name: str | None = None
+    email: str | None = None
+    is_admin: bool | None = None
+    password: str | None = Field(default=None, min_length=6)
+
+
+@router.patch("/users/{user_id}")
+async def admin_update_user(
+    user_id: int,
+    data: AdminUserUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a user (admin only)."""
+    if not user.is_admin:
+        raise HTTPException(403, "Solo admin")
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(404, "Utente non trovato")
+    if data.display_name is not None:
+        target.display_name = data.display_name
+    if data.email is not None:
+        existing = await db.execute(select(User).where(User.email == data.email, User.id != user_id))
+        if existing.scalar_one_or_none():
+            raise HTTPException(400, "Email già in uso")
+        target.email = data.email
+    if data.is_admin is not None:
+        if target.id == user.id and not data.is_admin:
+            raise HTTPException(400, "Non puoi rimuovere i tuoi diritti admin")
+        target.is_admin = data.is_admin
+    if data.password is not None:
+        target.password_hash = hash_password(data.password)
+    await db.commit()
+    return {"id": target.id, "email": target.email, "display_name": target.display_name, "is_admin": target.is_admin}
+
+
+@router.delete("/users/{user_id}")
+async def admin_delete_user(
+    user_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a user (admin only)."""
+    if not user.is_admin:
+        raise HTTPException(403, "Solo admin")
+    if user_id == user.id:
+        raise HTTPException(400, "Non puoi eliminare te stesso")
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(404, "Utente non trovato")
+    await db.delete(target)
+    await db.commit()
+    return {"detail": "Utente eliminato"}

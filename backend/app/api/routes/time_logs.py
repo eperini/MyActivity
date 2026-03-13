@@ -29,24 +29,13 @@ def format_minutes(minutes: int) -> str:
     return f"{m}m"
 
 
-async def _check_task_access(task_id: int, user_id: int, db: AsyncSession) -> Task:
+async def _check_task_access_local(task_id: int, user_id: int, db: AsyncSession) -> Task:
     """Verify task exists and user has access."""
+    from app.api.routes.tasks import _check_task_access
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
-    # Check list access
-    task_list = await db.get(TaskList, task.list_id)
-    if not task_list:
-        raise HTTPException(status_code=404, detail="Lista non trovata")
-    if task_list.owner_id != user_id:
-        member = await db.execute(
-            select(ListMember).where(
-                ListMember.list_id == task.list_id,
-                ListMember.user_id == user_id,
-            )
-        )
-        if not member.scalar_one_or_none():
-            raise HTTPException(status_code=403, detail="Non hai accesso a questo task")
+    await _check_task_access(task, user_id, db)
     return task
 
 
@@ -91,7 +80,7 @@ async def get_task_time_logs(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _check_task_access(task_id, user.id, db)
+    await _check_task_access_local(task_id, user.id, db)
     task_obj = await db.get(Task, task_id)
     jira_key = task_obj.jira_issue_key if task_obj else None
     result = await db.execute(
@@ -129,7 +118,7 @@ async def create_time_log(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _check_task_access(task_id, user.id, db)
+    await _check_task_access_local(task_id, user.id, db)
     log = TimeLog(
         task_id=task_id,
         user_id=user.id,
@@ -161,7 +150,7 @@ async def update_time_log(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _check_task_access(task_id, user.id, db)
+    await _check_task_access_local(task_id, user.id, db)
     log = await db.get(TimeLog, log_id)
     if not log or log.task_id != task_id:
         raise HTTPException(status_code=404, detail="Log non trovato")
@@ -192,7 +181,7 @@ async def delete_time_log(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _check_task_access(task_id, user.id, db)
+    await _check_task_access_local(task_id, user.id, db)
     log = await db.get(TimeLog, log_id)
     if not log or log.task_id != task_id:
         raise HTTPException(status_code=404, detail="Log non trovato")

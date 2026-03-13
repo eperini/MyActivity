@@ -53,6 +53,19 @@ export async function logout() {
   return request<{ detail: string }>("/auth/logout", { method: "POST" });
 }
 
+// Admin - User Management
+export interface AdminUser {
+  id: number;
+  email: string;
+  display_name: string;
+  is_admin: boolean;
+}
+export const getUsers = () => request<AdminUser[]>("/auth/users");
+export const adminUpdateUser = (id: number, data: { display_name?: string; email?: string; is_admin?: boolean; password?: string }) =>
+  request<AdminUser>(`/auth/users/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const adminDeleteUser = (id: number) =>
+  request<{ detail: string }>(`/auth/users/${id}`, { method: "DELETE" });
+
 // Lists
 export const getLists = () => request<TaskList[]>("/lists/");
 export const createList = (data: { name: string; color?: string }) =>
@@ -448,6 +461,28 @@ export const unlinkTaskFromJira = (taskId: number) =>
   request<{ detail: string }>(`/tasks/${taskId}/jira/unlink`, { method: "DELETE" });
 export const linkJiraAccount = () =>
   request<{ jira_account_id: string; display_name: string }>("/jira/link-account", { method: "POST" });
+export interface JiraUserMapping {
+  id: number;
+  jira_account_id: string;
+  jira_display_name: string;
+  jira_email: string | null;
+  zeno_user_id: number | null;
+  zeno_user_name: string | null;
+}
+export interface ZenoUser {
+  id: number;
+  display_name: string;
+  email: string;
+}
+export const getJiraUserMappings = (configId: number) =>
+  request<{ mappings: JiraUserMapping[]; zeno_users: ZenoUser[] }>(`/jira/config/${configId}/users`);
+export const importJiraUsers = (configId: number) =>
+  request<{ detail: string }>(`/jira/config/${configId}/users/import`, { method: "POST" });
+export const mapJiraUser = (configId: number, jiraAccountId: string, zenoUserId: number | null) =>
+  request<{ detail: string }>(`/jira/config/${configId}/users/map`, {
+    method: "PATCH",
+    body: JSON.stringify({ jira_account_id: jiraAccountId, zeno_user_id: zenoUserId }),
+  });
 
 // Reports
 export const generateReport = (data: {

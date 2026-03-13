@@ -337,7 +337,7 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
                   <TaskItem
                     key={task.id}
                     task={task}
-                    list={findList(lists, task.list_id)}
+                    list={task.list_id ? findList(lists, task.list_id) : undefined}
                     onToggle={() => handleToggle(task)}
                     onSelect={() => onSelectTask(task)}
                     isSelected={false}
@@ -363,7 +363,7 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
                     <TaskItem
                       key={task.id}
                       task={task}
-                      list={findList(lists, task.list_id)}
+                      list={task.list_id ? findList(lists, task.list_id) : undefined}
                       onToggle={() => handleToggle(task)}
                       onSelect={() => onSelectTask(task)}
                       isSelected={false}

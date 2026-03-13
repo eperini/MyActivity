@@ -35,7 +35,7 @@ export interface Task {
   id: number;
   title: string;
   description: string | null;
-  list_id: number;
+  list_id: number | null;
   created_by: number;
   assigned_to: number | null;
   assigned_to_name?: string | null;

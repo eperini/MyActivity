@@ -11,7 +11,7 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task
 from app.models.task_list import TaskList, ListMember
-from app.models.jira import JiraConfig
+from app.models.jira import JiraConfig, JiraUserMapping
 from app.models.project import Project
 
 router = APIRouter()
@@ -193,9 +193,6 @@ async def trigger_jira_sync(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # DISABLED: Jira sync temporarily disabled until stable
-    raise HTTPException(status_code=503, detail="Jira sync temporaneamente disabilitato")
-
     cfg = await db.get(JiraConfig, config_id)
     if not cfg or cfg.user_id != user.id:
         raise HTTPException(status_code=404, detail="Config non trovata")
@@ -203,6 +200,158 @@ async def trigger_jira_sync(
     from app.workers.tasks import sync_single_jira_config
     sync_single_jira_config.delay(cfg.id)
     return {"detail": "Sync avviato"}
+
+
+# ── User Mappings ────────────────────────────────────────────────────
+
+
+class JiraUserMappingOut(BaseModel):
+    id: int
+    jira_account_id: str
+    jira_display_name: str
+    jira_email: str | None
+    zeno_user_id: int | None
+    zeno_user_name: str | None = None
+
+
+class JiraUserMappingUpdate(BaseModel):
+    jira_account_id: str
+    zeno_user_id: int | None
+
+
+class ZenoUserOut(BaseModel):
+    id: int
+    display_name: str
+    email: str
+
+
+class JiraUserMappingsResponse(BaseModel):
+    mappings: list[JiraUserMappingOut]
+    zeno_users: list[ZenoUserOut]
+
+
+@router.get("/jira/config/{config_id}/users", response_model=JiraUserMappingsResponse)
+async def get_jira_user_mappings(
+    config_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all user mappings for a Jira config + available Zeno users."""
+    cfg = await db.get(JiraConfig, config_id)
+    if not cfg or cfg.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Config non trovata")
+
+    rows = (await db.execute(
+        select(JiraUserMapping, User.display_name)
+        .outerjoin(User, JiraUserMapping.zeno_user_id == User.id)
+        .where(JiraUserMapping.config_id == config_id)
+        .order_by(JiraUserMapping.jira_display_name)
+    )).all()
+
+    mappings = [
+        JiraUserMappingOut(
+            id=m.id,
+            jira_account_id=m.jira_account_id,
+            jira_display_name=m.jira_display_name,
+            jira_email=m.jira_email,
+            zeno_user_id=m.zeno_user_id,
+            zeno_user_name=uname,
+        )
+        for m, uname in rows
+    ]
+
+    zeno_users_result = (await db.execute(
+        select(User).where(~User.email.like("%@test.com")).order_by(User.display_name)
+    )).scalars().all()
+
+    return JiraUserMappingsResponse(
+        mappings=mappings,
+        zeno_users=[ZenoUserOut(id=u.id, display_name=u.display_name, email=u.email) for u in zeno_users_result],
+    )
+
+
+@router.post("/jira/config/{config_id}/users/import")
+async def import_jira_users(
+    config_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch users from Jira project and create/update mappings.
+    Auto-maps by email when possible."""
+    cfg = await db.get(JiraConfig, config_id)
+    if not cfg or cfg.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Config non trovata")
+
+    from app.services.jira_service import JiraService
+    jira = JiraService()
+    jira_users = await jira.get_project_members(cfg.jira_project_key)
+
+    # Load existing mappings
+    existing = (await db.execute(
+        select(JiraUserMapping).where(JiraUserMapping.config_id == config_id)
+    )).scalars().all()
+    existing_map = {m.jira_account_id: m for m in existing}
+
+    # Load all Zeno users for auto-mapping by email
+    zeno_users = (await db.execute(select(User))).scalars().all()
+    email_to_user = {u.email.lower(): u for u in zeno_users}
+
+    imported = 0
+    for ju in jira_users:
+        account_id = ju["accountId"]
+        if account_id in existing_map:
+            # Update display name/email if changed
+            m = existing_map[account_id]
+            m.jira_display_name = ju["displayName"]
+            if ju.get("emailAddress"):
+                m.jira_email = ju["emailAddress"]
+            continue
+
+        # Auto-map by email
+        zeno_user_id = None
+        jira_email = ju.get("emailAddress")
+        if jira_email and jira_email.lower() in email_to_user:
+            zeno_user_id = email_to_user[jira_email.lower()].id
+
+        mapping = JiraUserMapping(
+            config_id=config_id,
+            jira_account_id=account_id,
+            jira_display_name=ju["displayName"],
+            jira_email=jira_email,
+            zeno_user_id=zeno_user_id,
+        )
+        db.add(mapping)
+        imported += 1
+
+    await db.commit()
+    return {"detail": f"Importati {imported} utenti, {len(jira_users)} totali"}
+
+
+@router.patch("/jira/config/{config_id}/users/map")
+async def map_jira_user(
+    config_id: int,
+    data: JiraUserMappingUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Map a Jira user to a Zeno user."""
+    cfg = await db.get(JiraConfig, config_id)
+    if not cfg or cfg.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Config non trovata")
+
+    mapping = (await db.execute(
+        select(JiraUserMapping).where(
+            JiraUserMapping.config_id == config_id,
+            JiraUserMapping.jira_account_id == data.jira_account_id,
+        )
+    )).scalar_one_or_none()
+
+    if not mapping:
+        raise HTTPException(status_code=404, detail="Mapping non trovato")
+
+    mapping.zeno_user_id = data.zeno_user_id
+    await db.commit()
+    return {"detail": "Mapping aggiornato"}
 
 
 @router.get("/jira/projects")
@@ -235,16 +384,9 @@ async def push_task_to_jira(
     if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
 
-    # Verify list access
-    task_list = await db.get(TaskList, task.list_id)
-    if task_list and task_list.owner_id != user.id:
-        member = await db.execute(
-            select(ListMember).where(
-                ListMember.list_id == task.list_id, ListMember.user_id == user.id
-            )
-        )
-        if not member.scalar_one_or_none():
-            raise HTTPException(status_code=403, detail="Non hai accesso")
+    # Verify access
+    from app.api.routes.tasks import _check_task_access
+    await _check_task_access(task, user.id, db)
 
     if not task.project_id:
         raise HTTPException(status_code=400, detail="Task non associato a un progetto")
@@ -305,15 +447,8 @@ async def unlink_task_from_jira(
     if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
 
-    task_list = await db.get(TaskList, task.list_id)
-    if task_list and task_list.owner_id != user.id:
-        member = await db.execute(
-            select(ListMember).where(
-                ListMember.list_id == task.list_id, ListMember.user_id == user.id
-            )
-        )
-        if not member.scalar_one_or_none():
-            raise HTTPException(status_code=403, detail="Non hai accesso")
+    from app.api.routes.tasks import _check_task_access
+    await _check_task_access(task, user.id, db)
 
     task.jira_issue_key = None
     task.jira_issue_id = None

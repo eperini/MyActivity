@@ -21,7 +21,7 @@ router = APIRouter()
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     description: str | None = Field(default=None, max_length=5000)
-    list_id: int
+    list_id: int | None = None
     assigned_to: int | None = None
     priority: int = Field(default=4, ge=1, le=4)
     due_date: date | None = None
@@ -53,7 +53,7 @@ class TaskResponse(BaseModel):
     id: int
     title: str
     description: str | None
-    list_id: int
+    list_id: int | None
     created_by: int
     assigned_to: int | None
     assigned_to_name: str | None = None
@@ -220,12 +220,16 @@ async def get_tasks(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Include tasks from owned lists + lists where user is a member
+    # Include tasks from owned lists + lists where user is a member + project-only tasks
+    from sqlalchemy import or_
     from app.models.task_list import ListMember
     owned_list_ids = select(TaskList.id).where(TaskList.owner_id == user.id)
     member_list_ids = select(ListMember.list_id).where(ListMember.user_id == user.id)
     query = select(Task).where(
-        Task.list_id.in_(owned_list_ids.union(member_list_ids)),
+        or_(
+            Task.list_id.in_(owned_list_ids.union(member_list_ids)),
+            Task.list_id.is_(None) & (Task.created_by == user.id),
+        ),
         Task.parent_id.is_(None),
     )
     if list_id:
@@ -257,6 +261,16 @@ async def _check_list_access(list_id: int, user_id: int, db: AsyncSession) -> No
             raise HTTPException(status_code=403, detail="Non hai accesso a questa lista")
 
 
+async def _check_task_access(task: Task, user_id: int, db: AsyncSession) -> None:
+    """Verify user has access to a task via list, project, or ownership."""
+    if task.list_id:
+        await _check_list_access(task.list_id, user_id, db)
+    elif task.project_id:
+        await _check_project_access(task.project_id, user_id, db)
+    elif task.created_by != user_id:
+        raise HTTPException(status_code=403, detail="Non hai accesso a questo task")
+
+
 @router.post("/", response_model=TaskResponse)
 async def create_task(
     data: TaskCreate,
@@ -264,9 +278,12 @@ async def create_task(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _check_list_access(data.list_id, user.id, db)
+    if data.list_id is not None:
+        await _check_list_access(data.list_id, user.id, db)
     if data.project_id is not None:
         await _check_project_access(data.project_id, user.id, db)
+    if data.list_id is None and data.project_id is None:
+        raise HTTPException(status_code=400, detail="Specificare list_id o project_id")
     task_data = data.model_dump()
     if task_data.get("assigned_to") is not None:
         target_user = await db.get(User, task_data["assigned_to"])
@@ -301,7 +318,7 @@ async def update_task(
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
-    await _check_list_access(task.list_id, user.id, db)
+    await _check_task_access(task, user.id, db)
 
     update_data = data.model_dump(exclude_unset=True)
 
@@ -310,7 +327,7 @@ async def update_task(
     old_assigned_to = task.assigned_to
 
     # If changing list, verify access to new list too
-    if "list_id" in update_data and update_data["list_id"] != task.list_id:
+    if "list_id" in update_data and update_data["list_id"] is not None and update_data["list_id"] != task.list_id:
         await _check_list_access(update_data["list_id"], user.id, db)
     if "project_id" in update_data and update_data["project_id"] is not None:
         await _check_project_access(update_data["project_id"], user.id, db)
@@ -354,7 +371,7 @@ async def delete_task(
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
-    await _check_list_access(task.list_id, user.id, db)
+    await _check_task_access(task, user.id, db)
     event_id = task.google_event_id
     await db.delete(task)
     await db.commit()
@@ -376,7 +393,7 @@ async def _get_parent_task(task_id: int, user: User, db: AsyncSession) -> Task:
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
-    await _check_list_access(task.list_id, user.id, db)
+    await _check_task_access(task, user.id, db)
     return task
 
 

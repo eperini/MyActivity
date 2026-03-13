@@ -335,7 +335,7 @@ export default function TaskListView({
                   <SortableTaskItem
                     key={task.id}
                     task={task}
-                    list={listMap[task.list_id]}
+                    list={task.list_id ? listMap[task.list_id] : undefined}
                     isSelected={selectedTask?.id === task.id}
                     onSelect={onSelectTask}
                     onToggle={onToggleTask}

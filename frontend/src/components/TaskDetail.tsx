@@ -119,7 +119,7 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
   useEffect(() => {
     getTags().then(setAllTags).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento tag"); });
     getComments(task.id).then(setComments).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento commenti"); });
-    getListMembers(task.list_id).then(setMembers).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento membri"); });
+    if (task.list_id) getListMembers(task.list_id).then(setMembers).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento membri"); });
     getSubtasks(task.id).then(setSubtasks).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento subtask"); });
   }, [task.id, task.list_id]);
 
@@ -248,11 +248,12 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
             <List size={16} className="text-zinc-500" />
             {lists && lists.length > 0 ? (
               <select
-                value={task.list_id}
-                onChange={(e) => onUpdate(task.id, { list_id: Number(e.target.value) } as Partial<Task>)}
+                value={task.list_id ?? ""}
+                onChange={(e) => onUpdate(task.id, { list_id: e.target.value ? Number(e.target.value) : null } as Partial<Task>)}
                 className="bg-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-300 outline-none cursor-pointer"
                 style={{ color: list?.color || "#d4d4d8" }}
               >
+                {!task.list_id && <option value="">Nessuna lista</option>}
                 {lists.map((l) => (
                   <option key={l.id} value={l.id} style={{ color: l.color }} className="bg-zinc-800">
                     {l.name}

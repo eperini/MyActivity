@@ -98,16 +98,8 @@ async def create_template_from_task(
         raise HTTPException(status_code=404, detail="Task non trovato")
 
     # Check access
-    task_list = await db.get(TaskList, task.list_id)
-    if task_list.owner_id != user.id:
-        member = await db.execute(
-            select(ListMember).where(
-                ListMember.list_id == task.list_id,
-                ListMember.user_id == user.id,
-            )
-        )
-        if not member.scalar_one_or_none():
-            raise HTTPException(status_code=403, detail="Non hai accesso a questo task")
+    from app.api.routes.tasks import _check_task_access
+    await _check_task_access(task, user.id, db)
 
     # Get subtask titles
     subtask_result = await db.execute(
