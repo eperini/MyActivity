@@ -52,9 +52,13 @@ class TempoPushService:
 
         except Exception as e:
             logger.error("Tempo push error: %s", e)
-            push_log.status = "error"
-            push_log.error_message = str(e)[:500]
             self.db.rollback()
+            # Re-create push_log after rollback since it was detached
+            push_log = TempoPushLog(
+                triggered_by=triggered_by_user_id,
+                status="error",
+                error_message=str(e)[:500],
+            )
             self.db.add(push_log)
 
         finally:

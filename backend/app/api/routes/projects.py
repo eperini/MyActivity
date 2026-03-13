@@ -222,6 +222,13 @@ async def create_project(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Validate area belongs to user
+    if data.area_id:
+        from app.models.area import Area
+        area = await db.get(Area, data.area_id)
+        if not area or area.owner_id != user.id:
+            raise HTTPException(404, "Area non trovata")
+
     project = Project(
         name=data.name,
         description=data.description,

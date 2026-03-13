@@ -24,7 +24,7 @@ def _set_auth_cookie(response: Response, token: str):
         value=token,
         httponly=True,
         samesite="lax",
-        secure=False,  # set True if using HTTPS
+        secure=not settings.FRONTEND_URL.startswith("http://localhost"),
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )

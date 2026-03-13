@@ -311,6 +311,9 @@ async def get_time_report(
     db: AsyncSession = Depends(get_db),
 ):
     target_user_id = user_id or user.id
+    # Only admin can view other users' reports
+    if target_user_id != user.id and not user.is_admin:
+        raise HTTPException(403, "Non puoi visualizzare i report di altri utenti")
 
     # Task logs
     task_query = (

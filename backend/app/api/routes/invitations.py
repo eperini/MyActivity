@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -213,8 +213,11 @@ async def accept_invitation(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Use FOR UPDATE to prevent race conditions on concurrent acceptance
     result = await db.execute(
-        select(ProjectInvitation).where(ProjectInvitation.token == token)
+        select(ProjectInvitation)
+        .where(ProjectInvitation.token == token)
+        .with_for_update()
     )
     invitation = result.scalar_one_or_none()
     if not invitation:

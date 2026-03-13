@@ -11,9 +11,10 @@ from app.core.config import settings
 from app.models.user import User
 from app.models.epic import Epic
 from app.models.time_log import TimeLog
-from app.models.project import Project
+from app.models.project import Project, ProjectMember
 from app.models.jira import JiraConfig
 from app.models.tempo import TempoUser
+from app.models.sharing import ProjectRole
 
 router = APIRouter()
 
@@ -30,9 +31,20 @@ def format_minutes(minutes: int) -> str:
 
 
 async def _check_project_access(project_id: int, user_id: int, db: AsyncSession) -> Project:
+    """Verify user is a member of the project."""
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(404, "Progetto non trovato")
+    if project.owner_id == user_id:
+        return project
+    result = await db.execute(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(403, "Non hai accesso a questo progetto")
     return project
 
 
@@ -305,6 +317,7 @@ async def get_epic_time_logs(
     db: AsyncSession = Depends(get_db),
 ):
     epic = await _get_epic_or_404(epic_id, db)
+    await _check_project_access(epic.project_id, user.id, db)
 
     result = await db.execute(
         select(TimeLog, User.display_name, TempoUser.display_name)
@@ -343,6 +356,7 @@ async def create_epic_time_log(
     db: AsyncSession = Depends(get_db),
 ):
     epic = await _get_epic_or_404(epic_id, db)
+    await _check_project_access(epic.project_id, user.id, db)
 
     log = TimeLog(
         epic_id=epic.id,
@@ -381,7 +395,8 @@ async def delete_epic_time_log(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _get_epic_or_404(epic_id, db)
+    epic = await _get_epic_or_404(epic_id, db)
+    await _check_project_access(epic.project_id, user.id, db)
     log = await db.get(TimeLog, log_id)
     if not log or log.epic_id != epic_id:
         raise HTTPException(404, "Log non trovato")

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # URL sincrono per Celery (postgresql:// invece di postgresql+asyncpg://)
 SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
-_engine = create_engine(SYNC_DB_URL, echo=False, pool_size=5, max_overflow=5)
+_engine = create_engine(SYNC_DB_URL, echo=False, pool_size=10, max_overflow=10)
 _SessionLocal = sessionmaker(_engine)
 
 
@@ -598,8 +598,8 @@ def send_weekly_time_report(self):
                 # Telegram
                 if u.telegram_chat_id:
                     try:
-                        from app.services.telegram_service import send_telegram_message
-                        send_telegram_message(u.telegram_chat_id, msg)
+                        from app.services.telegram_service import send_message_sync
+                        send_message_sync(u.telegram_chat_id, msg)
                     except Exception as e:
                         logger.warning("Weekly report Telegram error for user %s: %s", u.id, e)
 
@@ -1164,15 +1164,18 @@ def _send_push_to_subs(subs, title, body, db):
 @celery_app.task
 def expire_pending_invitations():
     """Ogni giorno alle 01:00: marca come 'expired' gli inviti scaduti."""
+    from sqlalchemy import update
     from app.models.sharing import ProjectInvitation, InvitationStatus
 
     with _SessionLocal() as db:
-        count = db.query(ProjectInvitation).filter(
-            ProjectInvitation.status == InvitationStatus.PENDING.value,
-            ProjectInvitation.expires_at < datetime.now(timezone.utc),
-        ).update({"status": InvitationStatus.EXPIRED.value})
+        result = db.execute(
+            update(ProjectInvitation)
+            .where(ProjectInvitation.status == InvitationStatus.PENDING.value)
+            .where(ProjectInvitation.expires_at < datetime.now(timezone.utc))
+            .values(status=InvitationStatus.EXPIRED.value)
+        )
         db.commit()
-        return f"Scaduti {count} inviti"
+        return f"Scaduti {result.rowcount} inviti"
 
 
 @celery_app.task
@@ -1190,7 +1193,7 @@ def check_due_soon():
         tasks = db.execute(
             select(Task).where(
                 Task.due_date.in_([today, tomorrow]),
-                Task.status != TaskStatus.DONE.value,
+                Task.status != TaskStatus.DONE,
                 Task.assigned_to.isnot(None),
             )
         ).scalars().all()
