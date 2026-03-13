@@ -68,7 +68,37 @@ export interface TimeLog {
   formatted: string;
   note: string | null;
   source?: string;
+  tempo_push_status?: string | null;
+  tempo_push_error?: string | null;
+  jira_issue_key?: string | null;
   created_at: string;
+}
+
+export interface TempoPushLog {
+  id: number;
+  triggered_by: number | null;
+  status: string;
+  logs_found: number;
+  logs_pushed: number;
+  logs_updated: number;
+  logs_deleted: number;
+  logs_skipped: number;
+  logs_error: number;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface TempoPendingLog {
+  log_id: number;
+  task_id: number;
+  task_title: string;
+  jira_issue_key: string | null;
+  logged_at: string;
+  minutes: number;
+  status: string;
+  error: string | null;
+  has_jira: boolean;
 }
 
 export interface WeeklyTimeData {

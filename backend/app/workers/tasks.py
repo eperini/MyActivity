@@ -1005,6 +1005,53 @@ def auto_sync_tempo(self):
         raise self.retry(exc=exc)
 
 
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+def auto_push_to_tempo(self):
+    """Nightly push Zeno → Tempo. Runs at 02:00, before import (06:00) and reports (07:00)."""
+    from app.models.user import User
+
+    if not settings.TEMPO_API_TOKEN:
+        return "Tempo not configured"
+
+    try:
+        with _SessionLocal() as db:
+            admin = db.execute(
+                select(User).where(User.is_admin == True)
+            ).scalar_one_or_none()
+            if not admin:
+                return "No admin user found"
+
+            from app.services.tempo_push_service import TempoPushService
+            svc = TempoPushService(db)
+            push_log = svc.run_push(admin.id)
+
+            # Notify via Telegram on errors
+            if push_log.logs_error > 0 and admin.telegram_chat_id:
+                try:
+                    from app.services.telegram_service import send_message_sync
+                    send_message_sync(
+                        admin.telegram_chat_id,
+                        (
+                            f"⚠️ Push Tempo notturno completato con {push_log.logs_error} errori.\n"
+                            f"✅ Pushati: {push_log.logs_pushed}\n"
+                            f"❌ Errori: {push_log.logs_error}\n"
+                            f"Controlla Impostazioni → Tempo Cloud per i dettagli."
+                        ),
+                    )
+                except Exception as e:
+                    logger.warning("Telegram notification failed: %s", e)
+
+            return (
+                f"Tempo push: {push_log.logs_pushed} pushed, "
+                f"{push_log.logs_updated} updated, {push_log.logs_deleted} deleted, "
+                f"{push_log.logs_error} errors"
+            )
+
+    except Exception as exc:
+        logger.error("Auto tempo push error: %s", exc)
+        raise self.retry(exc=exc)
+
+
 def _send_push_to_subs(subs, title, body, db):
     """Send web push notifications to subscriptions."""
     import json

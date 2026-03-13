@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X, Cloud } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, getLists } from "@/lib/api";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, getLists, linkJiraAccount } from "@/lib/api";
 import type { TickTickImportResult } from "@/lib/api";
 import type { TaskList, TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
 import { useToast } from "@/components/Toast";
@@ -49,6 +49,8 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [newProjectName, setNewProjectName] = useState("");
   const [allLists, setAllLists] = useState<TaskList[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [jiraLinking, setJiraLinking] = useState(false);
+  const [jiraAccountLinked, setJiraAccountLinked] = useState<string | null>(null);
 
   useEffect(() => {
     getGoogleCalendarConfig()
@@ -572,6 +574,33 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
         <p className="text-xs text-zinc-500">
           Collega progetti Jira a progetti Zeno per sincronizzare automaticamente i task.
         </p>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              setJiraLinking(true);
+              try {
+                const res = await linkJiraAccount();
+                setJiraAccountLinked(res.display_name);
+                showToast(`Account Jira collegato: ${res.display_name}`, "success");
+              } catch (err) {
+                showToast(err instanceof Error ? err.message : "Errore collegamento account Jira");
+              } finally {
+                setJiraLinking(false);
+              }
+            }}
+            disabled={jiraLinking}
+            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 rounded-lg text-xs text-zinc-300 transition-colors"
+          >
+            <Link2 size={14} />
+            {jiraLinking ? "Collegamento..." : "Collega account Jira"}
+          </button>
+          {jiraAccountLinked && (
+            <span className="text-xs text-green-400 flex items-center gap-1">
+              <CheckCircle2 size={12} /> {jiraAccountLinked}
+            </span>
+          )}
+        </div>
 
         {jiraConfigs.length > 0 && (
           <div className="space-y-2">

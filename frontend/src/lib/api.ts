@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig, TempoPushLog, TempoPendingLog } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -424,6 +424,8 @@ export const pushTaskToJira = (taskId: number) =>
   request<{ jira_key: string; jira_url: string }>(`/tasks/${taskId}/jira/push`, { method: "POST" });
 export const unlinkTaskFromJira = (taskId: number) =>
   request<{ detail: string }>(`/tasks/${taskId}/jira/unlink`, { method: "DELETE" });
+export const linkJiraAccount = () =>
+  request<{ jira_account_id: string; display_name: string }>("/jira/link-account", { method: "POST" });
 
 // Reports
 export const generateReport = (data: {
@@ -494,6 +496,16 @@ export const getTempoImportHistory = () =>
   request<TempoImportLog[]>("/tempo/import/history");
 export const getTempoImportDetail = (id: number) =>
   request<TempoImportLog>(`/tempo/import/history/${id}`);
+export const triggerTempoPush = () =>
+  request<TempoPushLog>("/tempo/push", { method: "POST" });
+export const getTempoPushHistory = () =>
+  request<TempoPushLog[]>("/tempo/push/history");
+export const getTempoPushPending = () =>
+  request<{ total: number; logs: TempoPendingLog[] }>("/tempo/push/pending");
+export const skipTempoPush = (logId: number) =>
+  request<{ detail: string }>(`/time-logs/${logId}/skip-tempo`, { method: "PATCH" });
+export const pushLogNow = (logId: number) =>
+  request<{ log_id: number; tempo_worklog_id: number; jira_issue_key: string; status: string }>(`/time-logs/${logId}/push-now`, { method: "PATCH" });
 
 // Stats
 export const getDashboardStats = () => request<{

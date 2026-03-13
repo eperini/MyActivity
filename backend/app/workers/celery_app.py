@@ -44,6 +44,11 @@ celery_app.conf.update(
         #     "task": "app.workers.tasks.sync_jira_projects",
         #     "schedule": crontab(minute=f"*/{settings.JIRA_SYNC_INTERVAL_MINUTES}"),
         # },
+        # Push Zeno → Tempo: ogni notte alle 02:00
+        "auto-push-to-tempo": {
+            "task": "app.workers.tasks.auto_push_to_tempo",
+            "schedule": crontab(hour=2, minute=0),
+        },
         # Sync Tempo: ogni lunedì alle 06:00 (prima dei report settimanali)
         "auto-sync-tempo": {
             "task": "app.workers.tasks.auto_sync_tempo",

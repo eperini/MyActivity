@@ -46,3 +46,24 @@ class TempoImportLog(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     triggered_by_user = relationship("User")
+
+
+class TempoPushLog(Base):
+    __tablename__ = "tempo_push_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    triggered_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)
+    logs_found: Mapped[int] = mapped_column(Integer, default=0)
+    logs_pushed: Mapped[int] = mapped_column(Integer, default=0)
+    logs_updated: Mapped[int] = mapped_column(Integer, default=0)
+    logs_deleted: Mapped[int] = mapped_column(Integer, default=0)
+    logs_skipped: Mapped[int] = mapped_column(Integer, default=0)
+    logs_error: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    triggered_by_user = relationship("User")

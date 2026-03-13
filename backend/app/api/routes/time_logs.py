@@ -73,6 +73,9 @@ class TimeLogOut(BaseModel):
     formatted: str
     note: str | None
     source: str = "manual"
+    tempo_push_status: str | None = None
+    tempo_push_error: str | None = None
+    jira_issue_key: str | None = None
     created_at: str
 
     class Config:
@@ -88,6 +91,8 @@ async def get_task_time_logs(
     db: AsyncSession = Depends(get_db),
 ):
     await _check_task_access(task_id, user.id, db)
+    task_obj = await db.get(Task, task_id)
+    jira_key = task_obj.jira_issue_key if task_obj else None
     result = await db.execute(
         select(TimeLog, User.display_name, TempoUser.display_name)
         .outerjoin(User, TimeLog.user_id == User.id)
@@ -107,6 +112,9 @@ async def get_task_time_logs(
             formatted=format_minutes(log.minutes),
             note=log.note,
             source=log.source or "manual",
+            tempo_push_status=log.tempo_push_status,
+            tempo_push_error=log.tempo_push_error,
+            jira_issue_key=jira_key,
             created_at=log.created_at.isoformat(),
         )
         for log, user_name, tempo_name in rows

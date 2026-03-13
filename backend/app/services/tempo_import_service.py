@@ -118,6 +118,7 @@ class TempoImportService:
                 note=wl.get("description", "") or "",
                 source="tempo",
                 tempo_worklog_id=tempo_id,
+                tempo_push_status="ignored",
             )
             self.db.add(new_log)
             try:

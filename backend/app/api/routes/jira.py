@@ -340,3 +340,42 @@ async def get_task_jira_status(
         "jira_synced_at": task.jira_synced_at.isoformat() if task.jira_synced_at else None,
         "linked": task.jira_issue_key is not None,
     }
+
+
+@router.post("/jira/link-account")
+async def link_jira_account(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve and save the current user's Jira account ID."""
+    if not settings.JIRA_BASE_URL or not settings.JIRA_EMAIL or not settings.JIRA_API_TOKEN:
+        raise HTTPException(400, "Jira non configurato")
+
+    import httpx
+    import base64
+    auth_str = base64.b64encode(
+        f"{settings.JIRA_EMAIL}:{settings.JIRA_API_TOKEN}".encode()
+    ).decode()
+    headers = {
+        "Authorization": f"Basic {auth_str}",
+        "Accept": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{settings.JIRA_BASE_URL}/rest/api/3/myself",
+                headers=headers,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        raise HTTPException(502, f"Errore connessione Jira: {e}")
+
+    user.jira_account_id = data["accountId"]
+    await db.commit()
+    return {
+        "jira_account_id": data["accountId"],
+        "display_name": data.get("displayName", ""),
+    }

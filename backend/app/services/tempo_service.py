@@ -93,6 +93,98 @@ class TempoService:
 
         return all_worklogs
 
+    # ── Write operations ──────────────────────────────────────────────
+
+    async def create_worklog(
+        self, jira_issue_key: str, author_account_id: str,
+        started_date: date, time_spent_seconds: int, description: str = "",
+    ) -> dict:
+        payload = {
+            "issueKey": jira_issue_key,
+            "authorAccountId": author_account_id,
+            "startDate": started_date.isoformat(),
+            "timeSpentSeconds": time_spent_seconds,
+            "description": description,
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self.base_url}/worklogs",
+                headers=self.headers, json=payload, timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def update_worklog(
+        self, tempo_worklog_id: int, time_spent_seconds: int,
+        started_date: date, description: str = "",
+    ) -> dict:
+        payload = {
+            "timeSpentSeconds": time_spent_seconds,
+            "startDate": started_date.isoformat(),
+            "description": description,
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.put(
+                f"{self.base_url}/worklogs/{tempo_worklog_id}",
+                headers=self.headers, json=payload, timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def delete_worklog(self, tempo_worklog_id: int) -> None:
+        async with httpx.AsyncClient() as client:
+            resp = await client.delete(
+                f"{self.base_url}/worklogs/{tempo_worklog_id}",
+                headers=self.headers, timeout=30,
+            )
+            resp.raise_for_status()
+
+    # Sync versions for Celery workers
+
+    def create_worklog_sync(
+        self, jira_issue_key: str, author_account_id: str,
+        started_date: date, time_spent_seconds: int, description: str = "",
+    ) -> dict:
+        payload = {
+            "issueKey": jira_issue_key,
+            "authorAccountId": author_account_id,
+            "startDate": started_date.isoformat(),
+            "timeSpentSeconds": time_spent_seconds,
+            "description": description,
+        }
+        with httpx.Client() as client:
+            resp = client.post(
+                f"{self.base_url}/worklogs",
+                headers=self.headers, json=payload, timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    def update_worklog_sync(
+        self, tempo_worklog_id: int, time_spent_seconds: int,
+        started_date: date, description: str = "",
+    ) -> dict:
+        payload = {
+            "timeSpentSeconds": time_spent_seconds,
+            "startDate": started_date.isoformat(),
+            "description": description,
+        }
+        with httpx.Client() as client:
+            resp = client.put(
+                f"{self.base_url}/worklogs/{tempo_worklog_id}",
+                headers=self.headers, json=payload, timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    def delete_worklog_sync(self, tempo_worklog_id: int) -> None:
+        with httpx.Client() as client:
+            resp = client.delete(
+                f"{self.base_url}/worklogs/{tempo_worklog_id}",
+                headers=self.headers, timeout=30,
+            )
+            resp.raise_for_status()
+
     async def test_connection(self) -> dict:
         """Test Tempo API connectivity. Returns status info."""
         today = date.today()
