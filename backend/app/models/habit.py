@@ -41,7 +41,7 @@ class Habit(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    notifications: Mapped[list["Notification"]] = relationship(back_populates="habit")
+    reminders: Mapped[list["TaskReminder"]] = relationship(back_populates="habit")
     logs: Mapped[list["HabitLog"]] = relationship(back_populates="habit")
 
 

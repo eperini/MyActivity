@@ -66,5 +66,15 @@ celery_app.conf.update(
             "schedule": crontab(hour=7, minute=0, day_of_month=1),
             "args": ("monthly",),
         },
+        # Expire pending invitations: ogni giorno alle 01:00
+        "expire-invitations": {
+            "task": "app.workers.tasks.expire_pending_invitations",
+            "schedule": crontab(hour=1, minute=0),
+        },
+        # Check task due soon: ogni giorno alle 08:00
+        "check-due-soon": {
+            "task": "app.workers.tasks.check_due_soon",
+            "schedule": crontab(hour=8, minute=0),
+        },
     },
 )

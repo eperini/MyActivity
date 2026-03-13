@@ -172,7 +172,7 @@ def backup_database_to_drive(self):
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
 def check_and_send_notifications(self):
     """Controlla e invia le notifiche in scadenza."""
-    from app.models.notification import Notification
+    from app.models.notification import TaskReminder
     from app.models.task import Task
     from app.models.user import User
     from app.services.telegram_service import send_message_sync
@@ -183,9 +183,9 @@ def check_and_send_notifications(self):
         with _SessionLocal() as db:
             # Batch load notifications with tasks and users
             notifications = db.execute(
-                select(Notification)
-                .where(Notification.sent_at.is_(None))
-                .where(Notification.task_id.isnot(None))
+                select(TaskReminder)
+                .where(TaskReminder.sent_at.is_(None))
+                .where(TaskReminder.task_id.isnot(None))
             ).scalars().all()
 
             if not notifications:
@@ -1159,3 +1159,54 @@ def _send_push_to_subs(subs, title, body, db):
                 logger.warning("Push failed for sub %s: %s", sub.id, e)
         except Exception as e:
             logger.warning("Push error for sub %s: %s", sub.id, e)
+
+
+@celery_app.task
+def expire_pending_invitations():
+    """Ogni giorno alle 01:00: marca come 'expired' gli inviti scaduti."""
+    from app.models.sharing import ProjectInvitation, InvitationStatus
+
+    with _SessionLocal() as db:
+        count = db.query(ProjectInvitation).filter(
+            ProjectInvitation.status == InvitationStatus.PENDING.value,
+            ProjectInvitation.expires_at < datetime.now(timezone.utc),
+        ).update({"status": InvitationStatus.EXPIRED.value})
+        db.commit()
+        return f"Scaduti {count} inviti"
+
+
+@celery_app.task
+def check_due_soon():
+    """Ogni mattina alle 08:00: notifica i task in scadenza oggi o domani."""
+    from app.models.task import Task, TaskStatus
+    from app.models.project import Project
+    from app.services.notification_service import NotificationService
+    from app.models.sharing import NotificationType
+
+    with _SessionLocal() as db:
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+
+        tasks = db.execute(
+            select(Task).where(
+                Task.due_date.in_([today, tomorrow]),
+                Task.status != TaskStatus.DONE.value,
+                Task.assigned_to.isnot(None),
+            )
+        ).scalars().all()
+
+        svc = NotificationService(db)
+        for task in tasks:
+            when = "oggi" if task.due_date == today else "domani"
+            project = db.get(Project, task.project_id) if task.project_id else None
+            project_name = project.name if project else ""
+            svc.notify(
+                user_id=task.assigned_to,
+                type=NotificationType.TASK_DUE_SOON,
+                title=f"Task in scadenza {when}",
+                body=f"'{task.title}'" + (f" nel progetto {project_name}" if project_name else ""),
+                task_id=task.id,
+                project_id=task.project_id,
+            )
+        db.commit()
+        return f"Notificati {len(tasks)} task in scadenza"

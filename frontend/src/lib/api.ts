@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig, TempoPushLog, TempoPendingLog, Epic, QuickLogProject } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig, TempoPushLog, TempoPendingLog, Epic, QuickLogProject, ProjectInvitation, ZenoNotification } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -548,3 +548,59 @@ export const getDashboardStats = () => request<{
   focus_sessions_this_week: number;
   by_priority: Record<string, number>;
 }>("/stats/dashboard");
+
+// ─── Invitations ──────────────────────────────────────
+
+export const getProjectInvitations = (projectId: number) =>
+  request<ProjectInvitation[]>(`/projects/${projectId}/invitations/`);
+
+export const sendProjectInvitation = (projectId: number, data: { email: string; role: string }) =>
+  request<ProjectInvitation>(`/projects/${projectId}/invitations/`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const cancelProjectInvitation = (projectId: number, invitationId: number) =>
+  request(`/projects/${projectId}/invitations/${invitationId}`, { method: "DELETE" });
+
+export const getInvitationPreview = (token: string) =>
+  request<ProjectInvitation>(`/invitations/${token}`);
+
+export const acceptInvitation = (token: string, data: { area_id?: number; new_area_name?: string }) =>
+  request<{ status: string; project_id: number }>(`/invitations/${token}/accept`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const declineInvitation = (token: string) =>
+  request<{ status: string }>(`/invitations/${token}/decline`, { method: "POST" });
+
+export const getMyPendingInvitations = () =>
+  request<ProjectInvitation[]>("/invitations/pending/me");
+
+// ─── Notifications ────────────────────────────────────
+
+export const getNotifications = (limit = 50, offset = 0) =>
+  request<{ total: number; unread: number; notifications: ZenoNotification[] }>(
+    `/notifications/?limit=${limit}&offset=${offset}`
+  );
+
+export const getUnreadNotificationCount = () =>
+  request<{ unread: number }>("/notifications/unread-count");
+
+export const markNotificationRead = (id: number) =>
+  request(`/notifications/${id}/read`, { method: "PATCH" });
+
+export const markAllNotificationsRead = () =>
+  request("/notifications/read-all", { method: "PATCH" });
+
+export const deleteNotification = (id: number) =>
+  request(`/notifications/${id}`, { method: "DELETE" });
+
+// ─── Project Members (updated) ────────────────────────
+
+export const updateMemberRole = (projectId: number, memberId: number, role: string) =>
+  request(`/projects/${projectId}/members/${memberId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });

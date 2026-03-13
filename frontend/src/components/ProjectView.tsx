@@ -6,10 +6,11 @@ import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProje
 import { useToast } from "./Toast";
 import TaskItem from "./TaskItem";
 import AddTaskForm from "./AddTaskForm";
-import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X } from "lucide-react";
+import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X, Users } from "lucide-react";
 import CustomFieldEditor from "./CustomFieldEditor";
 import AutomationsView from "./AutomationsView";
 import SprintBoard from "./SprintBoard";
+import ProjectMembersPanel from "./ProjectMembersPanel";
 
 function findList(lists: TaskList[], listId: number) {
   return lists.find((l) => l.id === listId);
@@ -52,7 +53,7 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
   const [showFieldEditor, setShowFieldEditor] = useState(false);
   const [showAutomations, setShowAutomations] = useState(false);
   const [showSprints, setShowSprints] = useState(false);
-  const [activeTab, setActiveTab] = useState<"tasks" | "epics">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "epics" | "members">("tasks");
 
   // Epic inline form
   const [showNewEpic, setShowNewEpic] = useState(false);
@@ -274,6 +275,17 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
             <Zap size={12} className="text-yellow-400" />
             Epic ({epics.length})
           </button>
+          <button
+            onClick={() => setActiveTab("members")}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              activeTab === "members"
+                ? "bg-zinc-700 text-zinc-200"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Users size={12} />
+            Membri
+          </button>
         </div>
       </div>
 
@@ -300,7 +312,14 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
-        {activeTab === "tasks" ? (
+        {activeTab === "members" ? (
+          <ProjectMembersPanel
+            projectId={projectId}
+            currentUserRole={project?.current_user_role}
+            ownerId={project?.owner_id || 0}
+            currentUserId={0}
+          />
+        ) : activeTab === "tasks" ? (
           <>
             {/* Add task button */}
             <button

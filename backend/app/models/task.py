@@ -49,8 +49,8 @@ class Task(Base):
     project: Mapped["Project | None"] = relationship(back_populates="tasks")
     recurrence: Mapped["RecurrenceRule | None"] = relationship(back_populates="task", uselist=False)
     instances: Mapped[list["TaskInstance"]] = relationship(back_populates="task")
-    notifications: Mapped[list["Notification"]] = relationship(
-        back_populates="task", foreign_keys="Notification.task_id"
+    reminders: Mapped[list["TaskReminder"]] = relationship(
+        back_populates="task", foreign_keys="TaskReminder.task_id"
     )
     subtasks: Mapped[list["Task"]] = relationship(back_populates="parent")
     parent: Mapped["Task | None"] = relationship(back_populates="subtasks", remote_side="Task.id")

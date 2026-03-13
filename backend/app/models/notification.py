@@ -12,8 +12,9 @@ class NotificationChannel(str, PyEnum):
     EMAIL = "email"
 
 
-class Notification(Base):
-    __tablename__ = "notifications"
+class TaskReminder(Base):
+    """Task/habit reminder notifications (renamed from notifications to task_reminders)."""
+    __tablename__ = "task_reminders"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[int | None] = mapped_column(
@@ -32,5 +33,5 @@ class Notification(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    task: Mapped["Task | None"] = relationship(back_populates="notifications")
-    habit: Mapped["Habit | None"] = relationship(back_populates="notifications")
+    task: Mapped["Task | None"] = relationship(back_populates="reminders")
+    habit: Mapped["Habit | None"] = relationship(back_populates="reminders")

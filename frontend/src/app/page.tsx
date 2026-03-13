@@ -29,6 +29,7 @@ import WeeklyTimeReport from "@/components/WeeklyTimeReport";
 import ReportsView from "@/components/ReportsView";
 import ProjectView from "@/components/ProjectView";
 import QuickLogView from "@/components/QuickLogView";
+import NotificationsPanel from "@/components/NotificationsPanel";
 import BottomTabBar from "@/components/BottomTabBar";
 import MobileHeader from "@/components/MobileHeader";
 import FloatingAddButton from "@/components/FloatingAddButton";
@@ -272,10 +273,11 @@ export default function HomePage() {
   const isTimeReportView = selectedView === "timereport";
   const isReportsView = selectedView === "reports";
   const isQuickLogView = selectedView === "quicklog";
+  const isNotificationsView = selectedView === "notifications";
   const isProjectView = selectedView.startsWith("project-");
 
   // Check if current view is a task list view (needs TaskDetail)
-  const isTaskListView = !isHabitsView && !isEisenhowerView && !isCalendarView && !isStatsView && !isSettingsView && !isKanbanView && !isTimeReportView && !isReportsView && !isQuickLogView && !isProjectView && selectedView !== "pomodoro";
+  const isTaskListView = !isHabitsView && !isEisenhowerView && !isCalendarView && !isStatsView && !isSettingsView && !isKanbanView && !isTimeReportView && !isReportsView && !isQuickLogView && !isNotificationsView && !isProjectView && selectedView !== "pomodoro";
 
   function renderMainContent() {
     if (isStatsView) {
@@ -337,6 +339,10 @@ export default function HomePage() {
 
     if (isQuickLogView) {
       return <QuickLogView />;
+    }
+
+    if (isNotificationsView) {
+      return <NotificationsPanel open={true} onClose={() => setSelectedView("today")} />;
     }
 
     if (isReportsView) {

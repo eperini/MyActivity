@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.task import Task, TaskStatus
 from app.models.project import Project, ProjectMember, ProjectType, ProjectStatus
 from app.models.custom_field import ProjectCustomField, FieldType
+from app.models.sharing import ProjectRole, UserProjectArea
 
 router = APIRouter()
 
@@ -56,6 +57,8 @@ class ProjectResponse(BaseModel):
     position: int
     task_count: int = 0
     completed_count: int = 0
+    is_shared: bool = False
+    current_user_role: str | None = None
 
     class Config:
         from_attributes = True
@@ -71,7 +74,7 @@ class MemberResponse(BaseModel):
 
 class AddMemberRequest(BaseModel):
     email: EmailStr
-    role: str = Field(default="edit", pattern=r"^(edit|view)$")
+    role: str = Field(default="user", pattern=r"^(admin|super_user|user)$")
 
 
 class ProjectStatsResponse(BaseModel):
@@ -98,30 +101,51 @@ DEFAULT_FIELDS: dict[ProjectType, list[dict]] = {
 }
 
 
-async def _check_project_access(project_id: int, user_id: int, db: AsyncSession) -> Project:
+ROLE_HIERARCHY = {
+    ProjectRole.USER: 0,
+    ProjectRole.SUPER_USER: 1,
+    ProjectRole.ADMIN: 2,
+}
+
+
+async def _check_project_access(
+    project_id: int,
+    user_id: int,
+    db: AsyncSession,
+    min_role: ProjectRole = ProjectRole.USER,
+) -> Project:
+    """
+    Verify user is a member (or owner) of the project with role >= min_role.
+    Owner always has admin-level access.
+    """
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Progetto non trovato")
+
+    # Owner is always admin
     if project.owner_id == user_id:
         return project
-    member = await db.execute(
+
+    result = await db.execute(
         select(ProjectMember).where(
             ProjectMember.project_id == project_id,
             ProjectMember.user_id == user_id,
         )
     )
-    if not member.scalar_one_or_none():
+    member = result.scalar_one_or_none()
+    if not member:
         raise HTTPException(status_code=403, detail="Non hai accesso a questo progetto")
+
+    member_role = ProjectRole(member.role) if member.role in [r.value for r in ProjectRole] else ProjectRole.USER
+    if ROLE_HIERARCHY.get(member_role, 0) < ROLE_HIERARCHY[min_role]:
+        raise HTTPException(status_code=403, detail="Permessi insufficienti")
+
     return project
 
 
 async def _check_project_owner(project_id: int, user_id: int, db: AsyncSession) -> Project:
-    project = await db.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Progetto non trovato")
-    if project.owner_id != user_id:
-        raise HTTPException(status_code=403, detail="Non sei il proprietario di questo progetto")
-    return project
+    """Shortcut: requires admin role (owner always passes)."""
+    return await _check_project_access(project_id, user_id, db, min_role=ProjectRole.ADMIN)
 
 
 @router.get("/", response_model=list[ProjectResponse])
@@ -132,11 +156,9 @@ async def get_projects(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Projects owned by user + projects where user is member
-    owned_ids = select(Project.id).where(Project.owner_id == user.id)
+    # All projects where user is a member (owner is always a member now)
     member_ids = select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
-
-    query = select(Project).where(Project.id.in_(owned_ids.union(member_ids)))
+    query = select(Project).where(Project.id.in_(member_ids))
     if area_id is not None:
         query = query.where(Project.area_id == area_id)
     if status:
@@ -148,20 +170,36 @@ async def get_projects(
     result = await db.execute(query)
     projects = result.scalars().all()
 
+    if not projects:
+        return []
+
+    project_ids = [p.id for p in projects]
+
     # Task counts
-    if projects:
-        count_result = await db.execute(
-            select(
-                Task.project_id,
-                func.count().label("total"),
-                func.count(case((Task.status == TaskStatus.DONE, 1))).label("done"),
-            )
-            .where(Task.project_id.in_([p.id for p in projects]), Task.parent_id.is_(None))
-            .group_by(Task.project_id)
+    count_result = await db.execute(
+        select(
+            Task.project_id,
+            func.count().label("total"),
+            func.count(case((Task.status == TaskStatus.DONE, 1))).label("done"),
         )
-        counts = {row.project_id: (row.total, row.done) for row in count_result.all()}
-    else:
-        counts = {}
+        .where(Task.project_id.in_(project_ids), Task.parent_id.is_(None))
+        .group_by(Task.project_id)
+    )
+    counts = {row.project_id: (row.total, row.done) for row in count_result.all()}
+
+    # Member counts + current user role per project
+    member_count_result = await db.execute(
+        select(ProjectMember.project_id, func.count().label("cnt"))
+        .where(ProjectMember.project_id.in_(project_ids))
+        .group_by(ProjectMember.project_id)
+    )
+    member_counts = {row.project_id: row.cnt for row in member_count_result.all()}
+
+    user_roles_result = await db.execute(
+        select(ProjectMember.project_id, ProjectMember.role)
+        .where(ProjectMember.project_id.in_(project_ids), ProjectMember.user_id == user.id)
+    )
+    user_roles = {row.project_id: row.role for row in user_roles_result.all()}
 
     return [
         ProjectResponse(
@@ -171,6 +209,8 @@ async def get_projects(
             client_name=p.client_name, position=p.position,
             task_count=counts.get(p.id, (0, 0))[0],
             completed_count=counts.get(p.id, (0, 0))[1],
+            is_shared=member_counts.get(p.id, 1) > 1,
+            current_user_role=user_roles.get(p.id),
         )
         for p in projects
     ]
@@ -196,6 +236,11 @@ async def create_project(
     )
     db.add(project)
     await db.flush()
+
+    # Auto-add owner as admin member
+    db.add(ProjectMember(project_id=project.id, user_id=user.id, role=ProjectRole.ADMIN.value))
+    # Auto-create user_project_areas mapping for owner
+    db.add(UserProjectArea(user_id=user.id, project_id=project.id, area_id=data.area_id))
 
     # Auto-create default custom fields based on project_type
     for position, field_def in enumerate(DEFAULT_FIELDS.get(data.project_type, [])):
@@ -333,27 +378,20 @@ async def get_project_members(
     db: AsyncSession = Depends(get_db),
 ):
     await _check_project_access(project_id, user.id, db)
-    project = await db.get(Project, project_id)
-
-    owner = await db.get(User, project.owner_id)
-    members_list = [
-        MemberResponse(id=0, user_id=owner.id, email=owner.email, display_name=owner.display_name, role="owner")
-    ]
 
     result = await db.execute(
         select(ProjectMember, User)
         .join(User, ProjectMember.user_id == User.id)
         .where(ProjectMember.project_id == project_id)
     )
-    for member, member_user in result.all():
-        members_list.append(
-            MemberResponse(
-                id=member.id, user_id=member_user.id,
-                email=member_user.email, display_name=member_user.display_name,
-                role=member.role,
-            )
+    return [
+        MemberResponse(
+            id=member.id, user_id=member_user.id,
+            email=member_user.email, display_name=member_user.display_name,
+            role=member.role,
         )
-    return members_list
+        for member, member_user in result.all()
+    ]
 
 
 @router.post("/{project_id}/members", response_model=MemberResponse)
@@ -393,6 +431,32 @@ async def add_project_member(
     )
 
 
+class UpdateMemberRole(BaseModel):
+    role: str = Field(pattern=r"^(admin|super_user|user)$")
+
+
+@router.patch("/{project_id}/members/{member_id}", response_model=MemberResponse)
+async def update_member_role(
+    project_id: int,
+    member_id: int,
+    data: UpdateMemberRole,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _check_project_access(project_id, user.id, db, min_role=ProjectRole.ADMIN)
+    member = await db.get(ProjectMember, member_id)
+    if not member or member.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Membro non trovato")
+    member.role = data.role
+    await db.commit()
+    member_user = await db.get(User, member.user_id)
+    return MemberResponse(
+        id=member.id, user_id=member.user_id,
+        email=member_user.email, display_name=member_user.display_name,
+        role=member.role,
+    )
+
+
 @router.delete("/{project_id}/members/{member_id}")
 async def remove_project_member(
     project_id: int,
@@ -400,12 +464,14 @@ async def remove_project_member(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project = await _check_project_access(project_id, user.id, db)
+    await _check_project_access(project_id, user.id, db, min_role=ProjectRole.ADMIN)
     member = await db.get(ProjectMember, member_id)
     if not member or member.project_id != project_id:
         raise HTTPException(status_code=404, detail="Membro non trovato")
-    if member.user_id != user.id and project.owner_id != user.id:
-        raise HTTPException(status_code=403, detail="Non autorizzato")
+    # Cannot remove yourself if you're the project owner
+    project = await db.get(Project, project_id)
+    if member.user_id == project.owner_id:
+        raise HTTPException(status_code=400, detail="Non puoi rimuovere il proprietario del progetto")
     await db.delete(member)
     await db.commit()
     return {"detail": "Membro rimosso"}

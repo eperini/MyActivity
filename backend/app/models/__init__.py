@@ -3,7 +3,7 @@ from app.models.user import User
 from app.models.task_list import TaskList, ListMember
 from app.models.task import Task
 from app.models.recurrence import RecurrenceRule, TaskInstance
-from app.models.notification import Notification
+from app.models.notification import TaskReminder, NotificationChannel
 from app.models.habit import Habit, HabitLog
 from app.models.pomodoro import PomodoroSession
 from app.models.push_subscription import PushSubscription
@@ -21,10 +21,14 @@ from app.models.jira import JiraConfig
 from app.models.report import ReportConfig, ReportHistory, ReportType, ReportFrequency
 from app.models.tempo import TempoUser, TempoImportLog, TempoPushLog
 from app.models.epic import Epic, EpicStatus
+from app.models.sharing import (
+    ProjectRole, InvitationStatus, NotificationType,
+    UserProjectArea, ProjectInvitation, AppNotification,
+)
 
 __all__ = [
     "User", "TaskList", "ListMember", "Task",
-    "RecurrenceRule", "TaskInstance", "Notification",
+    "RecurrenceRule", "TaskInstance", "TaskReminder", "NotificationChannel",
     "Habit", "HabitLog", "PomodoroSession", "PushSubscription",
     "Tag", "task_tags", "Comment", "TaskTemplate",
     "Area", "Project", "ProjectMember",
@@ -37,4 +41,6 @@ __all__ = [
     "ReportConfig", "ReportHistory", "ReportType", "ReportFrequency",
     "TempoUser", "TempoImportLog", "TempoPushLog",
     "Epic", "EpicStatus",
+    "ProjectRole", "InvitationStatus", "NotificationType",
+    "UserProjectArea", "ProjectInvitation", "AppNotification",
 ]

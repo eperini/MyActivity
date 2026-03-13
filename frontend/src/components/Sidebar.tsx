@@ -1,9 +1,9 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw, FolderOpen, ChevronDown, ChevronRight, FileBarChart } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw, FolderOpen, ChevronDown, ChevronRight, FileBarChart, Bell } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { TaskList, Area, Project } from "@/types";
-import { createList, updateList, deleteList, reorderLists, resetListOrder, getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject } from "@/lib/api";
+import { createList, updateList, deleteList, reorderLists, resetListOrder, getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject, getUnreadNotificationCount } from "@/lib/api";
 import { useToast } from "./Toast";
 
 interface SidebarProps {
@@ -30,6 +30,7 @@ const NAV_ITEMS = [
   { id: "timereport", label: "Report Ore", icon: Timer },
   { id: "reports", label: "Report", icon: FileBarChart },
   { id: "stats", label: "Statistiche", icon: BarChart3 },
+  { id: "notifications", label: "Notifiche", icon: Bell },
   { id: "settings", label: "Impostazioni", icon: Settings },
 ];
 
@@ -50,6 +51,7 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
   const [dragOverListId, setDragOverListId] = useState<number | null>(null);
   const [areas, setAreas] = useState<Area[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [expandedAreas, setExpandedAreas] = useState<Set<number | null>>(new Set());
   // Area/Project CRUD state
   const [showNewArea, setShowNewArea] = useState(false);
@@ -92,6 +94,19 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
     }
     loadAreasProjects();
   }, [lists]); // reload when lists change (onListCreated triggers)
+
+  // Poll unread notification count every 30 seconds
+  useEffect(() => {
+    async function fetchUnread() {
+      try {
+        const data = await getUnreadNotificationCount();
+        setUnreadNotifCount(data.unread);
+      } catch { /* ignore */ }
+    }
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   function toggleArea(areaId: number | null) {
     setExpandedAreas((prev) => {
@@ -267,7 +282,8 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = selectedView === item.id;
-          const count = taskCounts[item.id] || 0;
+          const count = item.id === "notifications" ? unreadNotifCount : (taskCounts[item.id] || 0);
+          const isNotifBadge = item.id === "notifications" && count > 0;
           return (
             <button
               key={item.id}
@@ -280,9 +296,13 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
             >
               <Icon size={20} className="md:w-[18px] md:h-[18px]" />
               <span className="flex-1 text-left text-base md:text-sm">{item.label}</span>
-              {count > 0 && (
+              {isNotifBadge ? (
+                <span className="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium min-w-[18px] text-center">
+                  {count}
+                </span>
+              ) : count > 0 ? (
                 <span className="text-xs text-zinc-500">{count}</span>
-              )}
+              ) : null}
             </button>
           );
         })}

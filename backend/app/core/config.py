@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     TEMPO_BASE_URL: str = "https://api.tempo.io/4"
     TEMPO_SYNC_INTERVAL_DAYS: int = 7
     TEMPO_DEFAULT_IMPORT_FROM: str = "2026-01-01"
+    FRONTEND_URL: str = "http://localhost:3000"
 
     class Config:
         env_file = ".env"

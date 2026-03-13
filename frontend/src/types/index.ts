@@ -251,6 +251,8 @@ export interface Project {
   position: number;
   task_count: number;
   completed_count: number;
+  is_shared?: boolean;
+  current_user_role?: ProjectRole | null;
 }
 
 export interface ProjectMember {
@@ -455,6 +457,49 @@ export interface QuickLogProject {
   project_name: string;
   jira_key: string;
   epics: Epic[];
+}
+
+// Sharing & Notifications
+export type ProjectRole = 'admin' | 'super_user' | 'user';
+
+export type NotificationType =
+  | 'task_assigned'
+  | 'task_status_changed'
+  | 'task_commented'
+  | 'task_due_soon'
+  | 'project_invitation'
+  | 'sprint_started'
+  | 'sprint_completed'
+  | 'mention'
+  | 'automation_triggered'
+  | 'tempo_sync_error'
+  | 'report_ready';
+
+export type InvitationStatus =
+  | 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled';
+
+export interface ProjectInvitation {
+  id: number;
+  project_id: number;
+  email: string;
+  role: string;
+  status: InvitationStatus;
+  expires_at: string;
+  invited_by_name: string;
+  project_name?: string;
+  created_at: string;
+}
+
+export interface ZenoNotification {
+  id: number;
+  type: NotificationType;
+  title: string;
+  body?: string;
+  is_read: boolean;
+  project_id?: number;
+  task_id?: number;
+  epic_id?: number;
+  created_at: string;
 }
 
 export interface AutomationRule {
