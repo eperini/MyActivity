@@ -64,3 +64,41 @@ async def auth_client(client: AsyncClient):
     token = res.json()["access_token"]
     client.headers["Authorization"] = f"Bearer {token}"
     yield client
+
+
+async def register_user(client: AsyncClient, email: str, display_name: str = "User") -> dict:
+    """Register a user and return {"token": ..., "headers": ..., "email": ...}."""
+    res = await client.post("/api/auth/register", json={
+        "email": email,
+        "password": "securepass1",
+        "display_name": display_name,
+    })
+    assert res.status_code == 200
+    token = res.json()["access_token"]
+    return {
+        "token": token,
+        "headers": {"Authorization": f"Bearer {token}"},
+        "email": email,
+    }
+
+
+async def create_area(client: AsyncClient, headers: dict, name: str = "Test Area") -> dict:
+    """Create an area and return its JSON."""
+    res = await client.post("/api/areas/", json={"name": name}, headers=headers)
+    assert res.status_code == 200
+    return res.json()
+
+
+async def create_project(
+    client: AsyncClient,
+    headers: dict,
+    name: str = "Test Project",
+    area_id: int | None = None,
+) -> dict:
+    """Create a project and return its JSON."""
+    body = {"name": name}
+    if area_id:
+        body["area_id"] = area_id
+    res = await client.post("/api/projects/", json=body, headers=headers)
+    assert res.status_code == 200
+    return res.json()

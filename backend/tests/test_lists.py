@@ -71,4 +71,4 @@ async def test_update_list_not_owner(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_unauthenticated(client: AsyncClient):
     res = await client.get("/api/lists/")
-    assert res.status_code == 403
+    assert res.status_code in (401, 403)

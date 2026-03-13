@@ -1,7 +1,10 @@
 import pytest
 from httpx import AsyncClient
 
-HABIT_DATA = {"name": "Exercise", "frequency_type": "daily", "color": "#10B981", "start_date": "2026-03-01"}
+from datetime import date, timedelta
+
+_today = date.today()
+HABIT_DATA = {"name": "Exercise", "frequency_type": "daily", "color": "#10B981", "start_date": str(_today - timedelta(days=7))}
 
 
 @pytest.mark.asyncio
@@ -28,12 +31,12 @@ async def test_toggle_habit(auth_client: AsyncClient):
     habit_id = create.json()["id"]
 
     # Toggle on
-    res = await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": "2026-03-07"})
+    res = await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": str(_today)})
     assert res.status_code == 200
     assert res.json()["checked"] is True
 
     # Toggle off
-    res = await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": "2026-03-07"})
+    res = await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": str(_today)})
     assert res.status_code == 200
     assert res.json()["checked"] is False
 
@@ -42,9 +45,9 @@ async def test_toggle_habit(auth_client: AsyncClient):
 async def test_habit_stats(auth_client: AsyncClient):
     create = await auth_client.post("/api/habits/", json={**HABIT_DATA, "name": "Stats"})
     habit_id = create.json()["id"]
-    await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": "2026-03-05"})
-    await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": "2026-03-06"})
-    await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": "2026-03-07"})
+    await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": str(_today - timedelta(days=2))})
+    await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": str(_today - timedelta(days=1))})
+    await auth_client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": str(_today)})
 
     res = await auth_client.get(f"/api/habits/{habit_id}/stats")
     assert res.status_code == 200
@@ -78,5 +81,5 @@ async def test_habit_idor(client: AsyncClient):
     t2 = r2.json()["access_token"]
     h2 = {"Authorization": f"Bearer {t2}"}
 
-    res = await client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": "2026-03-07"}, headers=h2)
+    res = await client.post(f"/api/habits/{habit_id}/toggle", json={"log_date": str(_today)}, headers=h2)
     assert res.status_code in (403, 404)
