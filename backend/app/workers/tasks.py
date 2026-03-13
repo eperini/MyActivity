@@ -775,6 +775,163 @@ def _sync_single_jira(db, config):
     db.flush()
 
 
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+def send_periodic_reports(self, frequency: str):
+    """Generate and send all active periodic reports for the given frequency."""
+    from app.models.report import ReportConfig
+    from app.services.report_service import SyncReportService, report_data_to_json
+    from app.services.pdf_generator import PDFGenerator
+    import os
+
+    reports_dir = "/tmp/zeno_reports"
+    os.makedirs(reports_dir, exist_ok=True)
+
+    try:
+        with _SessionLocal() as db:
+            configs = db.query(ReportConfig).filter(
+                ReportConfig.is_active == True,
+                ReportConfig.frequency == frequency,
+            ).all()
+
+            for config in configs:
+                try:
+                    period_from, period_to = _get_report_period(frequency)
+                    svc = SyncReportService(db)
+                    data = svc.build_report_data(
+                        report_type=config.report_type.value,
+                        period_from=period_from,
+                        period_to=period_to,
+                        target_user_id=config.target_user_id,
+                        target_project_id=config.target_project_id,
+                        target_client_name=config.target_client_name,
+                        title=config.name,
+                    )
+
+                    pdf_path = os.path.join(reports_dir, f"report_{config.id}_{period_from}.pdf")
+                    PDFGenerator().generate(data, pdf_path)
+
+                    # Save to history
+                    from app.models.report import ReportHistory
+                    history = ReportHistory(
+                        config_id=config.id,
+                        user_id=config.user_id,
+                        report_type=config.report_type,
+                        title=config.name,
+                        period_from=period_from,
+                        period_to=period_to,
+                        file_path=pdf_path,
+                        data_json=report_data_to_json(data),
+                        status="ok",
+                    )
+                    db.add(history)
+
+                    # Send email if configured
+                    if config.send_email:
+                        email_to = config.email_to or config.user.email
+                        try:
+                            from app.services.email_service import send_report_email
+                            send_report_email(
+                                to=email_to,
+                                subject=f"{config.name} — {period_from.strftime('%B %Y')}",
+                                data=data,
+                                pdf_path=pdf_path,
+                            )
+                        except Exception as e:
+                            logger.warning("Report email failed for config %s: %s", config.id, e)
+
+                    config.last_sent_at = datetime.now(timezone.utc)
+                    db.commit()
+
+                except Exception as e:
+                    logger.error("Periodic report %s failed: %s", config.id, e)
+                    db.rollback()
+
+        logger.info("Periodic %s reports done: %d configs", frequency, len(configs))
+    except Exception as exc:
+        logger.error("Periodic reports error: %s", exc)
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
+def run_periodic_report_now(self, config_id: int):
+    """Run a single periodic report config immediately (for testing)."""
+    from app.models.report import ReportConfig, ReportHistory
+    from app.services.report_service import SyncReportService, report_data_to_json
+    from app.services.pdf_generator import PDFGenerator
+    import os
+
+    reports_dir = "/tmp/zeno_reports"
+    os.makedirs(reports_dir, exist_ok=True)
+
+    try:
+        with _SessionLocal() as db:
+            config = db.get(ReportConfig, config_id)
+            if not config:
+                return
+
+            period_from, period_to = _get_report_period(config.frequency.value)
+            svc = SyncReportService(db)
+            data = svc.build_report_data(
+                report_type=config.report_type.value,
+                period_from=period_from,
+                period_to=period_to,
+                target_user_id=config.target_user_id,
+                target_project_id=config.target_project_id,
+                target_client_name=config.target_client_name,
+                title=config.name,
+            )
+
+            pdf_path = os.path.join(reports_dir, f"report_{config.id}_{period_from}.pdf")
+            PDFGenerator().generate(data, pdf_path)
+
+            history = ReportHistory(
+                config_id=config.id,
+                user_id=config.user_id,
+                report_type=config.report_type,
+                title=config.name,
+                period_from=period_from,
+                period_to=period_to,
+                file_path=pdf_path,
+                data_json=report_data_to_json(data),
+                status="ok",
+            )
+            db.add(history)
+
+            if config.send_email:
+                email_to = config.email_to or config.user.email
+                try:
+                    from app.services.email_service import send_report_email
+                    send_report_email(
+                        to=email_to,
+                        subject=f"{config.name} — {period_from.strftime('%B %Y')}",
+                        data=data,
+                        pdf_path=pdf_path,
+                    )
+                except Exception as e:
+                    logger.warning("Report email failed for config %s: %s", config.id, e)
+
+            config.last_sent_at = datetime.now(timezone.utc)
+            db.commit()
+
+    except Exception as exc:
+        logger.error("Run report now error for config %s: %s", config_id, exc)
+        raise self.retry(exc=exc)
+
+
+def _get_report_period(frequency: str) -> tuple[date, date]:
+    """Calculate the report period based on frequency."""
+    today = date.today()
+    if frequency == "weekly":
+        last_monday = today - timedelta(days=today.weekday() + 7)
+        last_sunday = last_monday + timedelta(days=6)
+        return last_monday, last_sunday
+    else:
+        first_this_month = today.replace(day=1)
+        last_month_end = first_this_month - timedelta(days=1)
+        last_month_start = last_month_end.replace(day=1)
+        return last_month_start, last_month_end
+
+
 def _send_push_to_subs(subs, title, body, db):
     """Send web push notifications to subscriptions."""
     import json

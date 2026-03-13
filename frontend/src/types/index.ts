@@ -304,6 +304,59 @@ export interface JiraProject {
   name: string;
 }
 
+// Reports
+export type ReportType = 'person' | 'project' | 'client';
+export type ReportFrequency = 'weekly' | 'monthly';
+
+export interface ReportHistoryItem {
+  id: number;
+  report_type: ReportType;
+  title: string | null;
+  period_from: string;
+  period_to: string;
+  generated_at: string;
+  status: string;
+  has_pdf: boolean;
+  has_excel: boolean;
+  summary: {
+    total_logged_minutes: number;
+    total_done_tasks: number;
+    total_open_tasks: number;
+    avg_completion_pct: number;
+  } | null;
+}
+
+export interface ReportConfigItem {
+  id: number;
+  name: string;
+  report_type: ReportType;
+  frequency: ReportFrequency;
+  target_user_id: number | null;
+  target_project_id: number | null;
+  target_client_name: string | null;
+  is_active: boolean;
+  send_email: boolean;
+  email_to: string | null;
+  last_sent_at: string | null;
+  created_at: string;
+}
+
+export interface ReportGenerateResult {
+  history_id: number;
+  title: string;
+  generated_at: string;
+  downloads: {
+    pdf: string | null;
+    excel: string | null;
+  };
+  summary: {
+    total_logged_minutes: number;
+    total_done_tasks: number;
+    total_open_tasks: number;
+    avg_completion_pct: number;
+  };
+}
+
 export interface AutomationRule {
   id: number;
   project_id: number;

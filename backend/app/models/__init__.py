@@ -18,6 +18,7 @@ from app.models.automation import AutomationRule, TriggerType, ActionType
 from app.models.sprint import Sprint, SprintStatus, sprint_tasks
 from app.models.time_log import TimeLog
 from app.models.jira import JiraConfig
+from app.models.report import ReportConfig, ReportHistory, ReportType, ReportFrequency
 
 __all__ = [
     "User", "TaskList", "ListMember", "Task",
@@ -31,4 +32,5 @@ __all__ = [
     "Sprint", "SprintStatus", "sprint_tasks",
     "TimeLog",
     "JiraConfig",
+    "ReportConfig", "ReportHistory", "ReportType", "ReportFrequency",
 ]

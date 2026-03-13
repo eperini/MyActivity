@@ -65,6 +65,7 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/google-credentials.json:/app/google-credentials.json:ro
+      - reports_data:/tmp/zeno_reports
     networks:
       - internal
       - frontend
@@ -105,6 +106,7 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/google-credentials.json:/app/google-credentials.json:ro
+      - reports_data:/tmp/zeno_reports
     networks:
       - internal
     depends_on:
@@ -170,3 +172,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  reports_data:

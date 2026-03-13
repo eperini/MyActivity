@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject } from "@/types";
+import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -423,6 +423,54 @@ export const pushTaskToJira = (taskId: number) =>
   request<{ jira_key: string; jira_url: string }>(`/tasks/${taskId}/jira/push`, { method: "POST" });
 export const unlinkTaskFromJira = (taskId: number) =>
   request<{ detail: string }>(`/tasks/${taskId}/jira/unlink`, { method: "DELETE" });
+
+// Reports
+export const generateReport = (data: {
+  report_type: ReportType;
+  period_from: string;
+  period_to: string;
+  target_user_id?: number;
+  target_project_id?: number;
+  target_client_name?: string;
+  title?: string;
+  formats?: string[];
+}) => request<ReportGenerateResult>("/reports/generate", { method: "POST", body: JSON.stringify(data) });
+
+export const getReportHistory = () =>
+  request<ReportHistoryItem[]>("/reports/history");
+
+export const deleteReportHistory = (id: number) =>
+  request<{ detail: string }>(`/reports/history/${id}`, { method: "DELETE" });
+
+export const getReportClients = () =>
+  request<string[]>("/reports/clients");
+
+export const getReportConfigs = () =>
+  request<ReportConfigItem[]>("/reports/configs");
+
+export const createReportConfig = (data: {
+  name: string;
+  report_type: ReportType;
+  frequency: string;
+  target_user_id?: number;
+  target_project_id?: number;
+  target_client_name?: string;
+  send_email?: boolean;
+  email_to?: string;
+}) => request<ReportConfigItem>("/reports/configs", { method: "POST", body: JSON.stringify(data) });
+
+export const updateReportConfig = (id: number, data: {
+  name?: string;
+  is_active?: boolean;
+  send_email?: boolean;
+  email_to?: string;
+}) => request<ReportConfigItem>(`/reports/configs/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+
+export const deleteReportConfig = (id: number) =>
+  request<{ detail: string }>(`/reports/configs/${id}`, { method: "DELETE" });
+
+export const runReportConfigNow = (id: number) =>
+  request<{ detail: string }>(`/reports/configs/${id}/run-now`, { method: "POST" });
 
 // Stats
 export const getDashboardStats = () => request<{

@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw, FolderOpen, ChevronDown, ChevronRight } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw, FolderOpen, ChevronDown, ChevronRight, FileBarChart } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { TaskList, Area, Project } from "@/types";
 import { createList, updateList, deleteList, reorderLists, resetListOrder, getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject } from "@/lib/api";
@@ -27,6 +27,7 @@ const NAV_ITEMS = [
   { id: "eisenhower", label: "Eisenhower", icon: Grid2x2 },
   { id: "pomodoro", label: "Pomodoro", icon: Timer },
   { id: "timereport", label: "Report Ore", icon: Timer },
+  { id: "reports", label: "Report", icon: FileBarChart },
   { id: "stats", label: "Statistiche", icon: BarChart3 },
   { id: "settings", label: "Impostazioni", icon: Settings },
 ];
