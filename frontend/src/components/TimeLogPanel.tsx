@@ -184,47 +184,62 @@ export default function TimeLogPanel({ taskId, estimatedMinutes, timeLoggedMinut
 
       {/* Add form */}
       {showForm && (
-        <div className="ml-7 bg-zinc-800/50 rounded-lg p-3 space-y-2">
-          <div className="flex items-center gap-2">
+        <div className="ml-7 bg-zinc-800/50 rounded-xl p-4 space-y-3 border border-zinc-700/50">
+          <div className="flex items-center gap-3 flex-wrap">
             <input
               type="date"
               value={logDate}
               onChange={(e) => setLogDate(e.target.value)}
-              className="bg-zinc-900 rounded px-2 py-1 text-xs text-zinc-300 outline-none"
+              className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500"
             />
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <input
                 type="number"
                 min={0}
                 max={23}
                 value={hours}
                 onChange={(e) => setHours(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-12 bg-zinc-900 rounded px-2 py-1 text-xs text-zinc-300 outline-none text-center"
+                className="w-14 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-zinc-300 outline-none text-center focus:border-zinc-500"
               />
-              <span className="text-xs text-zinc-500">h</span>
+              <span className="text-sm text-zinc-500">h</span>
               <input
                 type="number"
                 min={0}
                 max={59}
                 value={mins}
                 onChange={(e) => setMins(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                className="w-12 bg-zinc-900 rounded px-2 py-1 text-xs text-zinc-300 outline-none text-center"
+                className="w-14 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-zinc-300 outline-none text-center focus:border-zinc-500"
               />
-              <span className="text-xs text-zinc-500">m</span>
+              <span className="text-sm text-zinc-500">m</span>
             </div>
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {[{ l: "1h", h: 1, m: 0 }, { l: "1,5h", h: 1, m: 30 }, { l: "2h", h: 2, m: 0 }, { l: "3h", h: 3, m: 0 }, { l: "4h", h: 4, m: 0 }, { l: "5h", h: 5, m: 0 }, { l: "6h", h: 6, m: 0 }, { l: "7h", h: 7, m: 0 }, { l: "8h", h: 8, m: 0 }].map(s => (
+              <button
+                key={s.l}
+                onClick={() => { setHours(s.h); setMins(s.m); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  hours === s.h && mins === s.m
+                    ? "bg-blue-600 text-white"
+                    : "bg-zinc-700/50 hover:bg-zinc-700 text-zinc-400"
+                }`}
+              >
+                {s.l}
+              </button>
+            ))}
           </div>
           <div className="flex gap-2">
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Nota (opzionale)..."
-              className="flex-1 bg-zinc-900 rounded px-2 py-1 text-xs text-zinc-300 outline-none placeholder-zinc-600"
+              className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none placeholder-zinc-600 focus:border-zinc-500"
               onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
             />
             <button
               onClick={handleAdd}
               disabled={saving || (hours * 60 + mins <= 0)}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded text-xs text-white transition-colors"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg text-sm text-white font-medium transition-colors"
             >
               Salva
             </button>
