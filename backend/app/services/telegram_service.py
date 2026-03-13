@@ -1,5 +1,5 @@
 """
-Servizio Telegram Bot per MyActivity.
+Servizio Telegram Bot per Zeno.
 
 Il bot gestisce:
 - /start -> registra il chat_id dell'utente per ricevere notifiche

@@ -15,7 +15,7 @@ from app.core.limiter import limiter
 limiter.enabled = False
 
 # Use test database in the same PostgreSQL
-TEST_DATABASE_URL = "postgresql+asyncpg://myactivity:ebfbff67abaf4de438faba1ec236ca92@localhost:5432/myactivity_test"
+TEST_DATABASE_URL = "postgresql+asyncpg://myactivity:ebfbff67abaf4de438faba1ec236ca92@localhost:5432/zeno_test"
 engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestSession = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 

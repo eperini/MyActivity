@@ -124,7 +124,7 @@ def backup_database_to_drive(self):
     env["PGPASSWORD"] = parsed.password or ""
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"myactivity_{timestamp}.sql.gz"
+    filename = f"zeno_{timestamp}.sql.gz"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         sql_path = os.path.join(tmpdir, "dump.sql")
@@ -136,8 +136,8 @@ def backup_database_to_drive(self):
                 "pg_dump",
                 "-h", parsed.hostname or "db",
                 "-p", str(parsed.port or 5432),
-                "-U", parsed.username or "myactivity",
-                "-d", parsed.path.lstrip("/") if parsed.path else "myactivity",
+                "-U", parsed.username or "zeno",
+                "-d", parsed.path.lstrip("/") if parsed.path else "zeno",
                 "--no-owner",
                 "--no-acl",
                 "-f", sql_path,
@@ -533,7 +533,7 @@ def _build_report_html(display_name, today, overdue, today_tasks, tomorrow_tasks
       <p style="color:#888;margin-top:0">{display_name} · {today.strftime('%A %d %B %Y')}</p>
       {sections}
       <hr style="border-color:#333;margin-top:24px">
-      <p style="color:#666;font-size:12px;text-align:center">MyActivity</p>
+      <p style="color:#666;font-size:12px;text-align:center">Zeno</p>
     </div>
     """
 

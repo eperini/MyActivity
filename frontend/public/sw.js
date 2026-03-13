@@ -1,4 +1,4 @@
-const CACHE_NAME = "myactivity-v2";
+const CACHE_NAME = "zeno-v1";
 const PRECACHE_URLS = ["/", "/login"];
 
 self.addEventListener("install", (event) => {
@@ -55,7 +55,7 @@ self.addEventListener("fetch", (event) => {
 
 // Push notifications
 self.addEventListener("push", (event) => {
-  let data = { title: "MyActivity", body: "Nuova notifica", icon: "/icons/icon-192.png" };
+  let data = { title: "Zeno", body: "Nuova notifica", icon: "/icons/icon-192.png" };
   if (event.data) {
     try {
       data = { ...data, ...event.data.json() };

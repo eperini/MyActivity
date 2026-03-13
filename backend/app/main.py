@@ -11,7 +11,7 @@ from app.core.limiter import limiter
 if not settings.SECRET_KEY:
     raise RuntimeError("SECRET_KEY must be set in environment variables")
 
-app = FastAPI(title=settings.APP_NAME, version="0.1.0")
+app = FastAPI(title=settings.APP_NAME, version="3.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

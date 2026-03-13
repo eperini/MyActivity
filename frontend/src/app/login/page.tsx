@@ -34,7 +34,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
       <div className="w-full max-w-sm p-8">
-        <h1 className="text-2xl font-bold text-white mb-1">MyActivity</h1>
+        <h1 className="text-2xl font-bold text-white mb-1">Zeno</h1>
         <p className="text-sm text-zinc-500 mb-8">
           {isRegister ? "Crea un nuovo account" : "Accedi al tuo account"}
         </p>

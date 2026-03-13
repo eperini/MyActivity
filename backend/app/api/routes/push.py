@@ -86,7 +86,7 @@ async def send_test_push(
         raise HTTPException(status_code=404, detail="Nessuna iscrizione push trovata")
 
     payload = json.dumps({
-        "title": "MyActivity",
+        "title": "Zeno",
         "body": "Le notifiche push funzionano!",
         "icon": "/icons/icon-192.png",
     })

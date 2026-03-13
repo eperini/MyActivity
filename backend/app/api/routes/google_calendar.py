@@ -53,7 +53,7 @@ async def trigger_sync(
     if not sync_list_id:
         raise HTTPException(status_code=400, detail="Lista di sincronizzazione non configurata")
 
-    # --- Push: MyActivity → Google ---
+    # --- Push: Zeno → Google ---
     result = await db.execute(
         select(Task).where(
             Task.list_id == sync_list_id,
@@ -73,7 +73,7 @@ async def trigger_sync(
 
     await db.commit()
 
-    # --- Pull: Google → MyActivity ---
+    # --- Pull: Google → Zeno ---
     pulled = 0
     try:
         events = fetch_calendar_events(days_back=7, days_forward=60)
@@ -103,9 +103,9 @@ async def trigger_sync(
             if not event_id or event_id in existing_event_ids:
                 continue
 
-            # Skip events created by MyActivity
+            # Skip events created by Zeno
             ext_props = event.get("extendedProperties", {}).get("private", {})
-            if ext_props.get("myactivity_task_id"):
+            if ext_props.get("zeno_task_id") or ext_props.get("myactivity_task_id"):
                 continue
 
             recurring_id = event.get("recurringEventId")

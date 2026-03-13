@@ -1,6 +1,6 @@
 {
-  "name": "MyActivity",
-  "short_name": "MyActivity",
+  "name": "Zeno",
+  "short_name": "Zeno",
   "description": "Gestisci i tuoi task e abitudini",
   "start_url": "/",
   "display": "standalone",

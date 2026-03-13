@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: myactivity-db
+    container_name: zeno-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: myactivity
@@ -21,7 +21,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: myactivity-redis
+    container_name: zeno-redis
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -37,7 +37,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: myactivity-backend
+    container_name: zeno-backend
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db:5432/myactivity
@@ -46,7 +46,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
-      VAPID_MAILTO: ${VAPID_MAILTO:-mailto:admin@myactivity.local}
+      VAPID_MAILTO: ${VAPID_MAILTO:-mailto:admin@zeno.local}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       GOOGLE_CREDENTIALS_FILE: /app/google-credentials.json
       GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}
@@ -74,7 +74,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: myactivity-celery-worker
+    container_name: zeno-celery-worker
     restart: unless-stopped
     command: celery -A app.workers.celery_app worker --loglevel=info
     environment:
@@ -90,10 +90,10 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-noreply@myactivity.local}
+      SMTP_FROM: ${SMTP_FROM:-noreply@zeno.local}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
-      VAPID_MAILTO: ${VAPID_MAILTO:-mailto:admin@myactivity.local}
+      VAPID_MAILTO: ${VAPID_MAILTO:-mailto:admin@zeno.local}
     volumes:
       - ./backend/app:/app/app
       - ./backend/google-credentials.json:/app/google-credentials.json:ro
@@ -109,7 +109,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: myactivity-celery-beat
+    container_name: zeno-celery-beat
     restart: unless-stopped
     command: celery -A app.workers.celery_app beat --loglevel=info
     environment:
@@ -134,7 +134,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: myactivity-telegram-bot
+    container_name: zeno-telegram-bot
     restart: unless-stopped
     command: python -m app.bot
     environment:

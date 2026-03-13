@@ -133,7 +133,7 @@ async def migrate():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  myActivity v2 — Migrazione dati")
+    print("  Zeno v2 — Migrazione dati")
     print("=" * 60)
     print()
     print("Questa operazione:")

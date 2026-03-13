@@ -40,7 +40,7 @@ async def generate_link_code(
     code = generate_code(user.id)
 
     bot_info = await get_bot_info()
-    bot_username = bot_info["username"] if bot_info else "myactivity_bot"
+    bot_username = bot_info["username"] if bot_info else "zeno_bot"
 
     return LinkResponse(
         code=code,
@@ -201,7 +201,7 @@ async def telegram_webhook(
     if text.startswith("/help"):
         await send_message(
             chat_id,
-            "<b>MyActivity Bot</b>\n\n"
+            "<b>Zeno Bot</b>\n\n"
             "/tasks - Mostra i task di oggi\n"
             "/help - Mostra questo messaggio",
         )

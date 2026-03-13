@@ -30,7 +30,7 @@ def _task_to_event(task) -> dict:
         "summary": task.title,
         "description": task.description or "",
         "extendedProperties": {
-            "private": {"myactivity_task_id": str(task.id)}
+            "private": {"zeno_task_id": str(task.id)}
         },
     }
 

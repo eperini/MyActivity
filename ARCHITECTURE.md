@@ -1,11 +1,16 @@
-# myActivity - Documentazione Architetturale
+# Zeno - Documentazione Architetturale
 
 ## Panoramica
 
-**myActivity** e' un'applicazione self-hosted per la gestione di task, abitudini e produttivita personale, ispirata a TickTick. Progettata per uso familiare multi-utente, gira interamente su un Mac Mini tramite Docker Desktop.
+**Zeno** (precedentemente myActivity) e' un'applicazione self-hosted per la gestione di task, abitudini e produttivita personale, ispirata a TickTick. Progettata per uso familiare multi-utente, gira interamente su un Mac Mini tramite Docker Desktop.
 
 ### Obiettivi principali
 - Gestione task con ricorrenze avanzate (inclusi pattern lavorativi)
+- Organizzazione gerarchica: Aree → Progetti → Task (v2)
+- Campi custom per progetto con default per tipo (v2)
+- Dipendenze tra task con rilevamento cicli (v2)
+- Automazioni regole-based per progetto (v2)
+- Sprint con metriche di avanzamento (v2)
 - Tracking abitudini con streak e statistiche
 - Notifiche proattive via Telegram, Web Push e Email
 - Matrice di Eisenhower per prioritizzazione visiva
@@ -132,7 +137,7 @@ myActivity/
 │       │   ├── __init__.py       # Import ALL models (relationship resolution)
 │       │   ├── user.py           # User (email, telegram_chat_id, api_key, is_admin)
 │       │   ├── task_list.py      # TaskList (position) + ListMember (roles)
-│       │   ├── task.py           # Task (priority 1-4, status enum, parent_id)
+│       │   ├── task.py           # Task (priority 1-4, status enum, parent_id, project_id, custom_fields JSONB)
 │       │   ├── recurrence.py     # RecurrenceRule + TaskInstance
 │       │   ├── notification.py   # Notification (channel, offset)
 │       │   ├── habit.py          # Habit + HabitLog
@@ -140,7 +145,13 @@ myActivity/
 │       │   ├── push.py           # PushSubscription (VAPID)
 │       │   ├── tag.py            # Tag + task_tags association
 │       │   ├── comment.py        # Comment
-│       │   └── template.py       # TaskTemplate (JSON subtasks/recurrence)
+│       │   ├── template.py       # TaskTemplate (JSON subtasks/recurrence)
+│       │   ├── area.py           # Area (name, color, icon, position, owner_id) [v2]
+│       │   ├── project.py        # Project + ProjectMember (area_id, type, status) [v2]
+│       │   ├── custom_field.py   # ProjectCustomField (field_type, options JSONB) [v2]
+│       │   ├── dependency.py     # TaskDependency (blocks/relates_to/duplicates) [v2]
+│       │   ├── automation.py     # AutomationRule (trigger/action types, JSONB config) [v2]
+│       │   └── sprint.py         # Sprint + sprint_tasks association (planned/active/completed) [v2]
 │       ├── api/routes/
 │       │   ├── auth.py           # Register, login, logout, profile, API key
 │       │   ├── lists.py          # CRUD liste + reorder + members
@@ -158,7 +169,13 @@ myActivity/
 │       │   ├── comments.py       # CRUD commenti su task
 │       │   ├── quickadd.py       # Quick add con linguaggio naturale
 │       │   ├── shortcut.py       # API key endpoint per iOS Shortcuts
-│       │   └── templates.py      # CRUD template + from-task + instantiate
+│       │   ├── templates.py      # CRUD template + from-task + instantiate
+│       │   ├── areas.py          # CRUD aree + reorder [v2]
+│       │   ├── projects.py       # CRUD progetti + members + stats [v2]
+│       │   ├── custom_fields.py  # CRUD campi custom + reorder [v2]
+│       │   ├── dependencies.py   # Dipendenze task + cycle detection [v2]
+│       │   ├── automations.py    # CRUD regole automazione + toggle [v2]
+│       │   └── sprints.py        # CRUD sprint + add/remove task [v2]
 │       ├── services/
 │       │   ├── recurrence_service.py  # RRULE builder, occorrenze, workday adjust
 │       │   ├── telegram_service.py    # send_message async/sync
@@ -168,7 +185,7 @@ myActivity/
 │       │   └── quickadd_parser.py     # Parser italiano (regex-based)
 │       └── workers/
 │           ├── celery_app.py     # Celery config, beat schedule
-│           └── tasks.py          # Istanze ricorrenti, notifiche, report, backup
+│           └── tasks.py          # Istanze ricorrenti, notifiche, report, backup, evaluate_automations [v2]
 │
 └── frontend/
     ├── package.json
@@ -184,11 +201,11 @@ myActivity/
         │   ├── page.tsx          # Dashboard principale (routing viste)
         │   └── login/page.tsx    # Login/Register form
         ├── components/
-        │   ├── Sidebar.tsx       # Navigazione + liste + drag & drop reorder
+        │   ├── Sidebar.tsx       # Navigazione + liste + aree/progetti [v2] + drag & drop reorder
         │   ├── TaskListView.tsx  # Lista task filtrata + ordinamento
         │   ├── TaskItem.tsx      # Riga task (checkbox, badge, date, subtask progress)
-        │   ├── TaskDetail.tsx    # Pannello dettaglio (edit, subtask, tag, commenti, template)
-        │   ├── AddTaskForm.tsx   # Creazione task (structured + quick + template)
+        │   ├── TaskDetail.tsx    # Pannello dettaglio (edit, subtask, tag, commenti, template, custom fields, dipendenze) [v2]
+        │   ├── AddTaskForm.tsx   # Creazione task (structured + quick + template, defaultProjectId) [v2]
         │   ├── DatePicker.tsx    # Calendario popup (shortcuts + griglia + orario)
         │   ├── DayCalendar.tsx   # Vista giornaliera con timeline
         │   ├── CalendarView.tsx  # Calendario mensile con task
@@ -205,7 +222,13 @@ myActivity/
         │   ├── Toast.tsx         # ToastProvider context, auto-dismiss 4s
         │   ├── BottomTabBar.tsx  # Tab bar mobile (5 tab con ciclo "More")
         │   ├── MobileHeader.tsx  # Header mobile con hamburger
-        │   └── FloatingAddButton.tsx # FAB mobile
+        │   ├── FloatingAddButton.tsx # FAB mobile
+        │   ├── ProjectView.tsx       # Vista progetto (header, stats, task, pannelli) [v2]
+        │   ├── CustomFieldsPanel.tsx  # Pannello campi custom in TaskDetail [v2]
+        │   ├── CustomFieldEditor.tsx  # Editor definizioni campi custom [v2]
+        │   ├── DependenciesPanel.tsx  # Pannello dipendenze in TaskDetail [v2]
+        │   ├── AutomationsView.tsx    # Editor regole automazione [v2]
+        │   └── SprintBoard.tsx        # Board sprint con metriche [v2]
         ├── hooks/
         │   └── useIsMobile.ts    # Breakpoint md (768px)
         ├── lib/
@@ -282,6 +305,35 @@ SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
 - **Ordinamento**: per data in tutte le viste lista
 - **Vista Oggi/Prossimi 7gg**: include task scaduti (overdue)
 
+### 11. Aree e Progetti (v2) — Backward compatibility
+
+**Decisione**: I task mantengono sia `list_id` (obbligatorio) che `project_id` (opzionale). Le liste restano per la condivisione e le viste tradizionali, i progetti aggiungono organizzazione gerarchica.
+
+**Gerarchia**: Area → Progetto → Task. Le aree sono contenitori tematici (es. Family, Lavoro). I progetti hanno tipo (technical/administrative/personal), stato (active/on_hold/completed/archived), e membri con ruoli.
+
+### 12. Campi custom per tipo progetto (v2)
+
+**Decisione**: Alla creazione di un progetto, vengono auto-popolati campi custom di default in base al `project_type`:
+- **technical**: Sprint, Story Points, Component, Branch Name
+- **administrative**: Budget, Deadline, Priority Level, Owner
+- **personal**: Category, Notes, Reminder Date
+
+I campi sono definiti in `ProjectCustomField` e i valori salvati come JSONB (`custom_fields`) nel Task.
+
+### 13. Rilevamento cicli nelle dipendenze (v2)
+
+**Soluzione**: Recursive CTE in PostgreSQL per verificare che aggiungere una dipendenza `blocks` non crei un ciclo. Solo il tipo `blocks` viene verificato (non `relates_to` o `duplicates`).
+
+### 14. Automazioni con depth guard (v2)
+
+**Problema**: Le automazioni possono causare loop infiniti (es. status_changed → change_status → status_changed).
+
+**Soluzione**: Il Celery task `evaluate_automations` accetta un parametro `depth` (max 3). L'azione `create_task` non re-triggera automazioni. Tutte le azioni sono wrappate in try/except per isolamento errori.
+
+### 15. Sprint con task condivisi (v2)
+
+**Decisione**: `sprint_tasks` e' una tabella di associazione N:M — un task puo' appartenere a piu' sprint (es. backlog → sprint attivo). Gli sprint hanno status transitions: planned → active → completed.
+
 ---
 
 ## Sicurezza
@@ -292,9 +344,14 @@ SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
 - **bcrypt** per hashing password (diretto, min 8 char, max 128 char)
 - **API key** hashata con SHA-256 nel DB per iOS Shortcuts
 - **List access check**: owner O membro su tutte le operazioni task
-- **IDOR fix**: comments, tags, push subscription verificano accesso
+- **Project access check** (v2): owner O membro su tutte le operazioni progetto
+- **IDOR fix**: comments, tags, push subscription, project_id assignment verificano accesso
 - **Rate limiting**: `slowapi` 5 req/min su `/auth/login` e `/auth/register`
 - **Backup**: solo admin (is_admin check)
+- **FK ondelete** (v2): tasks.created_by e assigned_to usano SET NULL (non CASCADE)
+- **Automation depth guard** (v2): max 3 livelli di ricorsione per prevenire loop infiniti
+- **Cycle detection** (v2): recursive CTE per dipendenze task (tipo blocks)
+- **Sprint task access** (v2): verifica list_access prima di aggiungere task a sprint
 
 ### Validazione Input
 - **Title**: max 500 char
@@ -339,18 +396,88 @@ lists                          tasks
 ├── name                       ├── title
 ├── color                      ├── description
 ├── icon                       ├── list_id (FK -> lists, CASCADE)
-├── owner_id (FK -> users)     ├── created_by (FK -> users)
-├── position (INT, default 0)  ├── assigned_to (FK -> users, nullable)
+├── owner_id (FK -> users)     ├── created_by (FK -> users, SET NULL)
+├── position (INT, default 0)  ├── assigned_to (FK -> users, SET NULL, nullable)
 ├── created_at                 ├── priority (1-4)
 │                              ├── status (todo/doing/done)
 list_members                   ├── due_date
 ├── id (PK)                    ├── due_time
 ├── list_id (FK, CASCADE)      ├── completed_at
 ├── user_id (FK, CASCADE)      ├── parent_id (self-ref FK, CASCADE)
-└── role (edit/view)           ├── google_event_id (nullable)
+└── role (edit/view)           ├── project_id (FK -> projects, SET NULL, nullable) [v2]
+                               ├── custom_fields (JSONB, nullable) [v2]
+                               ├── google_event_id (nullable)
                                ├── position (INT)
                                ├── created_at
                                └── updated_at
+```
+
+### Aree e Progetti (v2)
+```
+areas                          projects
+├── id (PK)                    ├── id (PK)
+├── name                       ├── area_id (FK -> areas, SET NULL, nullable)
+├── color                      ├── name
+├── icon                       ├── description
+├── owner_id (FK -> users)     ├── project_type (technical/administrative/personal)
+├── position (INT)             ├── status (active/on_hold/completed/archived)
+└── created_at                 ├── color / icon
+                               ├── owner_id (FK -> users, CASCADE)
+project_members                ├── start_date / target_date
+├── id (PK)                    ├── client_name
+├── project_id (FK, CASCADE)   ├── position (INT)
+├── user_id (FK, CASCADE)      ├── created_at
+└── role (admin/edit/view)     └── updated_at
+
+project_custom_fields
+├── id (PK)
+├── project_id (FK -> projects, CASCADE)
+├── name
+├── field_key (UNIQUE con project_id)
+├── field_type (text/number/date/select/multi_select/boolean/url)
+├── options (JSONB, nullable)
+├── default_value (JSONB, nullable)
+├── is_required (BOOLEAN)
+└── position (INT)
+```
+
+### Dipendenze Task (v2)
+```
+task_dependencies
+├── id (PK)
+├── blocking_task_id (FK -> tasks, CASCADE)
+├── blocked_task_id (FK -> tasks, CASCADE)
+├── dependency_type (blocks/relates_to/duplicates)
+├── created_at
+├── UNIQUE (blocking_task_id, blocked_task_id)
+└── CHECK (blocking_task_id != blocked_task_id)
+```
+
+### Automazioni (v2)
+```
+automation_rules
+├── id (PK)
+├── project_id (FK -> projects, CASCADE)
+├── name
+├── is_active (BOOLEAN)
+├── trigger_type (status_changed/due_date_passed/task_created/all_subtasks_done/assigned_to_changed)
+├── trigger_config (JSONB)
+├── action_type (change_status/assign_to/create_task/send_notification/set_field)
+├── action_config (JSONB)
+├── created_at
+└── last_triggered
+```
+
+### Sprint (v2)
+```
+sprints                        sprint_tasks (association)
+├── id (PK)                    ├── sprint_id (FK -> sprints, CASCADE)
+├── project_id (FK, CASCADE)   └── task_id (FK -> tasks, CASCADE)
+├── name
+├── goal
+├── start_date / end_date
+├── status (planned/active/completed)
+└── created_at
 ```
 
 ### Tags & Commenti
@@ -417,9 +544,15 @@ notifications                  ├── user_id (FK)
 ```
 
 ### DB Indexes
-- `tasks`: list_id, created_by, assigned_to, status, due_date, parent_id
+- `tasks`: list_id, created_by, assigned_to, status, due_date, parent_id, project_id
 - `notifications`: task_id, user_id, sent_at
 - `comments`: task_id
+- `areas`: owner_id
+- `projects`: area_id, owner_id
+- `project_custom_fields`: project_id, UNIQUE(project_id, field_key)
+- `task_dependencies`: blocking_task_id, blocked_task_id, UNIQUE(blocking, blocked)
+- `automation_rules`: project_id
+- `sprints`: project_id
 
 ---
 
@@ -563,6 +696,65 @@ notifications                  ├── user_id (FK)
 | GET | `/api/stats/dashboard` | Dashboard statistiche complete |
 | GET | `/api/health` | Healthcheck |
 
+### Aree (v2)
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/areas/` | Aree utente con project_count |
+| POST | `/api/areas/` | Crea area |
+| PATCH | `/api/areas/reorder` | Riordina aree |
+| PATCH | `/api/areas/{id}` | Aggiorna area |
+| DELETE | `/api/areas/{id}` | Elimina area (progetti spostati a area_id=null) |
+
+### Progetti (v2)
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/projects/` | Progetti utente (propri + membro), con task_count |
+| POST | `/api/projects/` | Crea progetto (auto-popola campi custom default) |
+| GET | `/api/projects/{id}` | Dettaglio progetto |
+| PATCH | `/api/projects/{id}` | Aggiorna progetto |
+| DELETE | `/api/projects/{id}` | Elimina progetto |
+| GET | `/api/projects/{id}/tasks` | Task del progetto |
+| GET | `/api/projects/{id}/members` | Membri del progetto |
+| POST | `/api/projects/{id}/members` | Aggiungi membro |
+| DELETE | `/api/projects/{id}/members/{mid}` | Rimuovi membro |
+| GET | `/api/projects/{id}/stats` | Statistiche progetto |
+
+### Campi Custom (v2)
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/projects/{id}/fields` | Definizioni campi progetto |
+| POST | `/api/projects/{id}/fields` | Crea campo custom |
+| PATCH | `/api/projects/{id}/fields/{fid}` | Aggiorna campo |
+| DELETE | `/api/projects/{id}/fields/{fid}` | Elimina campo |
+| PATCH | `/api/projects/{id}/fields/reorder` | Riordina campi |
+
+### Dipendenze Task (v2)
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/tasks/{id}/dependencies` | Dipendenze del task (blocking, blocked_by, relates_to) |
+| POST | `/api/tasks/{id}/dependencies` | Aggiungi dipendenza (con cycle detection) |
+| DELETE | `/api/tasks/dependencies/{did}` | Rimuovi dipendenza |
+
+### Automazioni (v2)
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/projects/{id}/automations` | Regole automazione del progetto |
+| POST | `/api/projects/{id}/automations` | Crea regola |
+| PATCH | `/api/projects/{id}/automations/{aid}` | Aggiorna regola |
+| PATCH | `/api/projects/{id}/automations/{aid}/toggle` | Attiva/disattiva regola |
+| DELETE | `/api/projects/{id}/automations/{aid}` | Elimina regola |
+
+### Sprint (v2)
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/projects/{id}/sprints` | Sprint del progetto |
+| POST | `/api/projects/{id}/sprints` | Crea sprint |
+| GET | `/api/sprints/{id}` | Dettaglio sprint (tasks + metriche) |
+| PATCH | `/api/sprints/{id}` | Aggiorna sprint |
+| DELETE | `/api/sprints/{id}` | Elimina sprint |
+| POST | `/api/sprints/{id}/tasks/{tid}` | Aggiungi task a sprint |
+| DELETE | `/api/sprints/{id}/tasks/{tid}` | Rimuovi task da sprint |
+
 ---
 
 ## Viste Frontend
@@ -600,6 +792,21 @@ Dashboard con completion rate, weekly/monthly charts, habits overview, focus hou
 ### 11. Impostazioni
 Invito famiglia, Google Calendar, backup, push notifications, report giornaliero, export/import, import TickTick, template, API key, logout.
 
+### 12. Vista Progetto (v2)
+Header con nome progetto, badge stato, tipo, descrizione. Barra progresso (task completati / totali). Lista task filtrata per project_id con form di creazione inline. Pannelli laterali per Campi Custom, Automazioni e Sprint (mutuamente esclusivi).
+
+### 13. Campi Custom (v2)
+Pannello collassabile in TaskDetail per i task con project_id. Renderizza input appropriato per tipo campo (text, number, date, select, multi_select, boolean, url). Editor separato per le definizioni dei campi del progetto.
+
+### 14. Dipendenze (v2)
+Pannello in TaskDetail che mostra 3 sezioni: "Blocca", "Bloccato da", "Correlato a". Form per aggiungere dipendenza con ricerca task e selettore tipo. Gestione errore 422 per dipendenze circolari.
+
+### 15. Automazioni (v2)
+Editor regole con lista toggle, creazione form con trigger/action type dinamici. Configurazione condizionale in base al tipo (es. status_changed richiede from_status/to_status).
+
+### 16. Sprint Board (v2)
+Selettore sprint, form creazione, vista dettaglio con barra progresso e metriche (task totali, completati, %, giorni rimanenti). Aggiunta/rimozione task, transizioni di stato (planned → active → completed).
+
 ---
 
 ## Celery Beat - Task Periodici
@@ -610,6 +817,7 @@ Invito famiglia, Google Calendar, backup, push notifications, report giornaliero
 | `check_and_send_notifications` | Ogni 60 secondi | Verifica e invia notifiche (Telegram + Push) |
 | `send_daily_reports` | Ogni 5 minuti | Report giornaliero (email + push + Telegram) |
 | `backup_to_drive` | Ogni giorno alle 03:00 | pg_dump + gzip + upload Google Drive |
+| `evaluate_automations` | On-demand (Celery task) | Esegue regole automazione per task (depth max 3) [v2] |
 
 Timezone: `Europe/Rome`
 
@@ -654,6 +862,36 @@ npm run start    # porta 3000
 # Le API su http://localhost:8000/api
 # Docs OpenAPI su http://localhost:8000/docs
 ```
+
+---
+
+## Migrazione v1 → v2
+
+Script: `backend/scripts/migrate_to_v2.py`
+
+La migrazione crea la struttura gerarchica a partire dalle liste esistenti:
+
+1. **6 Aree**: Family, Vision-e, AIthink, La Voce, Croce Rossa, Manu
+2. **8 Progetti**: uno per ogni lista esistente, mappati all'area corrispondente
+3. **60 Task**: associati ai progetti tramite `project_id` (senza toccare `list_id`)
+
+Le liste originali restano intatte. I task hanno ora sia `list_id` che `project_id`.
+
+Esecuzione:
+```bash
+docker cp backend/scripts/migrate_to_v2.py $(docker compose ps -q backend):/app/scripts/
+docker compose exec -w /app backend python scripts/migrate_to_v2.py
+```
+
+### Alembic Migrations (v2)
+| ID | Descrizione |
+|---|---|
+| `9f852858cc1c` | areas, projects, project_members + task project_id/custom_fields |
+| `5cf662c3691f` | project_custom_fields |
+| `6d4d6a65be95` | task_dependencies |
+| `e4ef3b49e85b` | automation_rules |
+| `bc016dbea859` | sprints + sprint_tasks |
+| `5f233bf6479b` | Fix FK ondelete (tasks.created_by, assigned_to → SET NULL) |
 
 ---
 

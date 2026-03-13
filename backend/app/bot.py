@@ -1,5 +1,5 @@
 """
-Bot Telegram interattivo per MyActivity.
+Bot Telegram interattivo per Zeno.
 
 Comandi:
   /start <codice>  - Collega l'account
@@ -307,7 +307,7 @@ async def cmd_summary(update: Update, context):
 
 async def cmd_help(update: Update, context):
     await update.message.reply_html(
-        "<b>🤖 MyActivity Bot</b>\n\n"
+        "<b>🤖 Zeno Bot</b>\n\n"
         "/tasks - Task di oggi (con bottoni ✅)\n"
         "/add &lt;titolo&gt; - Aggiungi task veloce\n"
         "/habits - Abitudini di oggi (con toggle)\n"

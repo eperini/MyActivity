@@ -80,7 +80,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
 
   function handleCopyInvite() {
     const url = `${window.location.origin}/login`;
-    const text = `Ciao! Ti invito a usare MyActivity per gestire task e abitudini insieme.\n\nRegistrati qui: ${url}\n\nDopo la registrazione, potro condividere le liste con te.`;
+    const text = `Ciao! Ti invito a usare Zeno per gestire task e abitudini insieme.\n\nRegistrati qui: ${url}\n\nDopo la registrazione, potro condividere le liste con te.`;
     navigator.clipboard.writeText(text).then(() => {
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);

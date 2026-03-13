@@ -9,13 +9,13 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "MyActivity",
+  title: "Zeno",
   description: "Gestisci i tuoi task e abitudini",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "MyActivity",
+    title: "Zeno",
   },
 };
 
