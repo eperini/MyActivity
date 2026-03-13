@@ -58,7 +58,8 @@ self.addEventListener("push", (event) => {
   let data = { title: "Zeno", body: "Nuova notifica", icon: "/icons/icon-192.png" };
   if (event.data) {
     try {
-      data = { ...data, ...event.data.json() };
+      const parsed = event.data.json();
+      data = { ...data, ...parsed };
     } catch {
       data.body = event.data.text();
     }
@@ -69,7 +70,7 @@ self.addEventListener("push", (event) => {
       icon: data.icon,
       badge: "/icons/icon-192.png",
       vibrate: [100, 50, 100],
-      data: { url: "/" },
+      data: { url: data.taskId ? `/?task=${data.taskId}` : "/" },
     })
   );
 });

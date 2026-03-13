@@ -10,6 +10,8 @@ from app.core.database import Base
 class NotificationChannel(str, PyEnum):
     TELEGRAM = "telegram"
     EMAIL = "email"
+    PUSH = "push"
+    BOTH = "both"  # telegram + push
 
 
 class TaskReminder(Base):
@@ -25,7 +27,8 @@ class TaskReminder(Base):
     )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     channel: Mapped[NotificationChannel] = mapped_column(
-        Enum(NotificationChannel), default=NotificationChannel.TELEGRAM
+        Enum(NotificationChannel, values_callable=lambda e: [x.value for x in e]),
+        default=NotificationChannel.TELEGRAM,
     )
     offset_minutes: Mapped[int] = mapped_column(Integer, default=0)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

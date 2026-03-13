@@ -171,10 +171,11 @@ def backup_database_to_drive(self):
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
 def check_and_send_notifications(self):
-    """Controlla e invia le notifiche in scadenza."""
-    from app.models.notification import TaskReminder
+    """Controlla e invia le notifiche in scadenza via Telegram e/o Web Push."""
+    from app.models.notification import TaskReminder, NotificationChannel
     from app.models.task import Task
     from app.models.user import User
+    from app.models.push_subscription import PushSubscription
     from app.services.telegram_service import send_message_sync
 
     now = datetime.now(timezone.utc)
@@ -203,6 +204,15 @@ def check_and_send_notifications(self):
                 result = db.execute(select(User).where(User.id.in_(user_ids)))
                 users_map = {u.id: u for u in result.scalars().all()}
 
+            # Batch load push subscriptions for all relevant users
+            push_subs_map = {}
+            if user_ids:
+                result = db.execute(
+                    select(PushSubscription).where(PushSubscription.user_id.in_(user_ids))
+                )
+                for sub in result.scalars().all():
+                    push_subs_map.setdefault(sub.user_id, []).append(sub)
+
             sent_count = 0
             for notif in notifications:
                 task = tasks_map.get(notif.task_id)
@@ -218,15 +228,38 @@ def check_and_send_notifications(self):
 
                 if now >= send_at:
                     user = users_map.get(notif.user_id)
-                    if user and user.telegram_chat_id:
-                        priority_emoji = {1: "🔴", 2: "🟠", 3: "🟡", 4: "⚪"}
-                        emoji = priority_emoji.get(task.priority, "⚪")
-                        text = f"{emoji} <b>Promemoria</b>\n\n{task.title}"
-                        if task.description:
-                            text += f"\n<i>{task.description}</i>"
-                        if send_message_sync(user.telegram_chat_id, text):
-                            notif.sent_at = now
-                            sent_count += 1
+                    if not user:
+                        continue
+
+                    priority_emoji = {1: "🔴", 2: "🟠", 3: "🟡", 4: "⚪"}
+                    emoji = priority_emoji.get(task.priority, "⚪")
+                    title = f"{emoji} Promemoria"
+                    body = task.title
+                    if task.description:
+                        body += f"\n{task.description}"
+
+                    channel = notif.channel
+                    sent = False
+
+                    # Send via Telegram
+                    if channel in (NotificationChannel.TELEGRAM, NotificationChannel.BOTH, NotificationChannel.EMAIL):
+                        if user.telegram_chat_id:
+                            text = f"{emoji} <b>Promemoria</b>\n\n{task.title}"
+                            if task.description:
+                                text += f"\n<i>{task.description}</i>"
+                            if send_message_sync(user.telegram_chat_id, text):
+                                sent = True
+
+                    # Send via Web Push
+                    if channel in (NotificationChannel.PUSH, NotificationChannel.BOTH):
+                        user_subs = push_subs_map.get(user.id, [])
+                        if user_subs:
+                            _send_push_to_subs(user_subs, title, body, db)
+                            sent = True
+
+                    if sent:
+                        notif.sent_at = now
+                        sent_count += 1
 
             db.commit()
             return f"Inviate {sent_count} notifiche"
@@ -322,6 +355,47 @@ def send_daily_reports(self):
                 time_str = f" alle {t.due_time.strftime('%H:%M')}" if t.due_time else ""
                 return f"{emoji} {t.title}{time_str}"
 
+            # Gather extra stats: yesterday's time logs and habit streaks
+            from app.models.time_log import TimeLog
+            from app.models.habit import Habit, HabitLog
+            yesterday = today - timedelta(days=1)
+            day_after_tomorrow = today + timedelta(days=2)
+
+            # Time logged yesterday
+            time_result = db.execute(
+                select(func.coalesce(func.sum(TimeLog.minutes), 0)).where(
+                    TimeLog.user_id == user.id,
+                    func.date(TimeLog.logged_at) == yesterday,
+                )
+            )
+            yesterday_minutes = time_result.scalar() or 0
+
+            # Tasks due in next 3 days (beyond tomorrow)
+            upcoming_tasks = db.execute(
+                select(Task).where(
+                    Task.list_id.in_(list_ids),
+                    Task.status != TaskStatus.DONE,
+                    Task.due_date == day_after_tomorrow,
+                )
+            ).scalars().all()
+
+            # Active habit streak count
+            active_habits = db.execute(
+                select(func.count(Habit.id)).where(
+                    Habit.created_by == user.id,
+                    Habit.is_archived == False,
+                )
+            ).scalar() or 0
+
+            habits_done_yesterday = db.execute(
+                select(func.count(HabitLog.id)).where(
+                    HabitLog.log_date == yesterday,
+                    HabitLog.habit_id.in_(
+                        select(Habit.id).where(Habit.created_by == user.id)
+                    ),
+                )
+            ).scalar() or 0
+
             # Send email
             if user.daily_report_email:
                 html = _build_report_html(
@@ -339,6 +413,8 @@ def send_daily_reports(self):
                     lines.append(f"📅 {len(today_tasks)} oggi")
                 if tomorrow_tasks:
                     lines.append(f"📆 {len(tomorrow_tasks)} domani")
+                if yesterday_minutes > 0:
+                    lines.append(f"⏱️ {round(yesterday_minutes / 60, 1)}h ieri")
                 body = " · ".join(lines)
 
                 from app.models.push_subscription import PushSubscription
@@ -363,6 +439,19 @@ def send_daily_reports(self):
                 if tomorrow_tasks:
                     text += f"\n📆 <b>Domani ({len(tomorrow_tasks)})</b>\n"
                     text += "\n".join(task_line(t) for t in tomorrow_tasks[:10])
+                    text += "\n"
+                if upcoming_tasks:
+                    text += f"\n🗓️ <b>Dopodomani ({len(upcoming_tasks)})</b>\n"
+                    text += "\n".join(task_line(t) for t in upcoming_tasks[:5])
+                    text += "\n"
+                # Stats footer
+                stats_parts = []
+                if yesterday_minutes > 0:
+                    stats_parts.append(f"⏱️ {round(yesterday_minutes / 60, 1)}h ieri")
+                if active_habits > 0:
+                    stats_parts.append(f"🔥 {habits_done_yesterday}/{active_habits} abitudini ieri")
+                if stats_parts:
+                    text += f"\n{'  ·  '.join(stats_parts)}"
 
                 from app.services.telegram_service import send_message_sync
                 if user.daily_report_email or user.daily_report_push:

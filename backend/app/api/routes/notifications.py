@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -9,6 +10,8 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.sharing import AppNotification
+from app.models.notification import TaskReminder, NotificationChannel
+from app.models.task import Task
 
 router = APIRouter()
 
@@ -135,3 +138,117 @@ async def delete_notification(
     await db.delete(notif)
     await db.commit()
     return {"detail": "Notifica eliminata"}
+
+
+# ─── Task Reminders CRUD ───
+
+
+class ReminderRequest(BaseModel):
+    offset_minutes: int  # negative = before due date (e.g. -15, -60, -1440)
+    channel: Optional[str] = "both"  # telegram, push, both
+
+
+class ReminderResponse(BaseModel):
+    id: int
+    task_id: int
+    offset_minutes: int
+    channel: str
+    sent_at: str | None
+    created_at: str
+
+
+@router.get("/tasks/{task_id}/reminders", response_model=list[ReminderResponse])
+async def get_task_reminders(
+    task_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Verify task belongs to user
+    task = await db.get(Task, task_id)
+    if not task or task.created_by != user.id:
+        raise HTTPException(404, "Task non trovato")
+
+    result = await db.execute(
+        select(TaskReminder)
+        .where(TaskReminder.task_id == task_id, TaskReminder.user_id == user.id)
+        .order_by(TaskReminder.offset_minutes)
+    )
+    reminders = result.scalars().all()
+    return [
+        ReminderResponse(
+            id=r.id,
+            task_id=r.task_id,
+            offset_minutes=r.offset_minutes,
+            channel=r.channel.value if r.channel else "both",
+            sent_at=r.sent_at.isoformat() if r.sent_at else None,
+            created_at=r.created_at.isoformat(),
+        )
+        for r in reminders
+    ]
+
+
+@router.post("/tasks/{task_id}/reminders", response_model=ReminderResponse, status_code=201)
+async def create_task_reminder(
+    task_id: int,
+    data: ReminderRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    task = await db.get(Task, task_id)
+    if not task or task.created_by != user.id:
+        raise HTTPException(404, "Task non trovato")
+    if not task.due_date:
+        raise HTTPException(400, "Il task non ha una data di scadenza")
+
+    # Map channel string to enum
+    channel_map = {
+        "telegram": NotificationChannel.TELEGRAM,
+        "push": NotificationChannel.PUSH,
+        "both": NotificationChannel.BOTH,
+        "email": NotificationChannel.EMAIL,
+    }
+    channel = channel_map.get(data.channel or "both", NotificationChannel.BOTH)
+
+    # Check duplicate (same offset for same task)
+    existing = await db.execute(
+        select(TaskReminder).where(
+            TaskReminder.task_id == task_id,
+            TaskReminder.user_id == user.id,
+            TaskReminder.offset_minutes == data.offset_minutes,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(400, "Promemoria con lo stesso offset gia esistente")
+
+    reminder = TaskReminder(
+        task_id=task_id,
+        user_id=user.id,
+        offset_minutes=data.offset_minutes,
+        channel=channel,
+    )
+    db.add(reminder)
+    await db.commit()
+    await db.refresh(reminder)
+
+    return ReminderResponse(
+        id=reminder.id,
+        task_id=reminder.task_id,
+        offset_minutes=reminder.offset_minutes,
+        channel=reminder.channel.value,
+        sent_at=None,
+        created_at=reminder.created_at.isoformat(),
+    )
+
+
+@router.delete("/reminders/{reminder_id}")
+async def delete_reminder(
+    reminder_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    reminder = await db.get(TaskReminder, reminder_id)
+    if not reminder or reminder.user_id != user.id:
+        raise HTTPException(404, "Promemoria non trovato")
+    await db.delete(reminder)
+    await db.commit()
+    return {"detail": "Promemoria eliminato"}

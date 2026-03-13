@@ -93,6 +93,25 @@ export const deleteTask = (id: number) =>
 export const reorderTasks = (ids: number[]) =>
   request<{ detail: string }>("/tasks/reorder", { method: "PATCH", body: JSON.stringify({ ids }) });
 
+// Reminders
+export interface Reminder {
+  id: number;
+  task_id: number;
+  offset_minutes: number;
+  channel: string;
+  sent_at: string | null;
+  created_at: string;
+}
+export const getReminders = (taskId: number) =>
+  request<Reminder[]>(`/tasks/${taskId}/reminders`);
+export const createReminder = (taskId: number, offsetMinutes: number, channel: string = "both") =>
+  request<Reminder>(`/tasks/${taskId}/reminders`, {
+    method: "POST",
+    body: JSON.stringify({ offset_minutes: offsetMinutes, channel }),
+  });
+export const deleteReminder = (reminderId: number) =>
+  request<{ detail: string }>(`/reminders/${reminderId}`, { method: "DELETE" });
+
 // Subtasks
 export const getSubtasks = (taskId: number) =>
   request<Task[]>(`/tasks/${taskId}/subtasks`);

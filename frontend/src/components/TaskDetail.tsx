@@ -8,6 +8,7 @@ import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagT
 import CustomFieldsPanel from "./CustomFieldsPanel";
 import DependenciesPanel from "./DependenciesPanel";
 import TimeLogPanel from "./TimeLogPanel";
+import ReminderPanel from "./ReminderPanel";
 import { useToast } from "@/components/Toast";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
@@ -606,6 +607,9 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
               onUpdate={(customFields) => onUpdate(task.id, { custom_fields: customFields } as Partial<Task>)}
             />
           )}
+
+          {/* Reminders */}
+          <ReminderPanel taskId={task.id} hasDueDate={!!task.due_date} />
 
           {/* Time Tracking */}
           <TimeLogPanel
