@@ -59,7 +59,7 @@ class JiraService:
         }
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"{self.base_url}/rest/api/3/search",
+                f"{self.base_url}/rest/api/3/search/jql",
                 headers=self.headers,
                 params=params,
                 timeout=30,
@@ -152,7 +152,7 @@ class JiraServiceSync:
         }
         with httpx.Client() as client:
             resp = client.get(
-                f"{self.base_url}/rest/api/3/search",
+                f"{self.base_url}/rest/api/3/search/jql",
                 headers=self.headers,
                 params=params,
                 timeout=30,

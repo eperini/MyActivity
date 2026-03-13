@@ -286,8 +286,11 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
         })}
       </nav>
 
+      {/* Divider */}
+      <div className="mx-4 my-3 border-t border-zinc-700" />
+
       {/* Lists */}
-      <div className="mt-6 px-3">
+      <div className="px-3">
         <div className="flex items-center justify-between px-3 mb-2">
           <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Liste</span>
           <div className="flex items-center gap-1">
@@ -441,8 +444,11 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
         </div>
       </div>
 
+      {/* Divider */}
+      <div className="mx-4 my-3 border-t border-zinc-700" />
+
       {/* Projects & Areas */}
-      <div className="mt-6 px-3">
+      <div className="px-3">
         <div className="flex items-center justify-between px-3 mb-2">
           <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Progetti</span>
           <div className="flex items-center gap-1">
@@ -654,24 +660,24 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
             }
 
             return (
-              <div key={`area-${area.id}`}>
+              <div key={`area-${area.id}`} className="mt-3 first:mt-0">
                 <div
-                  className="group flex items-center gap-2 px-3 py-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors cursor-pointer"
+                  className="group flex items-center gap-2 px-3 py-1 cursor-pointer"
                   onClick={() => toggleArea(area.id)}
                   onContextMenu={(e) => handleProjectContextMenu(e, "area", area.id)}
                 >
-                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  {isExpanded ? <ChevronDown size={10} className="text-zinc-500" /> : <ChevronRight size={10} className="text-zinc-500" />}
                   <span
-                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                    className="w-2 h-2 rounded-sm flex-shrink-0"
                     style={{ backgroundColor: area.color || "#6366F1" }}
                   />
-                  <span className="flex-1 text-left truncate text-sm font-medium">{area.name}</span>
-                  <span className="text-xs text-zinc-600 group-hover:hidden">{areaProjects.length}</span>
+                  <span className="flex-1 text-left truncate text-[10px] font-medium text-zinc-500 uppercase tracking-wider">{area.name}</span>
+                  <span className="text-[10px] text-zinc-600 group-hover:hidden">{areaProjects.length}</span>
                   <button
                     onClick={(e) => handleProjectContextMenu(e, "area", area.id)}
                     className="text-zinc-600 hover:text-zinc-300 hidden group-hover:block"
                   >
-                    <MoreHorizontal size={14} />
+                    <MoreHorizontal size={12} />
                   </button>
                 </div>
                 {isExpanded && (
@@ -786,6 +792,9 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
           })}
         </div>
       </div>
+
+      {/* Divider */}
+      <div className="mx-4 my-3 border-t border-zinc-700" />
 
       {/* Bottom */}
       <div className="mt-auto px-3 space-y-0.5">
@@ -936,6 +945,29 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
               <Plus size={14} />
               Aggiungi progetto
             </button>
+          )}
+          {projectContextMenu.type === "project" && (
+            <div className="px-3 py-2">
+              <span className="text-[10px] text-zinc-500 block mb-1">Sposta in area</span>
+              <select
+                value={projects.find(p => p.id === projectContextMenu.id)?.area_id ?? ""}
+                onChange={async (e) => {
+                  const areaId = e.target.value ? Number(e.target.value) : null;
+                  try {
+                    await updateProject(projectContextMenu.id, { area_id: areaId } as Partial<Project>);
+                    reloadAreasProjects();
+                    showToast("Progetto spostato", "success");
+                  } catch { showToast("Errore nello spostamento"); }
+                  setProjectContextMenu(null);
+                }}
+                className="w-full bg-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 outline-none"
+              >
+                <option value="">Nessuna area</option>
+                {areas.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
           )}
           <button
             onClick={() => {

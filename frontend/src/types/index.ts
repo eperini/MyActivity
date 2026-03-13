@@ -290,6 +290,8 @@ export interface JiraConfig {
   jira_project_key: string;
   zeno_project_id: number;
   zeno_project_name: string | null;
+  default_list_id: number | null;
+  default_list_name: string | null;
   sync_enabled: boolean;
   last_sync_at: string | null;
   last_sync_status: string | null;

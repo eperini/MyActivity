@@ -409,9 +409,9 @@ export const getWeeklyTime = () =>
 // Jira
 export const getJiraConfigs = () =>
   request<JiraConfig[]>("/jira/config");
-export const createJiraConfig = (data: { jira_project_key: string; zeno_project_id: number }) =>
+export const createJiraConfig = (data: { jira_project_key: string; zeno_project_id: number; default_list_id?: number }) =>
   request<JiraConfig>("/jira/config", { method: "POST", body: JSON.stringify(data) });
-export const updateJiraConfig = (id: number, data: { sync_enabled?: boolean }) =>
+export const updateJiraConfig = (id: number, data: { sync_enabled?: boolean; default_list_id?: number }) =>
   request<JiraConfig>(`/jira/config/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteJiraConfig = (id: number) =>
   request<{ detail: string }>(`/jira/config/${id}`, { method: "DELETE" });

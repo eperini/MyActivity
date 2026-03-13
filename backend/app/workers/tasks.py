@@ -697,15 +697,17 @@ def _sync_single_jira(db, config):
         updated_after=config.last_sync_at,
     )
 
-    # Find a list_id for new tasks: use the first list owned by the user
+    # Find a list_id for new tasks: use configured list or first list owned by user
     project = db.get(Project, config.zeno_project_id)
     if not project:
         return
 
-    list_result = db.execute(
-        select(TaskList.id).where(TaskList.owner_id == config.user_id).limit(1)
-    )
-    default_list_id = list_result.scalar()
+    default_list_id = config.default_list_id
+    if not default_list_id:
+        list_result = db.execute(
+            select(TaskList.id).where(TaskList.owner_id == config.user_id).limit(1)
+        )
+        default_list_id = list_result.scalar()
     if not default_list_id:
         return
 
@@ -759,6 +761,13 @@ def _sync_single_jira(db, config):
                 assigned_to=config.user_id,
             )
             db.add(new_task)
+            try:
+                db.flush()
+            except Exception:
+                # Race condition: another sync already created this task
+                db.rollback()
+                logger.debug("Skipping duplicate jira issue %s", issue["key"])
+                continue
 
         # Rate limit: small delay between issues
         time_module.sleep(0.1)

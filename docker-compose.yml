@@ -56,6 +56,10 @@ services:
       GOOGLE_DRIVE_CLIENT_SECRET: ${GOOGLE_DRIVE_CLIENT_SECRET:-}
       GOOGLE_DRIVE_REFRESH_TOKEN: ${GOOGLE_DRIVE_REFRESH_TOKEN:-}
       BACKUP_KEEP_COUNT: ${BACKUP_KEEP_COUNT:-7}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_SYNC_INTERVAL_MINUTES: ${JIRA_SYNC_INTERVAL_MINUTES:-15}
     ports:
       - "8000:8000"
     volumes:
@@ -94,6 +98,10 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_MAILTO: ${VAPID_MAILTO:-mailto:admin@zeno.local}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_SYNC_INTERVAL_MINUTES: ${JIRA_SYNC_INTERVAL_MINUTES:-15}
     volumes:
       - ./backend/app:/app/app
       - ./backend/google-credentials.json:/app/google-credentials.json:ro
@@ -120,6 +128,10 @@ services:
       GOOGLE_DRIVE_CLIENT_ID: ${GOOGLE_DRIVE_CLIENT_ID:-}
       GOOGLE_DRIVE_CLIENT_SECRET: ${GOOGLE_DRIVE_CLIENT_SECRET:-}
       GOOGLE_DRIVE_REFRESH_TOKEN: ${GOOGLE_DRIVE_REFRESH_TOKEN:-}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_SYNC_INTERVAL_MINUTES: ${JIRA_SYNC_INTERVAL_MINUTES:-15}
     volumes:
       - ./backend/google-credentials.json:/app/google-credentials.json:ro
     networks:

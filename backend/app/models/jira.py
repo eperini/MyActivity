@@ -17,6 +17,9 @@ class JiraConfig(Base):
     zeno_project_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
+    default_list_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lists.id", ondelete="SET NULL"), nullable=True
+    )
     sync_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_sync_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

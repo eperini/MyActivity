@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X } from "lucide-react";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects } from "@/lib/api";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, getLists } from "@/lib/api";
 import type { TickTickImportResult } from "@/lib/api";
-import type { TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
+import type { TaskList, TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
 import { useToast } from "@/components/Toast";
 
 export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
@@ -40,7 +40,11 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [showJiraAdd, setShowJiraAdd] = useState(false);
   const [newJiraKey, setNewJiraKey] = useState("");
   const [newZenoProjectId, setNewZenoProjectId] = useState<number | "">("");
+  const [newDefaultListId, setNewDefaultListId] = useState<number | "">("");
   const [jiraLoading, setJiraLoading] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [allLists, setAllLists] = useState<TaskList[]>([]);
 
   useEffect(() => {
     getGoogleCalendarConfig()
@@ -64,6 +68,9 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
       .catch(() => {});
     getProjects()
       .then(setZenoProjects)
+      .catch(() => {});
+    getLists()
+      .then(setAllLists)
       .catch(() => {});
   }, []);
 
@@ -570,6 +577,9 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
                     <span className="font-mono font-medium">{cfg.jira_project_key}</span>
                     <span className="text-zinc-500 mx-1">→</span>
                     {cfg.zeno_project_name || `Progetto #${cfg.zeno_project_id}`}
+                    {cfg.default_list_name && (
+                      <span className="text-zinc-500 text-[10px] ml-1">({cfg.default_list_name})</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <span className={`inline-block w-1.5 h-1.5 rounded-full ${
@@ -646,17 +656,86 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
               </div>
               <div className="flex-1">
                 <label className="text-[10px] text-zinc-500 block mb-1">Progetto Zeno</label>
-                <select
-                  value={newZenoProjectId}
-                  onChange={(e) => setNewZenoProjectId(e.target.value ? Number(e.target.value) : "")}
-                  className="w-full bg-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none"
-                >
-                  <option value="">Seleziona...</option>
-                  {zenoProjects.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+                {creatingProject ? (
+                  <div className="flex gap-1">
+                    <input
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      placeholder="Nome progetto"
+                      autoFocus
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter" && newProjectName.trim()) {
+                          try {
+                            const p = await createProject({ name: newProjectName.trim() });
+                            setZenoProjects(prev => [...prev, p]);
+                            setNewZenoProjectId(p.id);
+                            setCreatingProject(false);
+                            setNewProjectName("");
+                            showToast("Progetto creato", "success");
+                          } catch { showToast("Errore creazione progetto"); }
+                        } else if (e.key === "Escape") {
+                          setCreatingProject(false);
+                          setNewProjectName("");
+                        }
+                      }}
+                      className="flex-1 bg-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none placeholder-zinc-600"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!newProjectName.trim()) return;
+                        try {
+                          const p = await createProject({ name: newProjectName.trim() });
+                          setZenoProjects(prev => [...prev, p]);
+                          setNewZenoProjectId(p.id);
+                          setCreatingProject(false);
+                          setNewProjectName("");
+                          showToast("Progetto creato", "success");
+                        } catch { showToast("Errore creazione progetto"); }
+                      }}
+                      className="px-2 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white"
+                    >
+                      <Check size={12} />
+                    </button>
+                    <button
+                      onClick={() => { setCreatingProject(false); setNewProjectName(""); }}
+                      className="px-2 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={newZenoProjectId}
+                    onChange={(e) => {
+                      if (e.target.value === "__new__") {
+                        setCreatingProject(true);
+                      } else {
+                        setNewZenoProjectId(e.target.value ? Number(e.target.value) : "");
+                      }
+                    }}
+                    className="w-full bg-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none"
+                  >
+                    <option value="">Seleziona...</option>
+                    {zenoProjects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                    <option value="__new__">+ Nuovo progetto...</option>
+                  </select>
+                )}
               </div>
+            </div>
+            <div>
+              <label className="text-[10px] text-zinc-500 block mb-1">Lista di default</label>
+              <select
+                value={newDefaultListId}
+                onChange={(e) => setNewDefaultListId(e.target.value ? Number(e.target.value) : "")}
+                className="w-full bg-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none"
+              >
+                <option value="">Prima lista disponibile</option>
+                {allLists.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
             </div>
             <div className="flex gap-2">
               <button
@@ -664,11 +743,16 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
                   if (!newJiraKey || !newZenoProjectId) return;
                   setJiraLoading(true);
                   try {
-                    const cfg = await createJiraConfig({ jira_project_key: newJiraKey, zeno_project_id: Number(newZenoProjectId) });
+                    const cfg = await createJiraConfig({
+                      jira_project_key: newJiraKey,
+                      zeno_project_id: Number(newZenoProjectId),
+                      default_list_id: newDefaultListId ? Number(newDefaultListId) : undefined,
+                    });
                     setJiraConfigs(prev => [...prev, cfg]);
                     setShowJiraAdd(false);
                     setNewJiraKey("");
                     setNewZenoProjectId("");
+                    setNewDefaultListId("");
                     showToast("Mapping creato", "success");
                   } catch (err) {
                     showToast(err instanceof Error ? err.message : "Errore creazione mapping");
@@ -682,7 +766,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
                 {jiraLoading ? "..." : "Salva"}
               </button>
               <button
-                onClick={() => { setShowJiraAdd(false); setNewJiraKey(""); setNewZenoProjectId(""); }}
+                onClick={() => { setShowJiraAdd(false); setNewJiraKey(""); setNewZenoProjectId(""); setNewDefaultListId(""); }}
                 className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300 transition-colors"
               >
                 Annulla
