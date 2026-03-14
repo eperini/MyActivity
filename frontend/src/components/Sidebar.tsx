@@ -75,6 +75,8 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
   // Favorites (persisted in localStorage)
   const [favoriteNavs, setFavoriteNavs] = useState<Set<string>>(new Set());
   const [favoriteProjects, setFavoriteProjects] = useState<Set<number>>(new Set());
+  const [navExpanded, setNavExpanded] = useState(true);
+  const [listsExpanded, setListsExpanded] = useState(true);
 
   useEffect(() => {
     try {
@@ -82,6 +84,11 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
       const projs = JSON.parse(localStorage.getItem("zeno_fav_projects") || "[]");
       setFavoriteNavs(new Set(navs));
       setFavoriteProjects(new Set(projs));
+      // Collapse nav and lists by default when there are favorites
+      if (navs.length > 0 || projs.length > 0) {
+        setNavExpanded(false);
+        setListsExpanded(false);
+      }
     } catch { /* ignore */ }
   }, []);
 
@@ -387,44 +394,55 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
       )}
 
       {/* Navigation */}
-      <nav className="px-3 space-y-0.5">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive = selectedView === item.id;
-          const isFav = favoriteNavs.has(item.id);
-          const count = item.id === "notifications" ? unreadNotifCount : (taskCounts[item.id] || 0);
-          const isNotifBadge = item.id === "notifications" && count > 0;
-          return (
-            <button
-              key={item.id}
-              onClick={() => handleNav(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors group ${
-                isActive
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-              }`}
-            >
-              <Icon size={18} />
-              <span className="flex-1 text-left text-base md:text-sm">{item.label}</span>
-              {isNotifBadge ? (
-                <span className="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium min-w-[18px] text-center">
-                  {count}
-                </span>
-              ) : count > 0 ? (
-                <span className="text-xs text-zinc-500 group-hover:hidden">{count}</span>
-              ) : null}
-              <button
-                onClick={(e) => { e.stopPropagation(); toggleFavNav(item.id); }}
-                className={`hidden group-hover:block transition-colors ${
-                  isFav ? "text-yellow-400 hover:text-yellow-300" : "text-zinc-600 hover:text-yellow-400"
-                }`}
-              >
-                <Star size={12} fill={isFav ? "currentColor" : "none"} />
-              </button>
-            </button>
-          );
-        })}
-      </nav>
+      <div className="px-3">
+        <button
+          onClick={() => setNavExpanded(!navExpanded)}
+          className="flex items-center gap-1.5 px-3 mb-1 w-full text-left"
+        >
+          <ChevronRight size={12} className={`text-zinc-500 transition-transform ${navExpanded ? "rotate-90" : ""}`} />
+          <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Pagine</span>
+        </button>
+        {navExpanded && (
+          <nav className="space-y-0.5">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const isActive = selectedView === item.id;
+              const isFav = favoriteNavs.has(item.id);
+              const count = item.id === "notifications" ? unreadNotifCount : (taskCounts[item.id] || 0);
+              const isNotifBadge = item.id === "notifications" && count > 0;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNav(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors group ${
+                    isActive
+                      ? "bg-zinc-800 text-white"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span className="flex-1 text-left text-base md:text-sm">{item.label}</span>
+                  {isNotifBadge ? (
+                    <span className="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium min-w-[18px] text-center">
+                      {count}
+                    </span>
+                  ) : count > 0 ? (
+                    <span className="text-xs text-zinc-500 group-hover:hidden">{count}</span>
+                  ) : null}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleFavNav(item.id); }}
+                    className={`hidden group-hover:block transition-colors ${
+                      isFav ? "text-yellow-400 hover:text-yellow-300" : "text-zinc-600 hover:text-yellow-400"
+                    }`}
+                  >
+                    <Star size={12} fill={isFav ? "currentColor" : "none"} />
+                  </button>
+                </button>
+              );
+            })}
+          </nav>
+        )}
+      </div>
 
       {/* Divider */}
       <div className="mx-4 my-3 border-t border-zinc-700" />
@@ -432,24 +450,33 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
       {/* Lists */}
       <div className="px-3">
         <div className="flex items-center justify-between px-3 mb-2">
-          <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Liste</span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={handleResetOrder}
-              title="Reset ordine automatico"
-              className="text-zinc-600 hover:text-zinc-400 transition-colors"
-            >
-              <RotateCcw size={12} />
-            </button>
-            <button
-              onClick={() => setShowNewList(true)}
-              className="text-zinc-500 hover:text-blue-400 transition-colors"
-            >
-              <Plus size={14} />
-            </button>
-          </div>
+          <button
+            onClick={() => setListsExpanded(!listsExpanded)}
+            className="flex items-center gap-1.5"
+          >
+            <ChevronRight size={12} className={`text-zinc-500 transition-transform ${listsExpanded ? "rotate-90" : ""}`} />
+            <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Liste</span>
+          </button>
+          {listsExpanded && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleResetOrder}
+                title="Reset ordine automatico"
+                className="text-zinc-600 hover:text-zinc-400 transition-colors"
+              >
+                <RotateCcw size={12} />
+              </button>
+              <button
+                onClick={() => setShowNewList(true)}
+                className="text-zinc-500 hover:text-blue-400 transition-colors"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
+        {listsExpanded && <>
         {/* New list form */}
         {showNewList && (
           <div className="mb-2 mx-1 p-3 bg-zinc-800 rounded-lg space-y-3">
@@ -582,6 +609,7 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
             );
           })}
         </div>
+        </>}
       </div>
 
       {/* Divider */}
