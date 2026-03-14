@@ -589,10 +589,17 @@ export const getDashboardStats = () => request<{
   completed_tasks: number;
   overdue_tasks: number;
   due_today: number;
+  completed_today: number;
+  completed_this_week: number;
+  hours_tracked_today: number;
+  hours_tracked_this_week: number;
+  streak_days: number;
   completion_rate: number;
   avg_daily_completed: number;
   weekly: { date: string; completed: number; created: number }[];
   monthly: { month: string; completed: number; created: number }[];
+  heatmap: { date: string; count: number }[];
+  by_project: { id: number; name: string; color: string; task_count: number; completed_count: number }[];
   habits_overview: { id: number; name: string; color: string; completions_this_month: number; current_streak: number }[];
   total_focus_hours: number;
   focus_sessions_this_week: number;

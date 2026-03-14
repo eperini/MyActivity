@@ -1,9 +1,12 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, BarChart3, Settings, Columns3, FolderOpen, ChevronDown, ChevronRight, FileBarChart, Bell, RefreshCw, Star, Users, Archive, ListTodo } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, BarChart3, Settings, Columns3, FolderOpen, ChevronDown, ChevronRight, FileBarChart, Bell, RefreshCw, Star, Users, Archive, ListTodo, GripVertical } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Area, Project } from "@/types";
-import { getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject, getUnreadNotificationCount, getJiraConfigs, triggerJiraSync, importJiraUsers, getJiraUserMappings, mapJiraUser } from "@/lib/api";
+import { getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject, reorderAreas, getUnreadNotificationCount, getJiraConfigs, triggerJiraSync, importJiraUsers, getJiraUserMappings, mapJiraUser } from "@/lib/api";
 import type { JiraUserMapping } from "@/lib/api";
 import type { JiraConfig } from "@/types";
 import { useToast } from "./Toast";
@@ -40,6 +43,28 @@ const LIST_COLORS = [
   "#EC4899", "#06B6D4", "#F97316", "#6366F1", "#14B8A6",
 ];
 
+function SortableAreaWrapper({ id, children }: { id: number; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <div className="relative group/drag">
+        <div
+          className="absolute left-0 top-1 opacity-0 group-hover/drag:opacity-100 cursor-grab active:cursor-grabbing z-10 px-0.5"
+          {...listeners}
+        >
+          <GripVertical size={10} className="text-zinc-600" />
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen, onClose }: SidebarProps) {
   const { showToast } = useToast();
   const [areas, setAreas] = useState<Area[]>([]);
@@ -67,6 +92,28 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
   const [favoriteNavs, setFavoriteNavs] = useState<Set<string>>(new Set());
   const [favoriteProjects, setFavoriteProjects] = useState<Set<number>>(new Set());
   const [navExpanded, setNavExpanded] = useState(true);
+
+  // DnD sensors for area reordering
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  async function handleAreaDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = areas.findIndex((a) => a.id === active.id);
+    const newIndex = areas.findIndex((a) => a.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(areas, oldIndex, newIndex);
+    setAreas(reordered);
+    try {
+      await reorderAreas(reordered.map((a) => a.id));
+    } catch {
+      showToast("Errore riordinamento aree");
+      getAreas().then(setAreas).catch(() => {});
+    }
+  }
 
   useEffect(() => {
     try {
@@ -543,6 +590,8 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
           })}
 
           {/* Areas with their projects */}
+          <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleAreaDragEnd}>
+          <SortableContext items={areas.map((a) => a.id)} strategy={verticalListSortingStrategy}>
           {areas.map((area) => {
             const areaProjects = projects.filter((p) => p.area_id === area.id);
             const isExpanded = expandedAreas.has(area.id);
@@ -550,7 +599,8 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
 
             if (isEditingThisArea) {
               return (
-                <div key={`area-${area.id}`} className="mx-1 p-2 bg-zinc-800 rounded-lg space-y-2">
+                <SortableAreaWrapper key={`area-${area.id}`} id={area.id}>
+                <div className="mx-1 p-2 bg-zinc-800 rounded-lg space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: editingArea.color }} />
                     <input
@@ -581,11 +631,13 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
                     <button onClick={handleUpdateArea} className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white">Salva</button>
                   </div>
                 </div>
+                </SortableAreaWrapper>
               );
             }
 
             return (
-              <div key={`area-${area.id}`} className="mt-3 first:mt-0">
+              <SortableAreaWrapper key={`area-${area.id}`} id={area.id}>
+              <div className="mt-3 first:mt-0">
                 <div
                   className="group flex items-center gap-2 px-3 py-1 cursor-pointer"
                   onClick={() => toggleArea(area.id)}
@@ -721,8 +773,11 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
                   </>
                 )}
               </div>
+              </SortableAreaWrapper>
             );
           })}
+          </SortableContext>
+          </DndContext>
         </div>
       </div>
 

@@ -47,6 +47,7 @@ export interface Task {
   estimated_minutes?: number | null;
   time_logged_minutes?: number;
   time_logged_formatted?: string;
+  position?: number;
   jira_issue_key?: string | null;
   jira_url?: string | null;
 }
