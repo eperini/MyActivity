@@ -1,7 +1,7 @@
 from datetime import datetime, date, timezone
 from enum import Enum as PyEnum
 
-from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Date, Enum, UniqueConstraint
+from sqlalchemy import String, Text, Integer, Boolean, ForeignKey, DateTime, Date, Enum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -37,6 +37,7 @@ class Project(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
+    show_undated_eisenhower: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

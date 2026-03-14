@@ -235,6 +235,7 @@ export interface Project {
   target_date: string | null;
   client_name: string | null;
   position: number;
+  show_undated_eisenhower: boolean;
   task_count: number;
   completed_count: number;
   is_shared?: boolean;

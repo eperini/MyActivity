@@ -323,7 +323,7 @@ export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefres
 
           {/* Recurrence */}
           {recurrence && (
-            <div className="space-y-2">
+            <div data-tour="task-recurrence" className="space-y-2">
               <div className="flex items-center gap-3 text-sm">
                 <Repeat size={16} className="text-blue-400" />
                 <span className="text-blue-400 flex-1">
@@ -561,7 +561,7 @@ export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefres
           </div>
 
           {/* Assignment */}
-          <div className="space-y-2">
+          <div data-tour="task-assign" className="space-y-2">
             <div className="flex items-center gap-3 text-sm">
               <UserCircle size={16} className="text-zinc-500" />
               <span className="text-zinc-500 text-xs">Assegnato a</span>
@@ -632,7 +632,7 @@ export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefres
         </div>
 
         {/* Comments */}
-        <div className="border-t border-zinc-800 pt-4 space-y-3">
+        <div data-tour="task-comments" className="border-t border-zinc-800 pt-4 space-y-3">
           <div className="flex items-center gap-2 text-sm text-zinc-500">
             <MessageCircle size={16} />
             <span className="text-xs">Commenti ({comments.length})</span>

@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react";
 import type { Task, Project, ProjectStats, Epic, ProjectHeading } from "@/types";
-import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProjectEpics, createEpic, createEpicTimeLog, deleteEpic, pushEpicToJira, getProjectHeadings, createProjectHeading, deleteProjectHeading } from "@/lib/api";
+import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProjectEpics, createEpic, createEpicTimeLog, deleteEpic, pushEpicToJira, getProjectHeadings, createProjectHeading, deleteProjectHeading, updateProject } from "@/lib/api";
 import { useToast } from "./Toast";
 import TaskItem from "./TaskItem";
 import AddTaskForm from "./AddTaskForm";
-import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X, Users } from "lucide-react";
+import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X, Users, Grid2x2 } from "lucide-react";
 import CustomFieldEditor from "./CustomFieldEditor";
 import TimeLogForm from "./TimeLogForm";
 import AutomationsView from "./AutomationsView";
@@ -217,6 +217,7 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
           <span className="text-xs text-zinc-500">{typeLabels[project.project_type] || project.project_type}</span>
           <div className="flex-1" />
           <button
+            data-tour="project-sprints"
             onClick={() => { setShowSprints(!showSprints); if (!showSprints) { setShowAutomations(false); setShowFieldEditor(false); } }}
             className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-colors ${
               showSprints
@@ -229,6 +230,7 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
             <span className="hidden md:inline">Sprint</span>
           </button>
           <button
+            data-tour="project-automations"
             onClick={() => { setShowAutomations(!showAutomations); if (!showAutomations) { setShowFieldEditor(false); setShowSprints(false); } }}
             className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-colors ${
               showAutomations
@@ -284,6 +286,38 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
           </div>
         )}
 
+        {/* Eisenhower undated toggle */}
+        <label className="flex items-center gap-2 mt-2 cursor-pointer group">
+          <Grid2x2 size={12} className="text-zinc-500" />
+          <span className="text-[11px] text-zinc-500 group-hover:text-zinc-300 transition-colors">
+            Mostra task senza data in Eisenhower
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={project.show_undated_eisenhower}
+            onClick={async () => {
+              const newValue = !project.show_undated_eisenhower;
+              setProject({ ...project, show_undated_eisenhower: newValue });
+              try {
+                await updateProject(project.id, { show_undated_eisenhower: newValue } as Partial<Project>);
+              } catch {
+                setProject({ ...project, show_undated_eisenhower: !newValue });
+                showToast("Errore aggiornamento impostazione");
+              }
+            }}
+            className={`relative w-7 h-4 rounded-full transition-colors ${
+              project.show_undated_eisenhower ? "bg-blue-600" : "bg-zinc-600"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                project.show_undated_eisenhower ? "translate-x-3" : ""
+              }`}
+            />
+          </button>
+        </label>
+
         {/* Tab selector */}
         <div className="flex gap-1 mt-3">
           <button
@@ -308,6 +342,7 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
             Epic ({epics.length})
           </button>
           <button
+            data-tour="project-members-tab"
             onClick={() => setActiveTab("members")}
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               activeTab === "members"

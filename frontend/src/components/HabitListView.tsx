@@ -29,11 +29,12 @@ export default function HabitListView({
   const todayStr = format(today, "yyyy-MM-dd");
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-zinc-950">
+    <div data-tour="habit-list" className="flex-1 flex flex-col h-full bg-zinc-950">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
         <h1 className="text-lg font-semibold text-white">Abitudini</h1>
         <button
+          data-tour="habit-add-btn"
           onClick={onAddHabit}
           className="text-zinc-400 hover:text-blue-400 transition-colors"
         >

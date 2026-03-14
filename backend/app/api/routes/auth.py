@@ -52,12 +52,14 @@ class UserProfileResponse(BaseModel):
     email: str
     display_name: str
     is_admin: bool = False
+    has_seen_tour: bool = False
     daily_report_email: bool
     daily_report_push: bool
     daily_report_time: str | None
 
 
 class DailyReportPreferences(BaseModel):
+    has_seen_tour: bool | None = None
     daily_report_email: bool | None = None
     daily_report_push: bool | None = None
     daily_report_time: str | None = None  # "HH:MM" format
@@ -111,6 +113,7 @@ async def get_profile(user: User = Depends(get_current_user)):
         email=user.email,
         display_name=user.display_name,
         is_admin=user.is_admin,
+        has_seen_tour=user.has_seen_tour,
         daily_report_email=user.daily_report_email,
         daily_report_push=user.daily_report_push,
         daily_report_time=user.daily_report_time.strftime("%H:%M") if user.daily_report_time else "07:00",
@@ -146,6 +149,8 @@ async def update_preferences(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if data.has_seen_tour is not None:
+        user.has_seen_tour = data.has_seen_tour
     if data.daily_report_email is not None:
         user.daily_report_email = data.daily_report_email
     if data.daily_report_push is not None:

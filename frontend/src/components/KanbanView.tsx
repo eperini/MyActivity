@@ -58,7 +58,7 @@ export default function KanbanView({ tasks, onSelectTask, onToggleTask, onUpdate
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <div data-tour="kanban-board" className="flex-1 flex flex-col min-w-0 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <h2 className="text-sm font-medium text-zinc-300">Kanban</h2>

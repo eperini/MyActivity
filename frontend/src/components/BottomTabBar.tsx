@@ -61,6 +61,7 @@ export default function BottomTabBar({ selectedView, onSelectView }: BottomTabBa
           return (
             <button
               key={tab.id}
+              data-tour={`tab-${tab.id}`}
               onClick={() => handleTap(tab.id)}
               className={`flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-colors ${
                 isActive ? "text-blue-400" : "text-zinc-500"

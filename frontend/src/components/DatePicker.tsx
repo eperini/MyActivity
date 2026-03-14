@@ -255,6 +255,8 @@ export default function DatePicker({ value, timeValue, onChange, onTimeChange, o
 export function DateInput({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
   const [open, setOpen] = useState(false);
   const closedByTriggerRef = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
 
   const displayDate = (() => {
     try {
@@ -264,9 +266,26 @@ export function DateInput({ value, onChange, className }: { value: string; onCha
     }
   })();
 
+  function openPicker() {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const pickerHeight = 420; // approximate height of DatePicker
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - 330));
+
+      // If there's enough space above, show above; otherwise show below
+      if (rect.top > pickerHeight + 8) {
+        setPickerPos({ top: rect.top - pickerHeight - 4, left });
+      } else {
+        setPickerPos({ top: rect.bottom + 4, left });
+      }
+    }
+    setOpen(true);
+  }
+
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onMouseDown={() => {
           if (open) closedByTriggerRef.current = true;
@@ -276,14 +295,21 @@ export function DateInput({ value, onChange, className }: { value: string; onCha
             closedByTriggerRef.current = false;
             return;
           }
-          setOpen(!open);
+          if (open) {
+            setOpen(false);
+          } else {
+            openPicker();
+          }
         }}
         className={className || "bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500 transition-colors text-left min-w-[130px]"}
       >
         {displayDate}
       </button>
-      {open && (
-        <div className="absolute bottom-full left-0 mb-1 z-50">
+      {open && pickerPos && (
+        <div
+          className="fixed z-50"
+          style={{ top: pickerPos.top, left: pickerPos.left }}
+        >
           <DatePicker
             value={value}
             onChange={(d) => { if (d) onChange(d); setOpen(false); }}

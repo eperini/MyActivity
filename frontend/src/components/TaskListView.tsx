@@ -187,7 +187,7 @@ export default function TaskListView({
   const taskIds = filteredAndSorted.map((t) => t.id);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-zinc-950">
+    <div data-tour="task-list" className="flex-1 flex flex-col h-full bg-zinc-950">
       {/* Header - hidden on mobile (MobileHeader is used) */}
       <div className="hidden md:flex items-center justify-between px-6 py-4 border-b border-zinc-800">
         <h1 className="text-lg font-semibold text-white">{title}</h1>
@@ -224,6 +224,7 @@ export default function TaskListView({
             <SlidersHorizontal size={16} />
           </button>
           <button
+            data-tour="add-task-btn"
             onClick={() => setShowAddForm(true)}
             className="hidden md:block p-2 text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 rounded-lg transition-colors"
           >

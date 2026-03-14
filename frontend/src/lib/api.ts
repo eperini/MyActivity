@@ -320,12 +320,14 @@ export interface UserProfile {
   email: string;
   display_name: string;
   is_admin: boolean;
+  has_seen_tour: boolean;
   daily_report_email: boolean;
   daily_report_push: boolean;
   daily_report_time: string | null;
 }
 export const getProfile = () => request<UserProfile>("/auth/me");
 export const updatePreferences = (data: {
+  has_seen_tour?: boolean;
   daily_report_email?: boolean;
   daily_report_push?: boolean;
   daily_report_time?: string;

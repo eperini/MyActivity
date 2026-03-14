@@ -141,6 +141,7 @@ export default function AddTaskForm({ defaultProjectId, onCreated, onClose }: Ad
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-[5vh] sm:pt-[10vh] px-4 overflow-y-auto pb-10">
       <form
+        data-tour="add-task-form"
         onSubmit={handleSubmit}
         className="w-full max-w-lg bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl overflow-visible"
       >

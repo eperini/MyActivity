@@ -6,6 +6,7 @@ import type { Task, Habit } from "@/types";
 import {
   getTasks, updateTask, deleteTask,
   getHabits, getWeekLogs, toggleHabitLog, deleteHabit, logout,
+  getProfile, updatePreferences,
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import useIsMobile from "@/hooks/useIsMobile";
@@ -35,6 +36,7 @@ import MobileHeader from "@/components/MobileHeader";
 import FloatingAddButton from "@/components/FloatingAddButton";
 import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
 import { isToday, parseISO, differenceInDays } from "date-fns";
+import { useOnboarding } from "@/components/onboarding/OnboardingProvider";
 
 export default function HomePage() {
   const router = useRouter();
@@ -63,6 +65,9 @@ export default function HomePage() {
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts] = useState(false);
 
+  // Onboarding tour
+  const { registerNavigator, startTour, state: onboardingState } = useOnboarding();
+
   const loadData = useCallback(async () => {
     try {
       const t = await getTasks();
@@ -87,6 +92,22 @@ export default function HomePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Register navigator for onboarding tour
+  useEffect(() => {
+    registerNavigator(handleSelectView);
+  }, [registerNavigator]);
+
+  // Auto-start welcome tour for new users
+  useEffect(() => {
+    if (loading || onboardingState.isActive) return;
+    getProfile().then((profile) => {
+      if (!profile.has_seen_tour) {
+        startTour("welcome");
+        updatePreferences({ has_seen_tour: true }).catch(() => {});
+      }
+    }).catch(() => {});
+  }, [loading]);
 
   // Load habits when switching to habits view
   useEffect(() => {
@@ -435,6 +456,7 @@ export default function HomePage() {
           tasks={tasks.filter((t) => t.status !== "done" && t.status !== "someday")}
           onSelectTask={(task) => { setSelectedTask(task); }}
           onToggleTask={handleToggle}
+          onUpdateTask={handleUpdate}
         />
       );
     }

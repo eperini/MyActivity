@@ -11,6 +11,7 @@ import TempoSettingsPanel from "@/components/TempoSettingsPanel";
 import TempoUsersPanel from "@/components/TempoUsersPanel";
 import TempoImportPanel from "@/components/TempoImportPanel";
 import UserManagementPanel from "@/components/UserManagementPanel";
+import TourLauncher from "@/components/onboarding/TourLauncher";
 
 export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const { showToast } = useToast();
@@ -209,6 +210,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
           return (
             <button
               key={tab.id}
+              data-tour={tab.id === "integrazioni" ? "settings-integrations" : undefined}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
                 activeTab === tab.id
@@ -273,6 +275,11 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
               {inviteCopied ? <Check size={16} /> : <Copy size={16} />}
               {inviteCopied ? "Copiato!" : "Copia invito"}
             </button>
+          </div>
+
+          {/* Guided Tour */}
+          <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5">
+            <TourLauncher />
           </div>
 
           {/* Logout */}

@@ -22,6 +22,8 @@ class User(Base):
     api_key: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     jira_account_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    has_seen_tour: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
     # Daily report preferences
     daily_report_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     daily_report_push: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

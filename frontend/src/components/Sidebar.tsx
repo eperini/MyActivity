@@ -287,7 +287,7 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
   }
 
   const sidebarContent = (
-    <aside className="w-full md:w-80 h-full bg-zinc-900 flex flex-col py-4 text-sm overflow-y-auto">
+    <aside data-tour="sidebar" className="w-full md:w-80 h-full bg-zinc-900 flex flex-col py-4 text-sm overflow-y-auto">
       {/* Favorites section */}
       {(favoriteNavs.size > 0 || favoriteProjects.size > 0) && (
         <>
@@ -377,6 +377,7 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
               return (
                 <button
                   key={item.id}
+                  data-tour={`nav-${item.id}`}
                   onClick={() => handleNav(item.id)}
                   className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors group ${
                     isActive
@@ -413,10 +414,11 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
 
       {/* Projects & Areas */}
       <div className="px-3">
-        <div className="flex items-center justify-between px-3 mb-2">
+        <div data-tour="sidebar-projects" className="flex items-center justify-between px-3 mb-2">
           <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Progetti</span>
           <div className="flex items-center gap-1">
             <button
+              data-tour="sidebar-new-area"
               onClick={() => { setShowNewArea(true); setShowNewProject(false); }}
               title="Nuova area"
               className="text-zinc-500 hover:text-blue-400 transition-colors text-[10px] font-medium px-1"
@@ -424,6 +426,7 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
               +Area
             </button>
             <button
+              data-tour="sidebar-new-project"
               onClick={() => { setShowNewProject(null); setShowNewArea(false); }}
               title="Nuovo progetto"
               className="text-zinc-500 hover:text-blue-400 transition-colors"
@@ -912,6 +915,7 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
                           setJiraConfigs(configs);
                           if (updated.last_sync_status === "ok") {
                             showToast("Sincronizzazione Jira terminata", "success");
+                            window.location.reload();
                           } else {
                             showToast(`Errore sync: ${updated.last_sync_error || "errore sconosciuto"}`);
                           }
