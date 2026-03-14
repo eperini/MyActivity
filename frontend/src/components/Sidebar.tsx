@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, BarChart3, Settings, Columns3, FolderOpen, ChevronDown, ChevronRight, FileBarChart, Bell, RefreshCw, Star, Users, Archive } from "lucide-react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, BarChart3, Settings, Columns3, FolderOpen, ChevronDown, ChevronRight, FileBarChart, Bell, RefreshCw, Star, Users, Archive, ListTodo } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { Area, Project } from "@/types";
 import { getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject, getUnreadNotificationCount, getJiraConfigs, triggerJiraSync, importJiraUsers, getJiraUserMappings, mapJiraUser } from "@/lib/api";
@@ -20,7 +20,8 @@ const NAV_ITEMS = [
   { id: "today", label: "Oggi", icon: Calendar },
   { id: "next7", label: "Prossimi 7 Giorni", icon: Clock },
   { id: "inbox", label: "Inbox", icon: Inbox },
-  { id: "someday", label: "Prima o Poi", icon: Archive, color: "text-purple-400" },
+  { id: "all", label: "Tutti i Task", icon: ListTodo },
+  { id: "someday", label: "Prima o Poi", icon: Archive },
   { id: "calendar", label: "Calendario", icon: CalendarDays },
   { id: "habits", label: "Abitudini", icon: Zap },
   { id: "kanban", label: "Kanban", icon: Columns3 },

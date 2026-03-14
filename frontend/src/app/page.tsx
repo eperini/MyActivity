@@ -136,6 +136,9 @@ export default function HomePage() {
         return startOk || dueOk;
       }
       case "inbox":
+        // Inbox = unprocessed tasks (no project, no dates — capture staging area)
+        return !task.project_id && !task.start_date && !task.due_date;
+      case "all":
         return task.status !== "done" && task.status !== "someday";
       case "completed":
         return task.status === "done";
@@ -165,7 +168,8 @@ export default function HomePage() {
       const dueOk = dd && differenceInDays(parseISO(dd), today) <= 7;
       return startOk || dueOk;
     }).length,
-    inbox: activeTasks.length,
+    inbox: activeTasks.filter((t) => !t.project_id && !t.start_date && !t.due_date).length,
+    all: activeTasks.length,
     someday: tasks.filter((t) => t.status === "someday").length,
     habits: habits.length,
   };
@@ -175,6 +179,7 @@ export default function HomePage() {
     today: "Oggi",
     next7: "Prossimi 7 Giorni",
     inbox: "Inbox",
+    all: "Tutti i Task",
     completed: "Completati",
     someday: "Prima o Poi",
     calendar: "Calendario",
@@ -259,7 +264,7 @@ export default function HomePage() {
   }
 
   // Should show FAB?
-  const showFab = ["inbox", "today", "next7", "completed", "habits", "someday"].includes(selectedView) || selectedView.startsWith("project-");
+  const showFab = ["inbox", "all", "today", "next7", "completed", "habits", "someday"].includes(selectedView) || selectedView.startsWith("project-");
 
   // Keyboard shortcuts
   const shortcutActions = useMemo(

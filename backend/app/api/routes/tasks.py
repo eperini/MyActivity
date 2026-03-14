@@ -255,9 +255,8 @@ async def create_task(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if data.project_id is None:
-        raise HTTPException(status_code=400, detail="Specificare project_id")
-    await _check_project_access(data.project_id, user.id, db)
+    if data.project_id is not None:
+        await _check_project_access(data.project_id, user.id, db)
     task_data = data.model_dump()
     if task_data.get("assigned_to") is not None:
         target_user = await db.get(User, task_data["assigned_to"])
