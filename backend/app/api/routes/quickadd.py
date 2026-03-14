@@ -15,7 +15,7 @@ router = APIRouter()
 
 class QuickAddRequest(BaseModel):
     text: str = Field(min_length=1, max_length=500)
-    project_id: int
+    project_id: int | None = None
 
 
 @router.post("/quickadd")
@@ -24,9 +24,10 @@ async def quick_add_task(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify project access
-    from app.api.routes.projects import _check_project_access
-    await _check_project_access(data.project_id, user.id, db)
+    # Verify project access if project specified
+    if data.project_id is not None:
+        from app.api.routes.projects import _check_project_access
+        await _check_project_access(data.project_id, user.id, db)
 
     parsed = parse_quick_add(data.text)
 

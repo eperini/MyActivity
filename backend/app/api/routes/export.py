@@ -249,7 +249,7 @@ def _find_header_row(lines: list[str]) -> int:
 class TickTickImportResult(BaseModel):
     tasks_imported: int = 0
     subtasks_imported: int = 0
-    lists_created: int = 0
+    projects_created: int = 0
     tags_created: int = 0
     recurrences_created: int = 0
     skipped: int = 0
@@ -321,7 +321,7 @@ async def import_ticktick(
                 db.add(new_project)
                 await db.flush()
                 projects_by_name[list_name] = new_project.id
-                result.lists_created += 1
+                result.projects_created += 1
 
             proj_id = projects_by_name[list_name]
 

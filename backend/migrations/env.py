@@ -14,13 +14,7 @@ from app.core.config import settings
 from app.core.database import Base
 
 # Import all models so Alembic can detect them
-from app.models.user import User
-from app.models.task_list import TaskList, ListMember
-from app.models.task import Task
-from app.models.recurrence import RecurrenceRule, TaskInstance
-from app.models.notification import TaskReminder
-from app.models.habit import Habit, HabitLog
-from app.models.sharing import UserProjectArea, ProjectInvitation, AppNotification
+import app.models  # noqa: F401 - registers all models via __init__.py
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

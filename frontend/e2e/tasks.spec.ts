@@ -24,16 +24,16 @@ test.describe("Tasks", () => {
   test("tasks CRUD works via API", async ({ page }) => {
     const apiUrl = "http://localhost:8000/api";
 
-    // Create a list
-    const listRes = await page.request.post(`${apiUrl}/lists/`, {
-      data: { name: `E2E List ${Date.now()}` },
+    // Create a project
+    const projRes = await page.request.post(`${apiUrl}/projects/`, {
+      data: { name: `E2E Project ${Date.now()}` },
     });
-    expect(listRes.ok()).toBeTruthy();
-    const list = await listRes.json();
+    expect(projRes.ok()).toBeTruthy();
+    const project = await projRes.json();
 
     // Create task
     const taskRes = await page.request.post(`${apiUrl}/tasks/`, {
-      data: { title: `E2E Task ${Date.now()}`, list_id: list.id },
+      data: { title: `E2E Task ${Date.now()}`, project_id: project.id },
     });
     expect(taskRes.ok()).toBeTruthy();
     const task = await taskRes.json();
@@ -54,12 +54,12 @@ test.describe("Tasks", () => {
   test("time log CRUD works via API", async ({ page }) => {
     const apiUrl = "http://localhost:8000/api";
 
-    // Setup: list + task
-    const list = await (await page.request.post(`${apiUrl}/lists/`, {
-      data: { name: `TL List ${Date.now()}` },
+    // Setup: project + task
+    const project = await (await page.request.post(`${apiUrl}/projects/`, {
+      data: { name: `TL Project ${Date.now()}` },
     })).json();
     const task = await (await page.request.post(`${apiUrl}/tasks/`, {
-      data: { title: "Time Task", list_id: list.id },
+      data: { title: "Time Task", project_id: project.id },
     })).json();
 
     // Create time log

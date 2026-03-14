@@ -5,10 +5,10 @@ from tests.conftest import register_user, create_project
 
 
 async def _create_task_with_project(client: AsyncClient, headers: dict):
-    """Create a list + project + task and return (project, task) dicts."""
-    list_res = await client.post("/api/lists/", json={"name": "TL"}, headers=headers)
-    list_id = list_res.json()["id"]
-    task_res = await client.post("/api/tasks/", json={"title": "Time Task", "list_id": list_id}, headers=headers)
+    """Create a project + task and return the task dict."""
+    proj_res = await client.post("/api/projects/", json={"name": "TL"}, headers=headers)
+    project_id = proj_res.json()["id"]
+    task_res = await client.post("/api/tasks/", json={"title": "Time Task", "project_id": project_id}, headers=headers)
     return task_res.json()
 
 
@@ -115,7 +115,7 @@ async def test_cannot_log_time_on_others_task(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_cannot_update_others_time_log(client: AsyncClient):
-    """Even if you're a list member, you can't edit another user's log."""
+    """Even if you're a project member, you can't edit another user's log."""
     u1 = await register_user(client, "tl_u1@test.com", "U1")
     task = await _create_task_with_project(client, u1["headers"])
 

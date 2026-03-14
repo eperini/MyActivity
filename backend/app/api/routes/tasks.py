@@ -258,6 +258,12 @@ async def create_task(
     if data.project_id is not None:
         await _check_project_access(data.project_id, user.id, db)
     task_data = data.model_dump()
+    # Validate heading belongs to the same project
+    if task_data.get("heading_id") is not None:
+        from app.models.heading import ProjectHeading
+        heading = await db.get(ProjectHeading, task_data["heading_id"])
+        if not heading or heading.project_id != task_data.get("project_id"):
+            raise HTTPException(status_code=400, detail="La sezione non appartiene al progetto")
     if task_data.get("assigned_to") is not None:
         target_user = await db.get(User, task_data["assigned_to"])
         if not target_user:
@@ -302,6 +308,13 @@ async def update_task(
     # If changing project, verify access to new project
     if "project_id" in update_data and update_data["project_id"] is not None:
         await _check_project_access(update_data["project_id"], user.id, db)
+    # Validate heading belongs to the target project
+    if "heading_id" in update_data and update_data["heading_id"] is not None:
+        from app.models.heading import ProjectHeading
+        heading = await db.get(ProjectHeading, update_data["heading_id"])
+        target_project = update_data.get("project_id", task.project_id)
+        if not heading or heading.project_id != target_project:
+            raise HTTPException(status_code=400, detail="La sezione non appartiene al progetto")
     if "assigned_to" in update_data and update_data["assigned_to"] is not None:
         target_user = await db.get(User, update_data["assigned_to"])
         if not target_user:
