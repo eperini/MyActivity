@@ -9,8 +9,6 @@ import {
   login,
   register,
   logout,
-  getLists,
-  createList,
   getTasks,
   createTask,
   updateTask,
@@ -76,14 +74,14 @@ describe("Auth API", () => {
 
   it("401 redirects to login", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 401, json: () => Promise.resolve({}) });
-    await expect(getLists()).rejects.toThrow("Non autorizzato");
+    await expect(getTasks()).rejects.toThrow("Non autorizzato");
     expect(window.location.href).toBe("/login");
   });
 
   it("401 does NOT redirect when already on /login", async () => {
     (window.location as unknown as Record<string, string>).pathname = "/login";
     mockFetch.mockResolvedValueOnce({ ok: false, status: 401, json: () => Promise.resolve({}) });
-    await expect(getLists()).rejects.toThrow("Non autorizzato");
+    await expect(getTasks()).rejects.toThrow("Non autorizzato");
     expect(window.location.href).not.toBe("/login");
   });
 
@@ -93,37 +91,21 @@ describe("Auth API", () => {
       status: 400,
       json: () => Promise.resolve({ detail: "Campo obbligatorio" }),
     });
-    await expect(createList({ name: "" })).rejects.toThrow("Campo obbligatorio");
-  });
-});
-
-describe("Lists API", () => {
-  it("getLists fetches correctly", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse([{ id: 1, name: "Test" }]));
-    const lists = await getLists();
-    expect(lists).toHaveLength(1);
-    expect(mockFetch.mock.calls[0][0]).toContain("/lists/");
-  });
-
-  it("createList sends POST with body", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ id: 1, name: "New" }));
-    await createList({ name: "New", color: "#FF0000" });
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body).toEqual({ name: "New", color: "#FF0000" });
+    await expect(createTask({ title: "" })).rejects.toThrow("Campo obbligatorio");
   });
 });
 
 describe("Tasks API", () => {
   it("getTasks with params builds query string", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse([]));
-    await getTasks({ list_id: 5, status: "todo" });
-    expect(mockFetch.mock.calls[0][0]).toContain("list_id=5");
+    await getTasks({ project_id: 5, status: "todo" });
+    expect(mockFetch.mock.calls[0][0]).toContain("project_id=5");
     expect(mockFetch.mock.calls[0][0]).toContain("status=todo");
   });
 
   it("createTask sends POST", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ id: 1, title: "Test" }));
-    await createTask({ title: "Test", list_id: 1 });
+    await createTask({ title: "Test", project_id: 1 });
     expect(mockFetch.mock.calls[0][1].method).toBe("POST");
   });
 

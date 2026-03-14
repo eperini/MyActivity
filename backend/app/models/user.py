@@ -28,6 +28,4 @@ class User(Base):
     daily_report_time: Mapped[time | None] = mapped_column(Time, nullable=True, default=lambda: time(7, 0))
     daily_report_last_sent: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    owned_lists: Mapped[list["TaskList"]] = relationship(back_populates="owner")
-    list_memberships: Mapped[list["ListMember"]] = relationship(back_populates="user")
     areas: Mapped[list["Area"]] = relationship(back_populates="owner")

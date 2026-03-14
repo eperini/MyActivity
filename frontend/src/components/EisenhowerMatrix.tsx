@@ -1,13 +1,12 @@
 "use client";
 
 import { Check } from "lucide-react";
-import type { Task, TaskList } from "@/types";
+import type { Task } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
 import { isToday, parseISO, differenceInDays } from "date-fns";
 
 interface EisenhowerMatrixProps {
   tasks: Task[];
-  lists: TaskList[];
   onSelectTask: (task: Task) => void;
   onToggleTask: (task: Task) => void;
 }
@@ -101,17 +100,14 @@ function groupByTime(tasks: Task[]): TimeGroup[] {
 function QuadrantPanel({
   quadrant,
   tasks,
-  lists,
   onSelectTask,
   onToggleTask,
 }: {
   quadrant: Quadrant;
   tasks: Task[];
-  lists: TaskList[];
   onSelectTask: (task: Task) => void;
   onToggleTask: (task: Task) => void;
 }) {
-  const listMap = Object.fromEntries(lists.map((l) => [l.id, l]));
   const groups = groupByTime(tasks);
 
   return (
@@ -141,7 +137,6 @@ function QuadrantPanel({
                 {/* Tasks in group */}
                 {group.tasks.map((task) => {
                   const isDone = task.status === "done";
-                  const list = task.list_id ? listMap[task.list_id] : undefined;
                   const overdue = task.due_date ? isOverdue(task.due_date) : false;
 
                   return (
@@ -174,19 +169,6 @@ function QuadrantPanel({
                         {task.title}
                       </span>
 
-                      {/* List badge */}
-                      {list && (
-                        <span
-                          className="px-1.5 py-0.5 rounded text-[9px] font-medium flex-shrink-0"
-                          style={{
-                            backgroundColor: list.color + "20",
-                            color: list.color,
-                          }}
-                        >
-                          {list.name.length > 8 ? list.name.slice(0, 8) + "..." : list.name}
-                        </span>
-                      )}
-
                       {/* Due date */}
                       {task.due_date && (
                         <span
@@ -211,7 +193,6 @@ function QuadrantPanel({
 
 export default function EisenhowerMatrix({
   tasks,
-  lists,
   onSelectTask,
   onToggleTask,
 }: EisenhowerMatrixProps) {
@@ -229,7 +210,6 @@ export default function EisenhowerMatrix({
             key={q.title}
             quadrant={q}
             tasks={tasks.filter((t) => q.priorities.includes(t.priority))}
-            lists={lists}
             onSelectTask={onSelectTask}
             onToggleTask={onToggleTask}
           />

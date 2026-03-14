@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { ArrowLeft, Calendar, Flag, List, Repeat, Trash2, X, Tag as TagIcon, MessageCircle, UserCircle, Send, ListChecks, Bookmark, Plus, ExternalLink, Link2, Unlink } from "lucide-react";
-import type { Task, TaskList, RecurrenceRule, Tag, TaskComment, ListMember } from "@/types";
+import { ArrowLeft, Calendar, Flag, Repeat, Trash2, X, Tag as TagIcon, MessageCircle, UserCircle, Send, ListChecks, Bookmark, Plus, ExternalLink, Link2, Unlink } from "lucide-react";
+import type { Task, RecurrenceRule, Tag, TaskComment, ProjectMember } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
-import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getListMembers, updateTask as apiUpdateTask, getSubtasks, createSubtask, toggleSubtask, deleteTask as apiDeleteTask, createTemplateFromTask, pushTaskToJira, unlinkTaskFromJira } from "@/lib/api";
+import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getProjectMembers, updateTask as apiUpdateTask, getSubtasks, createSubtask, toggleSubtask, deleteTask as apiDeleteTask, createTemplateFromTask, pushTaskToJira, unlinkTaskFromJira } from "@/lib/api";
 import CustomFieldsPanel from "./CustomFieldsPanel";
 import DependenciesPanel from "./DependenciesPanel";
 import TimeLogPanel from "./TimeLogPanel";
@@ -16,8 +16,6 @@ import DatePicker from "./DatePicker";
 
 interface TaskDetailProps {
   task: Task;
-  list?: TaskList;
-  lists?: TaskList[];
   onClose: () => void;
   onUpdate: (id: number, data: Partial<Task>) => void;
   onDelete: (id: number) => void;
@@ -84,7 +82,7 @@ function describeRrule(rrule: string, workdayAdjust: string, workdayTarget: numb
   return desc;
 }
 
-export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDelete, onRefresh }: TaskDetailProps) {
+export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefresh }: TaskDetailProps) {
   const { showToast } = useToast();
   const priority = PRIORITY_LABELS[task.priority] || PRIORITY_LABELS[4];
   const overdue = task.due_date ? isOverdue(task.due_date) : false;
@@ -105,7 +103,7 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
   const [sendingComment, setSendingComment] = useState(false);
 
   // Assignment
-  const [members, setMembers] = useState<ListMember[]>([]);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
 
   // Subtasks
@@ -119,9 +117,9 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
   useEffect(() => {
     getTags().then(setAllTags).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento tag"); });
     getComments(task.id).then(setComments).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento commenti"); });
-    if (task.list_id) getListMembers(task.list_id).then(setMembers).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento membri"); });
+    if (task.project_id) getProjectMembers(task.project_id).then(setMembers).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento membri"); });
     getSubtasks(task.id).then(setSubtasks).catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento subtask"); });
-  }, [task.id, task.list_id]);
+  }, [task.id, task.project_id]);
 
   useEffect(() => {
     if (!task.has_recurrence) {
@@ -243,31 +241,6 @@ export default function TaskDetail({ task, list, lists, onClose, onUpdate, onDel
 
         {/* Meta */}
         <div className="space-y-3">
-          {/* List */}
-          <div className="flex items-center gap-3 text-sm">
-            <List size={16} className="text-zinc-500" />
-            {lists && lists.length > 0 ? (
-              <select
-                value={task.list_id ?? ""}
-                onChange={(e) => onUpdate(task.id, { list_id: e.target.value ? Number(e.target.value) : null } as Partial<Task>)}
-                className="bg-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-300 outline-none cursor-pointer"
-                style={{ color: list?.color || "#d4d4d8" }}
-              >
-                {!task.list_id && <option value="">Nessuna lista</option>}
-                {lists.map((l) => (
-                  <option key={l.id} value={l.id} style={{ color: l.color }} className="bg-zinc-800">
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            ) : list && (
-              <span className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: list.color }} />
-                <span className="text-zinc-300">{list.name}</span>
-              </span>
-            )}
-          </div>
-
           {/* Due date (click to open picker) */}
           <div className="relative">
             <button

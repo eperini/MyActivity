@@ -8,7 +8,6 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task, TaskStatus
-from app.models.task_list import TaskList, ListMember
 from app.models.recurrence import RecurrenceRule
 from app.models.template import TaskTemplate
 
@@ -38,7 +37,7 @@ class TemplateUpdate(BaseModel):
 
 
 class InstantiateTemplate(BaseModel):
-    list_id: int
+    project_id: int
     due_date: date | None = None
     due_time: time | None = None
 
@@ -162,25 +161,15 @@ async def instantiate_template(
     if not template or template.user_id != user.id:
         raise HTTPException(status_code=404, detail="Template non trovato")
 
-    # Check list access
-    task_list = await db.get(TaskList, data.list_id)
-    if not task_list:
-        raise HTTPException(status_code=404, detail="Lista non trovata")
-    if task_list.owner_id != user.id:
-        member = await db.execute(
-            select(ListMember).where(
-                ListMember.list_id == data.list_id,
-                ListMember.user_id == user.id,
-            )
-        )
-        if not member.scalar_one_or_none():
-            raise HTTPException(status_code=403, detail="Non hai accesso a questa lista")
+    # Check project access
+    from app.api.routes.projects import _check_project_access
+    await _check_project_access(data.project_id, user.id, db)
 
     # Create main task
     task = Task(
         title=template.title,
         description=template.description,
-        list_id=data.list_id,
+        project_id=data.project_id,
         created_by=user.id,
         priority=template.priority,
         due_date=data.due_date,
@@ -194,7 +183,7 @@ async def instantiate_template(
         for i, title in enumerate(template.subtask_titles):
             sub = Task(
                 title=title,
-                list_id=data.list_id,
+                project_id=data.project_id,
                 created_by=user.id,
                 parent_id=task.id,
                 priority=template.priority,
@@ -217,6 +206,6 @@ async def instantiate_template(
     return {
         "id": task.id,
         "title": task.title,
-        "list_id": task.list_id,
+        "project_id": task.project_id,
         "detail": "Task creato da template",
     }

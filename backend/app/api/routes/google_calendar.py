@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task, TaskStatus
-from app.models.task_list import TaskList
+from app.models.project import Project
 
 router = APIRouter()
 
@@ -33,8 +33,8 @@ async def get_config(user: User = Depends(get_current_user)):
     """Get current Google Calendar configuration."""
     return {
         "calendar_id": settings.GOOGLE_CALENDAR_ID,
-        "sync_list_id": settings.GOOGLE_SYNC_LIST_ID,
-        "configured": bool(settings.GOOGLE_CALENDAR_ID and settings.GOOGLE_SYNC_LIST_ID),
+        "sync_project_id": settings.GOOGLE_SYNC_PROJECT_ID,
+        "configured": bool(settings.GOOGLE_CALENDAR_ID and settings.GOOGLE_SYNC_PROJECT_ID),
     }
 
 
@@ -49,14 +49,14 @@ async def trigger_sync(
 
     from app.services.google_calendar import push_task_to_calendar, fetch_calendar_events
 
-    sync_list_id = settings.GOOGLE_SYNC_LIST_ID
-    if not sync_list_id:
-        raise HTTPException(status_code=400, detail="Lista di sincronizzazione non configurata")
+    sync_project_id = settings.GOOGLE_SYNC_PROJECT_ID
+    if not sync_project_id:
+        raise HTTPException(status_code=400, detail="Progetto di sincronizzazione non configurato")
 
     # --- Push: Zeno → Google ---
     result = await db.execute(
         select(Task).where(
-            Task.list_id == sync_list_id,
+            Task.project_id == sync_project_id,
             Task.due_date.isnot(None),
         )
     )
@@ -80,16 +80,16 @@ async def trigger_sync(
         # Get existing google_event_ids
         existing_result = await db.execute(
             select(Task.google_event_id).where(
-                Task.list_id == sync_list_id,
+                Task.project_id == sync_project_id,
                 Task.google_event_id.isnot(None),
             )
         )
         existing_event_ids = set(existing_result.scalars().all())
 
-        # Use the sync list
-        sync_list = await db.get(TaskList, sync_list_id)
-        if not sync_list:
-            return {"pushed": pushed, "pulled": 0, "detail": "Lista sync non trovata"}
+        # Use the sync project
+        sync_project = await db.get(Project, sync_project_id)
+        if not sync_project:
+            return {"pushed": pushed, "pulled": 0, "detail": "Progetto sync non trovato"}
 
         # For recurring events, keep only the next occurrence (closest to today)
         today = date.today()
@@ -142,7 +142,7 @@ async def trigger_sync(
         if recurring_best:
             title_result = await db.execute(
                 select(Task.title, Task.due_date).where(
-                    Task.list_id == sync_list_id,
+                    Task.project_id == sync_project_id,
                 )
             )
             existing_titles_dates = {(r[0], r[1]) for r in title_result.all()}
@@ -172,8 +172,8 @@ async def trigger_sync(
             task = Task(
                 title=summary,
                 description=description if description else None,
-                list_id=sync_list.id,
-                created_by=sync_list.owner_id,
+                project_id=sync_project.id,
+                created_by=sync_project.owner_id,
                 due_date=due_date,
                 due_time=due_time,
                 google_event_id=event.get("id"),

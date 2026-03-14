@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Task, TaskList, Project, ProjectStats, Epic } from "@/types";
+import type { Task, Project, ProjectStats, Epic } from "@/types";
 import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProjectEpics, createEpic, createEpicTimeLog, deleteEpic, pushEpicToJira } from "@/lib/api";
 import { useToast } from "./Toast";
 import TaskItem from "./TaskItem";
@@ -12,10 +12,6 @@ import TimeLogForm from "./TimeLogForm";
 import AutomationsView from "./AutomationsView";
 import SprintBoard from "./SprintBoard";
 import ProjectMembersPanel from "./ProjectMembersPanel";
-
-function findList(lists: TaskList[], listId: number) {
-  return lists.find((l) => l.id === listId);
-}
 
 const STATUS_LABELS: Record<string, string> = {
   todo: "da fare",
@@ -39,12 +35,11 @@ function formatMins(m: number): string {
 
 interface ProjectViewProps {
   projectId: number;
-  lists: TaskList[];
   onSelectTask: (task: Task) => void;
   onRefresh: () => void;
 }
 
-export default function ProjectView({ projectId, lists, onSelectTask, onRefresh }: ProjectViewProps) {
+export default function ProjectView({ projectId, onSelectTask, onRefresh }: ProjectViewProps) {
   const { showToast } = useToast();
   const [project, setProject] = useState<Project | null>(null);
   const [stats, setStats] = useState<ProjectStats | null>(null);
@@ -338,7 +333,6 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
                   <TaskItem
                     key={task.id}
                     task={task}
-                    list={task.list_id ? findList(lists, task.list_id) : undefined}
                     onToggle={() => handleToggle(task)}
                     onSelect={() => onSelectTask(task)}
                     isSelected={false}
@@ -364,7 +358,6 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
                     <TaskItem
                       key={task.id}
                       task={task}
-                      list={task.list_id ? findList(lists, task.list_id) : undefined}
                       onToggle={() => handleToggle(task)}
                       onSelect={() => onSelectTask(task)}
                       isSelected={false}
@@ -503,8 +496,6 @@ export default function ProjectView({ projectId, lists, onSelectTask, onRefresh 
       {/* Add task form overlay */}
       {showAddTask && (
         <AddTaskForm
-          lists={lists}
-          defaultListId={lists[0]?.id}
           defaultProjectId={projectId}
           onCreated={() => { setShowAddTask(false); onRefresh(); }}
           onClose={() => setShowAddTask(false)}

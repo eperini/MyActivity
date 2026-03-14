@@ -1,4 +1,4 @@
-import type { Task, TaskList, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, ListMember, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig, TempoPushLog, TempoPendingLog, Epic, QuickLogProject, ProjectInvitation, ZenoNotification } from "@/types";
+import type { Task, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig, TempoPushLog, TempoPendingLog, Epic, QuickLogProject, ProjectInvitation, ZenoNotification } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -66,29 +66,10 @@ export const adminUpdateUser = (id: number, data: { display_name?: string; email
 export const adminDeleteUser = (id: number) =>
   request<{ detail: string }>(`/auth/users/${id}`, { method: "DELETE" });
 
-// Lists
-export const getLists = () => request<TaskList[]>("/lists/");
-export const createList = (data: { name: string; color?: string }) =>
-  request<TaskList>("/lists/", { method: "POST", body: JSON.stringify(data) });
-export const updateList = (id: number, data: { name?: string; color?: string }) =>
-  request<TaskList>(`/lists/${id}`, { method: "PATCH", body: JSON.stringify(data) });
-export const deleteList = (id: number) =>
-  request<{ detail: string }>(`/lists/${id}`, { method: "DELETE" });
-export const reorderLists = (ids: number[]) =>
-  request<{ detail: string }>("/lists/reorder", { method: "PATCH", body: JSON.stringify({ ids }) });
-export const resetListOrder = () =>
-  request<{ detail: string }>("/lists/reset-order", { method: "PATCH" });
-export const getListMembers = (listId: number) =>
-  request<ListMember[]>(`/lists/${listId}/members`);
-export const addListMember = (listId: number, email: string, role = "edit") =>
-  request<ListMember>(`/lists/${listId}/members`, { method: "POST", body: JSON.stringify({ email, role }) });
-export const removeListMember = (listId: number, memberId: number) =>
-  request<{ detail: string }>(`/lists/${listId}/members/${memberId}`, { method: "DELETE" });
-
 // Tasks
-export const getTasks = (params?: { list_id?: number; status?: string }) => {
+export const getTasks = (params?: { project_id?: number; status?: string }) => {
   const query = new URLSearchParams();
-  if (params?.list_id) query.set("list_id", String(params.list_id));
+  if (params?.project_id) query.set("project_id", String(params.project_id));
   if (params?.status) query.set("status", params.status);
   const qs = query.toString();
   return request<Task[]>(`/tasks/${qs ? `?${qs}` : ""}`);
@@ -235,7 +216,7 @@ export async function exportBlob(path: string): Promise<Blob> {
 export interface TickTickImportResult {
   tasks_imported: number;
   subtasks_imported: number;
-  lists_created: number;
+  projects_created: number;
   tags_created: number;
   recurrences_created: number;
   skipped: number;
@@ -283,7 +264,7 @@ export async function importTasks(file: File): Promise<{ tasks_imported: number;
 
 // Google Calendar
 export const getGoogleCalendarConfig = () =>
-  request<{ calendar_id: string; sync_list_id: number; configured: boolean }>("/google/config");
+  request<{ calendar_id: string; sync_project_id: number; configured: boolean }>("/google/config");
 export const triggerGoogleSync = () =>
   request<{ pushed: number; pulled: number }>("/google/sync", { method: "POST" });
 
@@ -320,12 +301,12 @@ export const createTemplateFromTask = (taskId: number, name: string) =>
   request<TaskTemplate>(`/templates/from-task/${taskId}`, { method: "POST", body: JSON.stringify({ name }) });
 export const deleteTemplate = (id: number) =>
   request<{ detail: string }>(`/templates/${id}`, { method: "DELETE" });
-export const instantiateTemplate = (templateId: number, data: { list_id: number; due_date?: string; due_time?: string }) =>
+export const instantiateTemplate = (templateId: number, data: { project_id?: number; due_date?: string; due_time?: string }) =>
   request<{ id: number; title: string; detail: string }>(`/templates/${templateId}/instantiate`, { method: "POST", body: JSON.stringify(data) });
 
 // Quick add
-export const quickAddTask = (text: string, listId: number) =>
-  request<Task>("/tasks/quickadd", { method: "POST", body: JSON.stringify({ text, list_id: listId }) });
+export const quickAddTask = (text: string, projectId?: number) =>
+  request<Task>("/tasks/quickadd", { method: "POST", body: JSON.stringify({ text, project_id: projectId }) });
 
 // API Key (for iOS Shortcuts)
 export const generateApiKey = () =>
@@ -445,9 +426,9 @@ export const getWeeklyTime = () =>
 // Jira
 export const getJiraConfigs = () =>
   request<JiraConfig[]>("/jira/config");
-export const createJiraConfig = (data: { jira_project_key: string; zeno_project_id: number; default_list_id?: number }) =>
+export const createJiraConfig = (data: { jira_project_key: string; zeno_project_id: number }) =>
   request<JiraConfig>("/jira/config", { method: "POST", body: JSON.stringify(data) });
-export const updateJiraConfig = (id: number, data: { sync_enabled?: boolean; default_list_id?: number }) =>
+export const updateJiraConfig = (id: number, data: { sync_enabled?: boolean }) =>
   request<JiraConfig>(`/jira/config/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteJiraConfig = (id: number) =>
   request<{ detail: string }>(`/jira/config/${id}`, { method: "DELETE" });

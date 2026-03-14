@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import type { Task, TaskList, Habit } from "@/types";
+import type { Task, Habit } from "@/types";
 import {
-  getTasks, getLists, updateTask, deleteTask,
+  getTasks, updateTask, deleteTask,
   getHabits, getWeekLogs, toggleHabitLog, deleteHabit, logout,
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
@@ -22,7 +22,6 @@ import EisenhowerMatrix from "@/components/EisenhowerMatrix";
 import PomodoroTimer from "@/components/PomodoroTimer";
 import PomodoroHistory from "@/components/PomodoroHistory";
 import CalendarView from "@/components/CalendarView";
-import ShareListModal from "@/components/ShareListModal";
 import StatsView from "@/components/StatsView";
 import SettingsView from "@/components/SettingsView";
 import KanbanView from "@/components/KanbanView";
@@ -42,7 +41,6 @@ export default function HomePage() {
   const isMobile = useIsMobile();
   const { showToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [lists, setLists] = useState<TaskList[]>([]);
   const [selectedView, setSelectedView] = useState("inbox");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,17 +60,13 @@ export default function HomePage() {
   // Calendar add task
   const [calendarAddDate, setCalendarAddDate] = useState<string | null>(null);
 
-  // Share list
-  const [shareList, setShareList] = useState<TaskList | null>(null);
-
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [t, l] = await Promise.all([getTasks(), getLists()]);
+      const t = await getTasks();
       setTasks(t);
-      setLists(l);
     } catch {
       router.push("/login");
     } finally {
@@ -141,10 +135,6 @@ export default function HomePage() {
       case "completed":
         return task.status === "done";
       default:
-        if (selectedView.startsWith("list-")) {
-          const listId = parseInt(selectedView.split("-")[1]);
-          return task.list_id === listId;
-        }
         return true;
     }
   });
@@ -161,9 +151,6 @@ export default function HomePage() {
     inbox: activeTasks.length,
     habits: habits.length,
   };
-  lists.forEach((l) => {
-    taskCounts[`list-${l.id}`] = activeTasks.filter((t) => t.list_id === l.id).length;
-  });
 
   // View title
   const viewTitles: Record<string, string> = {
@@ -182,9 +169,7 @@ export default function HomePage() {
     reports: "Report",
     quicklog: "Quick Log",
   };
-  const viewTitle = selectedView.startsWith("list-")
-    ? lists.find((l) => l.id === parseInt(selectedView.split("-")[1]))?.name || "Lista"
-    : selectedView.startsWith("project-")
+  const viewTitle = selectedView.startsWith("project-")
     ? "Progetto"
     : viewTitles[selectedView] || "Task";
 
@@ -255,7 +240,7 @@ export default function HomePage() {
   }
 
   // Should show FAB?
-  const showFab = ["inbox", "today", "next7", "completed", "habits"].includes(selectedView) || selectedView.startsWith("list-") || selectedView.startsWith("project-");
+  const showFab = ["inbox", "today", "next7", "completed", "habits"].includes(selectedView) || selectedView.startsWith("project-");
 
   // Keyboard shortcuts
   const shortcutActions = useMemo(
@@ -269,7 +254,6 @@ export default function HomePage() {
         if (showMobileAdd) { setShowMobileAdd(false); return; }
         if (showAddHabit) { setShowAddHabit(false); return; }
         if (calendarAddDate) { setCalendarAddDate(null); return; }
-        if (shareList) { setShareList(null); return; }
         if (selectedTask) { setSelectedTask(null); return; }
         if (selectedHabit) { setSelectedHabit(null); return; }
       },
@@ -301,7 +285,7 @@ export default function HomePage() {
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedView, selectedTask, selectedHabit, showMobileAdd, showAddHabit, showShortcuts, calendarAddDate, shareList, filteredTasks]
+    [selectedView, selectedTask, selectedHabit, showMobileAdd, showAddHabit, showShortcuts, calendarAddDate, filteredTasks]
   );
   useKeyboardShortcuts(shortcutActions);
 
@@ -312,10 +296,6 @@ export default function HomePage() {
       </div>
     );
   }
-
-  const selectedList = selectedTask
-    ? lists.find((l) => l.id === selectedTask.list_id)
-    : undefined;
 
   const isHabitsView = selectedView === "habits";
   const isEisenhowerView = selectedView === "eisenhower";
@@ -407,7 +387,6 @@ export default function HomePage() {
         <>
           <KanbanView
             tasks={tasks}
-            lists={lists}
             onSelectTask={(task) => setSelectedTask(task)}
             onToggleTask={handleToggle}
             onUpdateTask={handleUpdate}
@@ -416,11 +395,9 @@ export default function HomePage() {
           {!isMobile && selectedTask && (
             <TaskDetail
               task={selectedTask}
-              list={selectedList}
               onClose={() => setSelectedTask(null)}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
-              lists={lists}
               onRefresh={loadData}
             />
           )}
@@ -432,7 +409,6 @@ export default function HomePage() {
       return (
         <EisenhowerMatrix
           tasks={tasks.filter((t) => t.status !== "done")}
-          lists={lists}
           onSelectTask={(task) => { setSelectedTask(task); }}
           onToggleTask={handleToggle}
         />
@@ -445,18 +421,15 @@ export default function HomePage() {
         <>
           <ProjectView
             projectId={projectId}
-            lists={lists}
             onSelectTask={setSelectedTask}
             onRefresh={loadData}
           />
           {!isMobile && selectedTask && (
             <TaskDetail
               task={selectedTask}
-              list={selectedList}
               onClose={() => setSelectedTask(null)}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
-              lists={lists}
               onRefresh={loadData}
             />
           )}
@@ -468,7 +441,6 @@ export default function HomePage() {
       return (
         <CalendarView
           tasks={tasks}
-          lists={lists}
           onSelectTask={(task) => setSelectedTask(task)}
           onSelectDate={() => {}}
           onAddTask={(date) => setCalendarAddDate(date)}
@@ -482,13 +454,7 @@ export default function HomePage() {
         <TaskListView
           title={viewTitle}
           tasks={filteredTasks}
-          lists={lists}
           selectedTask={selectedTask}
-          defaultListId={
-            selectedView.startsWith("list-")
-              ? parseInt(selectedView.split("-")[1])
-              : lists[0]?.id
-          }
           onSelectTask={setSelectedTask}
           onToggleTask={handleToggle}
           onTaskCreated={loadData}
@@ -498,11 +464,9 @@ export default function HomePage() {
           selectedTask ? (
             <TaskDetail
               task={selectedTask}
-              list={selectedList}
               onClose={() => setSelectedTask(null)}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
-              lists={lists}
               onRefresh={loadData}
             />
           ) : (
@@ -517,12 +481,9 @@ export default function HomePage() {
     <div className="h-screen bg-zinc-950 text-white flex flex-col md:flex-row">
       {/* Sidebar */}
       <Sidebar
-        lists={lists}
         selectedView={selectedView}
         onSelectView={handleSelectView}
         taskCounts={taskCounts}
-        onListCreated={loadData}
-        onShareList={setShareList}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -542,11 +503,9 @@ export default function HomePage() {
       {isMobile && selectedTask && (
         <TaskDetail
           task={selectedTask}
-          list={selectedList}
           onClose={() => setSelectedTask(null)}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
-          lists={lists}
           onRefresh={loadData}
         />
       )}
@@ -569,11 +528,9 @@ export default function HomePage() {
           <div onClick={(e) => e.stopPropagation()} className="max-h-[80vh] overflow-y-auto">
             <TaskDetail
               task={selectedTask}
-              list={selectedList}
               onClose={() => setSelectedTask(null)}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
-              lists={lists}
               onRefresh={loadData}
             />
           </div>
@@ -584,20 +541,10 @@ export default function HomePage() {
       {!isMobile && isEisenhowerView && selectedTask && (
         <TaskDetail
           task={selectedTask}
-          list={selectedList}
           onClose={() => setSelectedTask(null)}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
-          lists={lists}
           onRefresh={loadData}
-        />
-      )}
-
-      {/* Share list modal */}
-      {shareList && (
-        <ShareListModal
-          list={shareList}
-          onClose={() => setShareList(null)}
         />
       )}
 
@@ -607,7 +554,6 @@ export default function HomePage() {
           <div onClick={(e) => e.stopPropagation()}>
             <AddTaskFromCalendar
               date={calendarAddDate}
-              lists={lists}
               onCreated={() => { setCalendarAddDate(null); loadData(); }}
               onClose={() => setCalendarAddDate(null)}
             />
@@ -629,12 +575,6 @@ export default function HomePage() {
       {/* Mobile add task form */}
       {showMobileAdd && (
         <AddTaskForm
-          lists={lists}
-          defaultListId={
-            selectedView.startsWith("list-")
-              ? parseInt(selectedView.split("-")[1])
-              : lists[0]?.id
-          }
           onCreated={loadData}
           onClose={() => setShowMobileAdd(false)}
         />
@@ -657,21 +597,19 @@ export default function HomePage() {
 // Inline quick-add component for calendar
 import { createTask } from "@/lib/api";
 
-function AddTaskFromCalendar({ date, lists, onCreated, onClose }: {
+function AddTaskFromCalendar({ date, onCreated, onClose }: {
   date: string;
-  lists: TaskList[];
   onCreated: () => void;
   onClose: () => void;
 }) {
   const { showToast } = useToast();
   const [title, setTitle] = useState("");
-  const [listId, setListId] = useState(lists[0]?.id);
   const [priority, setPriority] = useState(4);
 
   async function handleSubmit() {
-    if (!title.trim() || !listId) return;
+    if (!title.trim()) return;
     try {
-      await createTask({ title: title.trim(), list_id: listId, due_date: date, priority, status: "todo" } as Parameters<typeof createTask>[0]);
+      await createTask({ title: title.trim(), due_date: date, priority, status: "todo" } as Parameters<typeof createTask>[0]);
       onCreated();
     } catch {
       showToast("Errore nella creazione del task");
@@ -693,15 +631,6 @@ function AddTaskFromCalendar({ date, lists, onCreated, onClose }: {
         }}
       />
       <div className="flex gap-2 mb-3">
-        <select
-          value={listId}
-          onChange={(e) => setListId(Number(e.target.value))}
-          className="flex-1 bg-zinc-700 text-sm text-zinc-300 rounded-lg px-2 py-1.5 outline-none"
-        >
-          {lists.map((l) => (
-            <option key={l.id} value={l.id}>{l.name}</option>
-          ))}
-        </select>
         <div className="flex gap-1">
           {[1, 2, 3, 4].map((p) => (
             <button

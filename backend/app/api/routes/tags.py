@@ -10,8 +10,6 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.tag import Tag, task_tags
 from app.models.task import Task
-from app.models.task_list import TaskList, ListMember
-
 router = APIRouter()
 
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")

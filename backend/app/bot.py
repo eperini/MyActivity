@@ -27,7 +27,7 @@ from app.core.config import settings
 from app.core.link_codes import consume_code
 from app.models.user import User
 from app.models.task import Task, TaskStatus
-from app.models.task_list import TaskList
+from app.models.project import Project
 from app.models.habit import Habit, HabitLog
 
 logging.basicConfig(level=logging.INFO)
@@ -147,18 +147,18 @@ async def cmd_add(update: Update, context):
     title = " ".join(context.args)
 
     with SessionLocal() as db:
-        # Prima lista dell'utente
-        first_list = db.execute(
-            select(TaskList).where(TaskList.owner_id == user_id).order_by(TaskList.id)
+        # Primo progetto dell'utente
+        first_project = db.execute(
+            select(Project).where(Project.owner_id == user_id).order_by(Project.id)
         ).scalars().first()
 
-        if not first_list:
-            await update.message.reply_text("Nessuna lista trovata. Crea una lista dall'app.")
+        if not first_project:
+            await update.message.reply_text("Nessun progetto trovato. Crea un progetto dall'app.")
             return
 
         task = Task(
             title=title,
-            list_id=first_list.id,
+            project_id=first_project.id,
             created_by=user_id,
             priority=4,
             status=TaskStatus.TODO,
@@ -169,7 +169,7 @@ async def cmd_add(update: Update, context):
 
         await update.message.reply_html(
             f"✅ Task creato:\n<b>{html.escape(title)}</b>\n"
-            f"📁 {html.escape(first_list.name)} · 📅 Oggi"
+            f"📁 {html.escape(first_project.name)} · 📅 Oggi"
         )
 
 

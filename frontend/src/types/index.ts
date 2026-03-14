@@ -6,14 +6,6 @@ export interface User {
   is_admin: boolean;
 }
 
-export interface TaskList {
-  id: number;
-  name: string;
-  color: string;
-  icon: string | null;
-  owner_id: number;
-}
-
 export type TaskStatus = "todo" | "doing" | "done";
 
 export interface Tag {
@@ -35,7 +27,6 @@ export interface Task {
   id: number;
   title: string;
   description: string | null;
-  list_id: number | null;
   created_by: number;
   assigned_to: number | null;
   assigned_to_name?: string | null;
@@ -199,14 +190,6 @@ export interface PomodoroStats {
   total_focus_minutes: number;
 }
 
-export interface ListMember {
-  id: number;
-  user_id: number;
-  email: string;
-  display_name: string;
-  role: string;
-}
-
 // Custom Fields
 export type FieldType = 'text' | 'number' | 'date' | 'select' | 'multi_select' | 'boolean' | 'url';
 
@@ -324,8 +307,6 @@ export interface JiraConfig {
   jira_project_key: string;
   zeno_project_id: number;
   zeno_project_name: string | null;
-  default_list_id: number | null;
-  default_list_name: string | null;
   sync_enabled: boolean;
   last_sync_at: string | null;
   last_sync_status: string | null;

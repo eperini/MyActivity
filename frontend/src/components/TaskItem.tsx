@@ -1,12 +1,11 @@
 "use client";
 
 import { Repeat, Clock, ExternalLink } from "lucide-react";
-import type { Task, TaskList } from "@/types";
+import type { Task } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
 
 interface TaskItemProps {
   task: Task;
-  list?: TaskList;
   isSelected: boolean;
   onSelect: (task: Task) => void;
   onToggle: (task: Task) => void;
@@ -26,7 +25,7 @@ const PRIORITY_CHECK_COLORS: Record<number, string> = {
   4: "text-zinc-500",
 };
 
-export default function TaskItem({ task, list, isSelected, onSelect, onToggle }: TaskItemProps) {
+export default function TaskItem({ task, isSelected, onSelect, onToggle }: TaskItemProps) {
   const isDone = task.status === "done";
   const displayDate = task.has_recurrence && task.next_occurrence ? task.next_occurrence : task.due_date;
   const overdue = displayDate ? isOverdue(displayDate) : false;
@@ -63,17 +62,6 @@ export default function TaskItem({ task, list, isSelected, onSelect, onToggle }:
           {task.title}
         </div>
         <div className="flex flex-wrap items-center gap-1 mt-1">
-          {list && (
-            <span
-              className="inline-block px-2 py-0.5 rounded text-[10px] font-medium"
-              style={{
-                backgroundColor: list.color + "20",
-                color: list.color,
-              }}
-            >
-              {list.name}
-            </span>
-          )}
           {task.tags && task.tags.length > 0 && task.tags.map(tag => (
             <span
               key={tag.id}

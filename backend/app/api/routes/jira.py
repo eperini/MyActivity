@@ -10,7 +10,6 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task
-from app.models.task_list import TaskList, ListMember
 from app.models.jira import JiraConfig, JiraUserMapping
 from app.models.project import Project
 
@@ -22,12 +21,10 @@ router = APIRouter()
 class JiraConfigCreate(BaseModel):
     jira_project_key: str = Field(..., max_length=50)
     zeno_project_id: int
-    default_list_id: int | None = None
 
 
 class JiraConfigUpdate(BaseModel):
     sync_enabled: bool | None = None
-    default_list_id: int | None = None
 
 
 class JiraConfigOut(BaseModel):
@@ -35,8 +32,6 @@ class JiraConfigOut(BaseModel):
     jira_project_key: str
     zeno_project_id: int
     zeno_project_name: str | None = None
-    default_list_id: int | None = None
-    default_list_name: str | None = None
     sync_enabled: bool
     last_sync_at: str | None = None
     last_sync_status: str | None = None
@@ -52,15 +47,14 @@ async def get_jira_configs(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(JiraConfig, Project.name, TaskList.name)
+        select(JiraConfig, Project.name)
         .outerjoin(Project, JiraConfig.zeno_project_id == Project.id)
-        .outerjoin(TaskList, JiraConfig.default_list_id == TaskList.id)
         .where(JiraConfig.user_id == user.id)
     )
     rows = result.all()
 
     configs = []
-    for cfg, proj_name, list_name in rows:
+    for cfg, proj_name in rows:
         # Count synced tasks
         count_result = await db.execute(
             select(func.count())
@@ -77,8 +71,6 @@ async def get_jira_configs(
             jira_project_key=cfg.jira_project_key,
             zeno_project_id=cfg.zeno_project_id,
             zeno_project_name=proj_name,
-            default_list_id=cfg.default_list_id,
-            default_list_name=list_name,
             sync_enabled=cfg.sync_enabled,
             last_sync_at=cfg.last_sync_at.isoformat() if cfg.last_sync_at else None,
             last_sync_status=cfg.last_sync_status,
@@ -106,7 +98,6 @@ async def create_jira_config(
         user_id=user.id,
         jira_project_key=data.jira_project_key.upper(),
         zeno_project_id=data.zeno_project_id,
-        default_list_id=data.default_list_id,
     )
     db.add(cfg)
     try:
@@ -116,18 +107,11 @@ async def create_jira_config(
         raise HTTPException(status_code=409, detail="Mapping già esistente")
     await db.refresh(cfg)
 
-    list_name = None
-    if cfg.default_list_id:
-        lst = await db.get(TaskList, cfg.default_list_id)
-        list_name = lst.name if lst else None
-
     return JiraConfigOut(
         id=cfg.id,
         jira_project_key=cfg.jira_project_key,
         zeno_project_id=cfg.zeno_project_id,
         zeno_project_name=project.name,
-        default_list_id=cfg.default_list_id,
-        default_list_name=list_name,
         sync_enabled=cfg.sync_enabled,
         last_sync_at=None,
         last_sync_status=None,
@@ -148,8 +132,6 @@ async def update_jira_config(
         raise HTTPException(status_code=404, detail="Config non trovata")
     if data.sync_enabled is not None:
         cfg.sync_enabled = data.sync_enabled
-    if data.default_list_id is not None:
-        cfg.default_list_id = data.default_list_id
     await db.commit()
     await db.refresh(cfg)
 

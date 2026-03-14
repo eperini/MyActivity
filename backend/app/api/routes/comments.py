@@ -8,8 +8,6 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.comment import Comment
 from app.models.task import Task
-from app.models.task_list import TaskList, ListMember
-
 router = APIRouter()
 
 

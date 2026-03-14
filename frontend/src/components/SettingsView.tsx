@@ -3,9 +3,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X, Cloud, Sun, Moon, Users, Settings as SettingsIcon, Database, Plug } from "lucide-react";
 import useTheme from "@/hooks/useTheme";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, getLists, linkJiraAccount } from "@/lib/api";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, linkJiraAccount } from "@/lib/api";
 import type { TickTickImportResult } from "@/lib/api";
-import type { TaskList, TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
+import type { TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
 import { useToast } from "@/components/Toast";
 import TempoSettingsPanel from "@/components/TempoSettingsPanel";
 import TempoUsersPanel from "@/components/TempoUsersPanel";
@@ -46,11 +46,9 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [showJiraAdd, setShowJiraAdd] = useState(false);
   const [newJiraKey, setNewJiraKey] = useState("");
   const [newZenoProjectId, setNewZenoProjectId] = useState<number | "">("");
-  const [newDefaultListId, setNewDefaultListId] = useState<number | "">("");
   const [jiraLoading, setJiraLoading] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
-  const [allLists, setAllLists] = useState<TaskList[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [jiraLinking, setJiraLinking] = useState(false);
   const [jiraAccountLinked, setJiraAccountLinked] = useState<string | null>(null);
@@ -79,9 +77,6 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
       .catch(() => {});
     getProjects()
       .then(setZenoProjects)
-      .catch(() => {});
-    getLists()
-      .then(setAllLists)
       .catch(() => {});
   }, []);
 
@@ -112,7 +107,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
 
   function handleCopyInvite() {
     const url = `${window.location.origin}/login`;
-    const text = `Ciao! Ti invito a usare Zeno per gestire task e abitudini insieme.\n\nRegistrati qui: ${url}\n\nDopo la registrazione, potro condividere le liste con te.`;
+    const text = `Ciao! Ti invito a usare Zeno per gestire task e abitudini insieme.\n\nRegistrati qui: ${url}\n\nDopo la registrazione, potro condividere i progetti con te.`;
     navigator.clipboard.writeText(text).then(() => {
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
@@ -269,7 +264,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
               Invita famiglia
             </h3>
             <p className="text-xs text-zinc-500">
-              Copia il messaggio di invito e invialo ai tuoi famigliari tramite WhatsApp, Telegram o email. Dopo la registrazione, potrai condividere le liste con loro dal menu contestuale della lista.
+              Copia il messaggio di invito e invialo ai tuoi famigliari tramite WhatsApp, Telegram o email. Dopo la registrazione, potrai condividere i progetti con loro.
             </p>
             <button
               onClick={handleCopyInvite}
@@ -414,7 +409,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
             {gcalConfigured ? (
               <>
                 <p className="text-xs text-zinc-500">
-                  I task della lista <span className="text-zinc-300 font-medium">Family</span> vengono sincronizzati automaticamente con il calendario Google condiviso. Usa il pulsante per forzare una sincronizzazione completa.
+                  I task del progetto <span className="text-zinc-300 font-medium">Family</span> vengono sincronizzati automaticamente con il calendario Google condiviso. Usa il pulsante per forzare una sincronizzazione completa.
                 </p>
                 <button
                   onClick={async () => {
@@ -490,9 +485,6 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
                         <span className="font-mono font-medium">{cfg.jira_project_key}</span>
                         <span className="text-zinc-500 mx-1">→</span>
                         {cfg.zeno_project_name || `Progetto #${cfg.zeno_project_id}`}
-                        {cfg.default_list_name && (
-                          <span className="text-zinc-500 text-[10px] ml-1">({cfg.default_list_name})</span>
-                        )}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className={`inline-block w-1.5 h-1.5 rounded-full ${
@@ -637,19 +629,6 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
                     )}
                   </div>
                 </div>
-                <div>
-                  <label className="text-[10px] text-zinc-500 block mb-1">Lista di default</label>
-                  <select
-                    value={newDefaultListId}
-                    onChange={(e) => setNewDefaultListId(e.target.value ? Number(e.target.value) : "")}
-                    className="w-full bg-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none"
-                  >
-                    <option value="">Prima lista disponibile</option>
-                    {allLists.map(l => (
-                      <option key={l.id} value={l.id}>{l.name}</option>
-                    ))}
-                  </select>
-                </div>
                 <div className="flex gap-2">
                   <button
                     onClick={async () => {
@@ -659,14 +638,12 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
                         const cfg = await createJiraConfig({
                           jira_project_key: newJiraKey,
                           zeno_project_id: Number(newZenoProjectId),
-                          default_list_id: newDefaultListId ? Number(newDefaultListId) : undefined,
                         });
                         setJiraConfigs(prev => [...prev, cfg]);
                         setShowJiraAdd(false);
                         setNewJiraKey("");
                         setNewZenoProjectId("");
-                        setNewDefaultListId("");
-                        showToast("Mapping creato", "success");
+                                                showToast("Mapping creato", "success");
                       } catch (err) {
                         showToast(err instanceof Error ? err.message : "Errore creazione mapping");
                       } finally {
@@ -679,7 +656,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
                     {jiraLoading ? "..." : "Salva"}
                   </button>
                   <button
-                    onClick={() => { setShowJiraAdd(false); setNewJiraKey(""); setNewZenoProjectId(""); setNewDefaultListId(""); }}
+                    onClick={() => { setShowJiraAdd(false); setNewJiraKey(""); setNewZenoProjectId(""); }}
                     className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300 transition-colors"
                   >
                     Annulla
@@ -825,7 +802,7 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
                     const res: TickTickImportResult = await importTickTick(file);
                     const parts = [`${res.tasks_imported} task`];
                     if (res.subtasks_imported > 0) parts.push(`${res.subtasks_imported} subtask`);
-                    if (res.lists_created > 0) parts.push(`${res.lists_created} liste create`);
+                    if (res.projects_created > 0) parts.push(`${res.projects_created} progetti creati`);
                     if (res.tags_created > 0) parts.push(`${res.tags_created} tag`);
                     if (res.recurrences_created > 0) parts.push(`${res.recurrences_created} ricorrenze`);
                     if (res.skipped > 0) parts.push(`${res.skipped} ignorati`);

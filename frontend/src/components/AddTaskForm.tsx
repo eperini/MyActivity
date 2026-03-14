@@ -1,16 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Calendar, List, Repeat, X, Zap, Bookmark } from "lucide-react";
-import type { TaskList, TaskTemplate } from "@/types";
-import { createTask, setRecurrence, quickAddTask, getTemplates, instantiateTemplate } from "@/lib/api";
+import { Calendar, Repeat, X, Zap, Bookmark } from "lucide-react";
+import type { TaskTemplate, Project } from "@/types";
+import { createTask, setRecurrence, quickAddTask, getTemplates, instantiateTemplate, getProjects } from "@/lib/api";
 import DatePicker from "./DatePicker";
 import { formatRelativeDate } from "@/lib/dates";
 import { useToast } from "./Toast";
 
 interface AddTaskFormProps {
-  lists: TaskList[];
-  defaultListId?: number;
   defaultProjectId?: number;
   onCreated: () => void;
   onClose: () => void;
@@ -36,11 +34,12 @@ const RECURRENCE_OPTIONS: { value: RecurrenceType; label: string }[] = [
   { value: "yearly", label: "Ogni anno" },
 ];
 
-export default function AddTaskForm({ lists, defaultListId, defaultProjectId, onCreated, onClose }: AddTaskFormProps) {
+export default function AddTaskForm({ defaultProjectId, onCreated, onClose }: AddTaskFormProps) {
   const { showToast } = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [listId, setListId] = useState(defaultListId || lists[0]?.id || 0);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<number | "">(defaultProjectId || "");
   const [priority, setPriority] = useState(4);
   const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueTime, setDueTime] = useState("");
@@ -51,6 +50,13 @@ export default function AddTaskForm({ lists, defaultListId, defaultProjectId, on
   const [templateMode, setTemplateMode] = useState(false);
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+  useEffect(() => {
+    getProjects().then((p) => {
+      setProjects(p);
+      if (!defaultProjectId && p.length > 0) setProjectId(p[0].id);
+    }).catch(() => {});
+  }, [defaultProjectId]);
+
   const dateButtonRef = useRef<HTMLButtonElement>(null);
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -89,18 +95,17 @@ export default function AddTaskForm({ lists, defaultListId, defaultProjectId, on
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !listId) return;
+    if (!title.trim()) return;
 
     setSubmitting(true);
     try {
       const task = await createTask({
         title: title.trim(),
         description: description.trim() || undefined,
-        list_id: listId,
         priority,
         due_date: dueDate || undefined,
         due_time: dueTime || undefined,
-        project_id: defaultProjectId || undefined,
+        project_id: projectId || defaultProjectId || undefined,
       } as Parameters<typeof createTask>[0]);
 
       // Set recurrence if selected
@@ -191,7 +196,7 @@ export default function AddTaskForm({ lists, defaultListId, defaultProjectId, on
                   e.preventDefault();
                   setSubmitting(true);
                   try {
-                    await quickAddTask(quickText.trim(), listId);
+                    await quickAddTask(quickText.trim(), projectId || undefined);
                     onCreated();
                     onClose();
                   } catch {
@@ -206,19 +211,21 @@ export default function AddTaskForm({ lists, defaultListId, defaultProjectId, on
               Supporta: date (oggi, domani, lunedì), priorità (p1-p4), tag (#nome), orario (alle 14:30)
             </p>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: lists.find(l => l.id === listId)?.color || "#3B82F6" }} />
-                <select
-                  value={listId}
-                  onChange={(e) => setListId(Number(e.target.value))}
-                  className="bg-transparent text-xs outline-none cursor-pointer"
-                  style={{ color: lists.find(l => l.id === listId)?.color || "#d4d4d8" }}
-                >
-                  {lists.map((l) => (
-                    <option key={l.id} value={l.id} style={{ color: l.color }} className="bg-zinc-800">{l.name}</option>
-                  ))}
-                </select>
-              </div>
+              {projects.length > 0 && (
+                <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: projects.find(p => p.id === projectId)?.color || "#6366F1" }} />
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : "")}
+                    className="bg-transparent text-xs text-zinc-300 outline-none cursor-pointer"
+                  >
+                    <option value="" className="bg-zinc-800">Nessun progetto</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id} className="bg-zinc-800">{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <button
                 type="button"
                 disabled={!quickText.trim() || submitting}
@@ -226,7 +233,7 @@ export default function AddTaskForm({ lists, defaultListId, defaultProjectId, on
                   if (!quickText.trim() || submitting) return;
                   setSubmitting(true);
                   try {
-                    await quickAddTask(quickText.trim(), listId);
+                    await quickAddTask(quickText.trim(), projectId || undefined);
                     onCreated();
                     onClose();
                   } catch {
@@ -261,7 +268,7 @@ export default function AddTaskForm({ lists, defaultListId, defaultProjectId, on
                       setSubmitting(true);
                       try {
                         await instantiateTemplate(t.id, {
-                          list_id: listId,
+                          project_id: projectId || undefined,
                           due_date: undefined,
                         });
                         onCreated();
@@ -288,21 +295,23 @@ export default function AddTaskForm({ lists, defaultListId, defaultProjectId, on
                 ))}
               </div>
             )}
-            <div className="flex items-center gap-2 pt-1">
-              <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: lists.find(l => l.id === listId)?.color || "#3B82F6" }} />
-                <select
-                  value={listId}
-                  onChange={(e) => setListId(Number(e.target.value))}
-                  className="bg-transparent text-xs outline-none cursor-pointer"
-                  style={{ color: lists.find(l => l.id === listId)?.color || "#d4d4d8" }}
-                >
-                  {lists.map((l) => (
-                    <option key={l.id} value={l.id} style={{ color: l.color }} className="bg-zinc-800">{l.name}</option>
-                  ))}
-                </select>
+            {projects.length > 0 && (
+              <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: projects.find(p => p.id === projectId)?.color || "#6366F1" }} />
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : "")}
+                    className="bg-transparent text-xs text-zinc-300 outline-none cursor-pointer"
+                  >
+                    <option value="" className="bg-zinc-800">Nessun progetto</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id} className="bg-zinc-800">{p.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -328,22 +337,24 @@ export default function AddTaskForm({ lists, defaultListId, defaultProjectId, on
 
           {/* Quick actions row */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* List */}
-            <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
-              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: lists.find(l => l.id === listId)?.color || "#3B82F6" }} />
-              <select
-                value={listId}
-                onChange={(e) => setListId(Number(e.target.value))}
-                className="bg-transparent text-xs outline-none cursor-pointer"
-                style={{ color: lists.find(l => l.id === listId)?.color || "#d4d4d8" }}
-              >
-                {lists.map((l) => (
-                  <option key={l.id} value={l.id} style={{ color: l.color }} className="bg-zinc-800">
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Project */}
+            {projects.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: projects.find(p => p.id === projectId)?.color || "#6366F1" }} />
+                <select
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : "")}
+                  className="bg-transparent text-xs text-zinc-300 outline-none cursor-pointer"
+                >
+                  <option value="" className="bg-zinc-800">Nessun progetto</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id} className="bg-zinc-800">
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Due date */}
             <div>

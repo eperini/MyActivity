@@ -2,7 +2,7 @@
 
 import { Plus, Search, X, SlidersHorizontal, GripVertical } from "lucide-react";
 import { useState, useMemo } from "react";
-import type { Task, TaskList } from "@/types";
+import type { Task } from "@/types";
 import TaskItem from "./TaskItem";
 import AddTaskForm from "./AddTaskForm";
 import { reorderTasks } from "@/lib/api";
@@ -26,9 +26,7 @@ import { CSS } from "@dnd-kit/utilities";
 interface TaskListViewProps {
   title: string;
   tasks: Task[];
-  lists: TaskList[];
   selectedTask: Task | null;
-  defaultListId?: number;
   onSelectTask: (task: Task) => void;
   onToggleTask: (task: Task) => void;
   onTaskCreated: () => void;
@@ -38,14 +36,12 @@ type SortOption = "priority" | "due_date" | "title" | "manual";
 
 function SortableTaskItem({
   task,
-  list,
   isSelected,
   onSelect,
   onToggle,
   isDraggable,
 }: {
   task: Task;
-  list?: TaskList;
   isSelected: boolean;
   onSelect: (task: Task) => void;
   onToggle: (task: Task) => void;
@@ -80,7 +76,6 @@ function SortableTaskItem({
       <div className="flex-1 min-w-0">
         <TaskItem
           task={task}
-          list={list}
           isSelected={isSelected}
           onSelect={onSelect}
           onToggle={onToggle}
@@ -93,9 +88,7 @@ function SortableTaskItem({
 export default function TaskListView({
   title,
   tasks,
-  lists,
   selectedTask,
-  defaultListId,
   onSelectTask,
   onToggleTask,
   onTaskCreated,
@@ -104,12 +97,9 @@ export default function TaskListView({
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [filterPriority, setFilterPriority] = useState<number | null>(null);
-  const [filterList, setFilterList] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("due_date");
 
-  const listMap = Object.fromEntries(lists.map((l) => [l.id, l]));
-
-  const hasActiveFilters = searchQuery || filterPriority !== null || filterList !== null;
+  const hasActiveFilters = searchQuery || filterPriority !== null;
   const isManualSort = sortBy === "manual";
 
   const sensors = useSensors(
@@ -135,11 +125,6 @@ export default function TaskListView({
       result = result.filter((t) => t.priority === filterPriority);
     }
 
-    // List filter
-    if (filterList !== null) {
-      result = result.filter((t) => t.list_id === filterList);
-    }
-
     // Sort
     if (sortBy === "manual") {
       result.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -162,12 +147,11 @@ export default function TaskListView({
     }
 
     return result;
-  }, [tasks, searchQuery, filterPriority, filterList, sortBy]);
+  }, [tasks, searchQuery, filterPriority, sortBy]);
 
   function clearFilters() {
     setSearchQuery("");
     setFilterPriority(null);
-    setFilterList(null);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -269,20 +253,6 @@ export default function TaskListView({
 
             <div className="w-px h-5 bg-zinc-800" />
 
-            {/* List filter */}
-            <select
-              value={filterList ?? ""}
-              onChange={(e) => setFilterList(e.target.value ? Number(e.target.value) : null)}
-              className="bg-zinc-800 text-[10px] text-zinc-400 rounded px-2 py-1 outline-none"
-            >
-              <option value="">Tutte le liste</option>
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-
-            <div className="w-px h-5 bg-zinc-800" />
-
             {/* Sort */}
             <select
               value={sortBy}
@@ -335,7 +305,6 @@ export default function TaskListView({
                   <SortableTaskItem
                     key={task.id}
                     task={task}
-                    list={task.list_id ? listMap[task.list_id] : undefined}
                     isSelected={selectedTask?.id === task.id}
                     onSelect={onSelectTask}
                     onToggle={onToggleTask}
@@ -351,8 +320,6 @@ export default function TaskListView({
       {/* Add task modal */}
       {showAddForm && (
         <AddTaskForm
-          lists={lists}
-          defaultListId={defaultListId}
           onCreated={onTaskCreated}
           onClose={() => setShowAddForm(false)}
         />

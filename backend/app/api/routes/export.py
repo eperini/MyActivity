@@ -15,7 +15,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task, TaskStatus
-from app.models.task_list import TaskList
+from app.models.project import Project
 from app.models.habit import Habit, HabitLog
 from app.models.recurrence import RecurrenceRule
 from app.models.tag import Tag, task_tags
@@ -31,7 +31,7 @@ def _serialize(val):
     return val
 
 
-TASK_FIELDS = ["id", "title", "description", "list_id", "priority", "status", "due_date", "due_time"]
+TASK_FIELDS = ["id", "title", "description", "project_id", "priority", "status", "due_date", "due_time"]
 HABIT_FIELDS = ["id", "name", "description", "frequency_type", "frequency_days", "times_per_period", "start_date", "color"]
 
 
@@ -46,20 +46,20 @@ async def export_tasks(
     )
     tasks = result.scalars().all()
 
-    # Get list names for context
-    lists_result = await db.execute(
-        select(TaskList).where(TaskList.owner_id == user.id)
+    # Get project names for context
+    projects_result = await db.execute(
+        select(Project).where(Project.owner_id == user.id)
     )
-    lists_map = {l.id: l.name for l in lists_result.scalars().all()}
+    projects_map = {p.id: p.name for p in projects_result.scalars().all()}
 
     if fmt == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow([*TASK_FIELDS, "list_name"])
+        writer.writerow([*TASK_FIELDS, "project_name"])
         for t in tasks:
             writer.writerow([
                 *[_serialize(getattr(t, f)) for f in TASK_FIELDS],
-                lists_map.get(t.list_id, ""),
+                projects_map.get(t.project_id, ""),
             ])
         output.seek(0)
         return StreamingResponse(
@@ -71,7 +71,7 @@ async def export_tasks(
     data = []
     for t in tasks:
         row = {f: _serialize(getattr(t, f)) for f in TASK_FIELDS}
-        row["list_name"] = lists_map.get(t.list_id, "")
+        row["project_name"] = projects_map.get(t.project_id, "")
         data.append(row)
     return StreamingResponse(
         iter([json.dumps(data, ensure_ascii=False, indent=2)]),
@@ -149,11 +149,11 @@ async def import_tasks(
     if not isinstance(data, list):
         raise HTTPException(status_code=400, detail="Il file deve contenere un array di task")
 
-    # Get user's lists for mapping
-    lists_result = await db.execute(
-        select(TaskList).where(TaskList.owner_id == user.id)
+    # Get user's projects for mapping
+    projects_result = await db.execute(
+        select(Project).where(Project.owner_id == user.id)
     )
-    lists_by_name = {l.name: l.id for l in lists_result.scalars().all()}
+    projects_by_name = {p.name: p.id for p in projects_result.scalars().all()}
 
     imported = 0
     errors = []
@@ -163,32 +163,32 @@ async def import_tasks(
             errors.append(f"Riga {i+1}: titolo mancante")
             continue
 
-        # Resolve list
-        list_id = None
-        list_name = item.get("list_name")
-        if list_name and list_name in lists_by_name:
-            list_id = lists_by_name[list_name]
-        elif item.get("list_id"):
-            # Check if list_id exists and belongs to user
-            existing = await db.get(TaskList, item["list_id"])
+        # Resolve project
+        proj_id = None
+        project_name = item.get("project_name")
+        if project_name and project_name in projects_by_name:
+            proj_id = projects_by_name[project_name]
+        elif item.get("project_id"):
+            # Check if project_id exists and belongs to user
+            existing = await db.get(Project, item["project_id"])
             if existing and existing.owner_id == user.id:
-                list_id = existing.id
+                proj_id = existing.id
 
-        if not list_id:
-            # Use first list or create default
-            if not lists_by_name:
-                new_list = TaskList(name="Importati", owner_id=user.id, color="#6366F1")
-                db.add(new_list)
+        if not proj_id:
+            # Use first project or create default
+            if not projects_by_name:
+                new_project = Project(name="Importati", owner_id=user.id, color="#6366F1", project_type="personal", status="active")
+                db.add(new_project)
                 await db.flush()
-                list_id = new_list.id
-                lists_by_name["Importati"] = list_id
+                proj_id = new_project.id
+                projects_by_name["Importati"] = proj_id
             else:
-                list_id = next(iter(lists_by_name.values()))
+                proj_id = next(iter(projects_by_name.values()))
 
         task = Task(
             title=title,
             description=item.get("description"),
-            list_id=list_id,
+            project_id=proj_id,
             created_by=user.id,
             priority=min(max(int(item.get("priority", 4)), 1), 4),
             status=item.get("status", "todo"),
@@ -281,9 +281,9 @@ async def import_ticktick(
             detail="Formato CSV non riconosciuto. Assicurati di esportare da TickTick > Settings > Backup.",
         )
 
-    # Load existing lists
-    lists_result = await db.execute(select(TaskList).where(TaskList.owner_id == user.id))
-    lists_by_name: dict[str, int] = {l.name: l.id for l in lists_result.scalars().all()}
+    # Load existing projects
+    projects_result = await db.execute(select(Project).where(Project.owner_id == user.id))
+    projects_by_name: dict[str, int] = {p.name: p.id for p in projects_result.scalars().all()}
 
     # Load existing tags
     tags_result = await db.execute(select(Tag).where(Tag.user_id == user.id))
@@ -314,16 +314,16 @@ async def import_ticktick(
                 deferred_subtasks.append(row)
                 continue
 
-            # Resolve list
+            # Resolve project
             list_name = (row.get("List Name") or "").strip() or "Importati"
-            if list_name not in lists_by_name:
-                new_list = TaskList(name=list_name, owner_id=user.id, color="#6366F1")
-                db.add(new_list)
+            if list_name not in projects_by_name:
+                new_project = Project(name=list_name, owner_id=user.id, color="#6366F1", project_type="personal", status="active")
+                db.add(new_project)
                 await db.flush()
-                lists_by_name[list_name] = new_list.id
+                projects_by_name[list_name] = new_project.id
                 result.lists_created += 1
 
-            list_id = lists_by_name[list_name]
+            proj_id = projects_by_name[list_name]
 
             # Priority
             tt_priority = int(row.get("Priority") or 0)
@@ -362,7 +362,7 @@ async def import_ticktick(
             task = Task(
                 title=title[:500],
                 description=content[:5000] if content else None,
-                list_id=list_id,
+                project_id=proj_id,
                 created_by=user.id,
                 priority=priority,
                 status=status,
@@ -406,9 +406,9 @@ async def import_ticktick(
             if not parent_task:
                 # Parent not found, create as top-level task
                 list_name = (row.get("List Name") or "").strip() or "Importati"
-                list_id = lists_by_name.get(list_name, next(iter(lists_by_name.values())))
+                proj_id = projects_by_name.get(list_name, next(iter(projects_by_name.values())))
                 task = Task(
-                    title=title[:500], list_id=list_id, created_by=user.id,
+                    title=title[:500], project_id=proj_id, created_by=user.id,
                     priority=TICKTICK_PRIORITY_MAP.get(int(row.get("Priority") or 0), 4),
                     status=TaskStatus.DONE if int(row.get("Status") or 0) > 0 else TaskStatus.TODO,
                 )
@@ -419,7 +419,7 @@ async def import_ticktick(
             tt_status = int(row.get("Status") or 0)
             subtask = Task(
                 title=title[:500],
-                list_id=parent_task.list_id,
+                project_id=parent_task.project_id,
                 created_by=user.id,
                 parent_id=parent_task.id,
                 priority=TICKTICK_PRIORITY_MAP.get(int(row.get("Priority") or 0), 4),

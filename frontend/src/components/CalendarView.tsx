@@ -9,11 +9,10 @@ import {
   addDays,
 } from "date-fns";
 import { it } from "date-fns/locale";
-import type { Task, TaskList } from "@/types";
+import type { Task } from "@/types";
 
 interface CalendarViewProps {
   tasks: Task[];
-  lists: TaskList[];
   onSelectTask: (task: Task) => void;
   onSelectDate: (date: string) => void;
   onAddTask: (date: string) => void;
@@ -28,12 +27,10 @@ const PRIORITY_COLORS: Record<number, string> = {
 
 type ViewMode = "month" | "week";
 
-export default function CalendarView({ tasks, lists, onSelectTask, onSelectDate, onAddTask }: CalendarViewProps) {
+export default function CalendarView({ tasks, onSelectTask, onSelectDate, onAddTask }: CalendarViewProps) {
   const [viewDate, setViewDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-
-  const listMap = Object.fromEntries(lists.map((l) => [l.id, l]));
 
   // Navigation
   function prev() {
@@ -189,7 +186,6 @@ export default function CalendarView({ tasks, lists, onSelectTask, onSelectDate,
                 {/* Tasks */}
                 <div className="space-y-0.5">
                   {dayTasks.slice(0, maxShown).map((task) => {
-                    const list = task.list_id ? listMap[task.list_id] : undefined;
                     return (
                       <div
                         key={task.id}
@@ -199,8 +195,8 @@ export default function CalendarView({ tasks, lists, onSelectTask, onSelectDate,
                         }}
                         className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] truncate cursor-pointer hover:opacity-80 transition-opacity"
                         style={{
-                          backgroundColor: (list?.color || PRIORITY_COLORS[task.priority]) + "20",
-                          borderLeft: `2px solid ${list?.color || PRIORITY_COLORS[task.priority]}`,
+                          backgroundColor: PRIORITY_COLORS[task.priority] + "20",
+                          borderLeft: `2px solid ${PRIORITY_COLORS[task.priority]}`,
                         }}
                       >
                         <span className="truncate text-zinc-300">{task.title}</span>
@@ -254,7 +250,6 @@ export default function CalendarView({ tasks, lists, onSelectTask, onSelectDate,
             ) : (
               <div className="py-1">
                 {selectedDayTasks.map((task) => {
-                  const list = task.list_id ? listMap[task.list_id] : undefined;
                   const isDone = task.status === "done";
                   return (
                     <div
@@ -270,17 +265,11 @@ export default function CalendarView({ tasks, lists, onSelectTask, onSelectDate,
                         <div className={`text-sm truncate ${isDone ? "text-zinc-600 line-through" : "text-zinc-200"}`}>
                           {task.title}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {list && (
-                            <span className="text-[10px] text-zinc-500 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: list.color }} />
-                              {list.name}
-                            </span>
-                          )}
-                          {task.due_time && (
+                        {task.due_time && (
+                          <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[10px] text-zinc-500">{task.due_time.slice(0, 5)}</span>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

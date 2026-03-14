@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     VAPID_MAILTO: str = "mailto:admin@zeno.local"
     GOOGLE_CREDENTIALS_FILE: str = "/app/google-credentials.json"
     GOOGLE_CALENDAR_ID: str = ""
-    GOOGLE_SYNC_LIST_ID: int = 0
+    GOOGLE_SYNC_PROJECT_ID: int = 0
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

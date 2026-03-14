@@ -277,7 +277,7 @@ def send_daily_reports(self):
     from sqlalchemy import or_
     from app.models.user import User
     from app.models.task import Task, TaskStatus
-    from app.models.task_list import ListMember
+    from app.models.project import Project, ProjectMember
 
     rome_tz = ZoneInfo("Europe/Rome")
     now_rome = datetime.now(rome_tz)
@@ -310,25 +310,24 @@ def send_daily_reports(self):
                 if last_sent_rome.date() == today:
                     continue
 
-            # Get user's list IDs (owned + member)
-            list_ids = set()
-            from app.models.task_list import TaskList
+            # Get user's project IDs (owned + member)
+            project_ids = set()
             owned = db.execute(
-                select(TaskList.id).where(TaskList.owner_id == user.id)
+                select(Project.id).where(Project.owner_id == user.id)
             ).scalars().all()
-            list_ids.update(owned)
+            project_ids.update(owned)
             member_of = db.execute(
-                select(ListMember.list_id).where(ListMember.user_id == user.id)
+                select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
             ).scalars().all()
-            list_ids.update(member_of)
+            project_ids.update(member_of)
 
             from sqlalchemy import or_
 
-            # Query tasks (from lists + project-only tasks owned by user)
+            # Query tasks (from projects + unassigned tasks owned by user)
             base_q = select(Task).where(
                 or_(
-                    Task.list_id.in_(list_ids) if list_ids else sa_false(),
-                    Task.list_id.is_(None) & (Task.created_by == user.id),
+                    Task.project_id.in_(project_ids) if project_ids else sa_false(),
+                    Task.project_id.is_(None) & (Task.created_by == user.id),
                 ),
                 Task.status != TaskStatus.DONE,
             )
@@ -376,8 +375,8 @@ def send_daily_reports(self):
             upcoming_tasks = db.execute(
                 select(Task).where(
                     or_(
-                        Task.list_id.in_(list_ids) if list_ids else sa_false(),
-                        Task.list_id.is_(None) & (Task.created_by == user.id),
+                        Task.project_id.in_(project_ids) if project_ids else sa_false(),
+                        Task.project_id.is_(None) & (Task.created_by == user.id),
                     ),
                     Task.status != TaskStatus.DONE,
                     Task.due_date == day_after_tomorrow,
@@ -576,7 +575,6 @@ def _execute_action(action_type: str, action_cfg: dict, task, db):
         if title:
             new_task = Task(
                 title=title,
-                list_id=task.list_id,
                 created_by=task.created_by,
                 project_id=task.project_id,
                 priority=action_cfg.get("priority", 4),
@@ -788,7 +786,6 @@ def _sync_single_jira(db, config):
     """Sync a single Jira project → Zeno (issues + epics)."""
     import time as time_module
     from app.models.task import Task, TaskStatus
-    from app.models.task_list import TaskList
     from app.models.project import Project
     from app.models.epic import Epic
     from app.models.jira import JiraUserMapping
@@ -807,12 +804,9 @@ def _sync_single_jira(db, config):
         itype = issue["fields"].get("issuetype", {}).get("name", "?")
         logger.info("  Issue %s: type=%s, summary=%s", issue["key"], itype, issue["fields"].get("summary", "")[:60])
 
-    # Find a list_id for new tasks: use configured list if set, otherwise None (project-only)
     project = db.get(Project, config.zeno_project_id)
     if not project:
         return
-
-    default_list_id = config.default_list_id
 
     # Load Jira → Zeno user mappings
     user_mappings_rows = db.execute(
@@ -872,7 +866,6 @@ def _sync_single_jira(db, config):
             new_task = Task(
                 **mapped,
                 status=TaskStatus(jira_status),
-                list_id=default_list_id,
                 project_id=config.zeno_project_id,
                 created_by=config.user_id,
                 assigned_to=assigned_to,

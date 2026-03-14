@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { List, GripVertical } from "lucide-react";
-import type { Task, TaskList } from "@/types";
+import { GripVertical } from "lucide-react";
+import type { Task } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
 
 interface KanbanViewProps {
   tasks: Task[];
-  lists: TaskList[];
   onSelectTask: (task: Task) => void;
   onToggleTask: (task: Task) => void;
   onUpdateTask: (id: number, data: Partial<Task>) => void;
@@ -26,15 +25,13 @@ const PRIORITY_DOTS: Record<number, string> = {
   4: "bg-zinc-500",
 };
 
-export default function KanbanView({ tasks, lists, onSelectTask, onToggleTask, onUpdateTask }: KanbanViewProps) {
-  const [filterListId, setFilterListId] = useState<number | null>(null);
+export default function KanbanView({ tasks, onSelectTask, onToggleTask, onUpdateTask }: KanbanViewProps) {
 
-  const filtered = filterListId ? tasks.filter((t) => t.list_id === filterListId) : tasks;
-
+  // Group by status
   // Group by status
   const columns = COLUMNS.map((col) => ({
     ...col,
-    tasks: filtered.filter((t) => t.status === col.id),
+    tasks: tasks.filter((t) => t.status === col.id),
   }));
 
   // Drag state
@@ -65,21 +62,6 @@ export default function KanbanView({ tasks, lists, onSelectTask, onToggleTask, o
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <h2 className="text-sm font-medium text-zinc-300">Kanban</h2>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-3 py-1.5">
-            <List size={14} className="text-zinc-500" />
-            <select
-              value={filterListId ?? ""}
-              onChange={(e) => setFilterListId(e.target.value ? Number(e.target.value) : null)}
-              className="bg-transparent text-xs text-zinc-300 outline-none cursor-pointer"
-            >
-              <option value="" className="bg-zinc-800">Tutte le liste</option>
-              {lists.map((l) => (
-                <option key={l.id} value={l.id} className="bg-zinc-800">{l.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
       </div>
 
       {/* Board */}
@@ -105,7 +87,6 @@ export default function KanbanView({ tasks, lists, onSelectTask, onToggleTask, o
               {/* Cards */}
               <div className="flex-1 overflow-y-auto p-2 space-y-2">
                 {col.tasks.map((task) => {
-                  const taskList = lists.find((l) => l.id === task.list_id);
                   const overdue = task.due_date ? isOverdue(task.due_date) : false;
                   return (
                     <div
@@ -127,15 +108,6 @@ export default function KanbanView({ tasks, lists, onSelectTask, onToggleTask, o
                           {/* Meta row */}
                           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                             <span className={`w-2 h-2 rounded-full ${PRIORITY_DOTS[task.priority] || PRIORITY_DOTS[4]}`} />
-
-                            {taskList && !filterListId && (
-                              <span
-                                className="px-1.5 py-0.5 rounded text-[9px]"
-                                style={{ backgroundColor: taskList.color + "20", color: taskList.color }}
-                              >
-                                {taskList.name}
-                              </span>
-                            )}
 
                             {task.tags && task.tags.length > 0 && task.tags.slice(0, 2).map((tag) => (
                               <span

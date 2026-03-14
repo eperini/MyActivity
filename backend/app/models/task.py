@@ -23,7 +23,6 @@ class Task(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    list_id: Mapped[int | None] = mapped_column(ForeignKey("lists.id", ondelete="SET NULL"), nullable=True, index=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     assigned_to: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     priority: Mapped[int] = mapped_column(SmallInteger, default=4)  # 1=urgente+importante, 4=bassa
@@ -45,7 +44,6 @@ class Task(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    task_list: Mapped["TaskList | None"] = relationship(back_populates="tasks")
     project: Mapped["Project | None"] = relationship(back_populates="tasks")
     recurrence: Mapped["RecurrenceRule | None"] = relationship(back_populates="task", uselist=False)
     instances: Mapped[list["TaskInstance"]] = relationship(back_populates="task")

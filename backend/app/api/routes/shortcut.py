@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.deps import get_user_by_api_key
 from app.models.user import User
 from app.models.task import Task
-from app.models.task_list import TaskList
+from app.models.project import Project
 from app.models.tag import Tag, task_tags
 from app.services.quickadd_parser import parse_quick_add
 
@@ -16,7 +16,7 @@ router = APIRouter()
 
 class ShortcutTaskRequest(BaseModel):
     text: str = Field(min_length=1, max_length=500)
-    list_id: int | None = None
+    project_id: int | None = None
 
 
 @router.post("/task")
@@ -31,23 +31,23 @@ async def create_task_via_shortcut(
     if not parsed.title:
         raise HTTPException(400, "Testo vuoto")
 
-    # Use provided list_id or user's first owned list
-    list_id = data.list_id
-    if list_id:
-        # Verify list access
-        from app.api.routes.access import _check_list_access
-        await _check_list_access(list_id, user.id, db)
-    if not list_id:
+    # Use provided project_id or user's first owned project
+    project_id = data.project_id
+    if project_id:
+        # Verify project access
+        from app.api.routes.projects import _check_project_access
+        await _check_project_access(project_id, user.id, db)
+    if not project_id:
         result = await db.execute(
-            select(TaskList.id).where(TaskList.owner_id == user.id).order_by(TaskList.id).limit(1)
+            select(Project.id).where(Project.owner_id == user.id).order_by(Project.id).limit(1)
         )
-        list_id = result.scalar_one_or_none()
-        if not list_id:
-            raise HTTPException(400, "Nessuna lista trovata")
+        project_id = result.scalar_one_or_none()
+        if not project_id:
+            raise HTTPException(400, "Nessun progetto trovato")
 
     task = Task(
         title=parsed.title,
-        list_id=list_id,
+        project_id=project_id,
         created_by=user.id,
         priority=parsed.priority,
         due_date=parsed.due_date,

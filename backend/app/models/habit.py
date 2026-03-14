@@ -15,9 +15,6 @@ class Habit(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    list_id: Mapped[int | None] = mapped_column(
-        ForeignKey("lists.id", ondelete="SET NULL"), nullable=True
-    )
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     assigned_to: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     frequency_type: Mapped[str] = mapped_column(String(20), default="daily")  # daily, weekly, custom

@@ -15,7 +15,7 @@ router = APIRouter()
 
 class QuickAddRequest(BaseModel):
     text: str = Field(min_length=1, max_length=500)
-    list_id: int
+    project_id: int
 
 
 @router.post("/quickadd")
@@ -24,9 +24,9 @@ async def quick_add_task(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify list access
-    from app.api.routes.access import _check_list_access
-    await _check_list_access(data.list_id, user.id, db)
+    # Verify project access
+    from app.api.routes.projects import _check_project_access
+    await _check_project_access(data.project_id, user.id, db)
 
     parsed = parse_quick_add(data.text)
 
@@ -35,7 +35,7 @@ async def quick_add_task(
 
     task = Task(
         title=parsed.title,
-        list_id=data.list_id,
+        project_id=data.project_id,
         created_by=user.id,
         priority=parsed.priority,
         due_date=parsed.due_date,
@@ -64,7 +64,7 @@ async def quick_add_task(
     return {
         "id": task.id,
         "title": task.title,
-        "list_id": task.list_id,
+        "project_id": task.project_id,
         "priority": task.priority,
         "status": task.status.value if task.status else "todo",
         "due_date": task.due_date.isoformat() if task.due_date else None,

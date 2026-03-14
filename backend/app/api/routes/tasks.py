@@ -9,12 +9,12 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task, TaskStatus
-from app.models.task_list import TaskList, ListMember
+from app.models.project import Project, ProjectMember
 from app.models.recurrence import RecurrenceRule
 from app.models.tag import Tag, task_tags
 from app.models.time_log import TimeLog
 from app.api.routes.projects import _check_project_access
-from app.api.routes.access import _check_task_access, _check_list_access
+from app.api.routes.access import _check_task_access
 
 router = APIRouter()
 
@@ -22,7 +22,6 @@ router = APIRouter()
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     description: str | None = Field(default=None, max_length=5000)
-    list_id: int | None = None
     assigned_to: int | None = None
     priority: int = Field(default=4, ge=1, le=4)
     due_date: date | None = None
@@ -34,7 +33,6 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=500)
     description: str | None = Field(default=None, max_length=5000)
-    list_id: int | None = None
     priority: int | None = Field(default=None, ge=1, le=4)
     status: TaskStatus | None = None
     due_date: date | None = None
@@ -54,7 +52,6 @@ class TaskResponse(BaseModel):
     id: int
     title: str
     description: str | None
-    list_id: int | None
     created_by: int
     assigned_to: int | None
     assigned_to_name: str | None = None
@@ -80,11 +77,11 @@ class TaskResponse(BaseModel):
 
 
 def _should_sync(task) -> bool:
-    """Only sync top-level tasks from the configured sync list."""
+    """Only sync top-level tasks from the configured sync project."""
     return (
         settings.GOOGLE_CALENDAR_ID
-        and settings.GOOGLE_SYNC_LIST_ID
-        and task.list_id == settings.GOOGLE_SYNC_LIST_ID
+        and settings.GOOGLE_SYNC_PROJECT_ID
+        and task.project_id == settings.GOOGLE_SYNC_PROJECT_ID
         and task.due_date is not None
         and task.parent_id is None
     )
@@ -215,26 +212,25 @@ async def _enrich_with_recurrence(tasks: list[Task], db: AsyncSession) -> list[d
 
 @router.get("/", response_model=list[TaskResponse])
 async def get_tasks(
-    list_id: int | None = Query(None),
+    project_id: int | None = Query(None),
     status: TaskStatus | None = Query(None),
     tag_id: int | None = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Include tasks from owned lists + lists where user is a member + project-only tasks
+    # Include tasks from owned projects + projects where user is a member + unassigned tasks
     from sqlalchemy import or_
-    from app.models.task_list import ListMember
-    owned_list_ids = select(TaskList.id).where(TaskList.owner_id == user.id)
-    member_list_ids = select(ListMember.list_id).where(ListMember.user_id == user.id)
+    owned_project_ids = select(Project.id).where(Project.owner_id == user.id)
+    member_project_ids = select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
     query = select(Task).where(
         or_(
-            Task.list_id.in_(owned_list_ids.union(member_list_ids)),
-            Task.list_id.is_(None) & (Task.created_by == user.id),
+            Task.project_id.in_(owned_project_ids.union(member_project_ids)),
+            Task.project_id.is_(None) & (Task.created_by == user.id),
         ),
         Task.parent_id.is_(None),
     )
-    if list_id:
-        query = query.where(Task.list_id == list_id)
+    if project_id:
+        query = query.where(Task.project_id == project_id)
     if status:
         query = query.where(Task.status == status)
     if tag_id:
@@ -253,12 +249,9 @@ async def create_task(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if data.list_id is not None:
-        await _check_list_access(data.list_id, user.id, db)
-    if data.project_id is not None:
-        await _check_project_access(data.project_id, user.id, db)
-    if data.list_id is None and data.project_id is None:
-        raise HTTPException(status_code=400, detail="Specificare list_id o project_id")
+    if data.project_id is None:
+        raise HTTPException(status_code=400, detail="Specificare project_id")
+    await _check_project_access(data.project_id, user.id, db)
     task_data = data.model_dump()
     if task_data.get("assigned_to") is not None:
         target_user = await db.get(User, task_data["assigned_to"])
@@ -301,9 +294,7 @@ async def update_task(
     old_status = task.status
     old_assigned_to = task.assigned_to
 
-    # If changing list, verify access to new list too
-    if "list_id" in update_data and update_data["list_id"] is not None and update_data["list_id"] != task.list_id:
-        await _check_list_access(update_data["list_id"], user.id, db)
+    # If changing project, verify access to new project
     if "project_id" in update_data and update_data["project_id"] is not None:
         await _check_project_access(update_data["project_id"], user.id, db)
     if "assigned_to" in update_data and update_data["assigned_to"] is not None:
@@ -405,7 +396,7 @@ async def create_subtask(
 
     subtask = Task(
         title=data.title,
-        list_id=parent.list_id,
+        project_id=parent.project_id,
         created_by=user.id,
         parent_id=parent.id,
         priority=data.priority,
