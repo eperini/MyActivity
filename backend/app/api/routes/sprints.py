@@ -11,7 +11,7 @@ from app.models.user import User
 from app.models.task import Task, TaskStatus
 from app.models.sprint import Sprint, SprintStatus, sprint_tasks
 from app.api.routes.projects import _check_project_access, _check_project_owner
-from app.api.routes.tasks import _check_task_access
+from app.api.routes.access import _check_task_access
 
 router = APIRouter()
 

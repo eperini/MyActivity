@@ -98,7 +98,7 @@ async def create_template_from_task(
         raise HTTPException(status_code=404, detail="Task non trovato")
 
     # Check access
-    from app.api.routes.tasks import _check_task_access
+    from app.api.routes.access import _check_task_access
     await _check_task_access(task, user.id, db)
 
     # Get subtask titles

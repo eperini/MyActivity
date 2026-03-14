@@ -31,7 +31,7 @@ def format_minutes(minutes: int) -> str:
 
 async def _check_task_access_local(task_id: int, user_id: int, db: AsyncSession) -> Task:
     """Verify task exists and user has access."""
-    from app.api.routes.tasks import _check_task_access
+    from app.api.routes.access import _check_task_access
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")

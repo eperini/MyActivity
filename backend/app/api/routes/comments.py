@@ -17,21 +17,21 @@ class CommentCreate(BaseModel):
     text: str = Field(min_length=1, max_length=5000)
 
 
-async def _check_task_access(task_id: int, user_id: int, db: AsyncSession) -> Task:
+async def _check_task_access_local(task_id: int, user_id: int, db: AsyncSession) -> Task:
     """Verify user has access to the task (owns it or is member of its list/project)."""
-    from app.api.routes.tasks import _check_task_access as _check_access
+    from app.api.routes.access import _check_task_access
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(404, "Task non trovato")
     if task.created_by == user_id:
         return task
-    await _check_access(task, user_id, db)
+    await _check_task_access(task, user_id, db)
     return task
 
 
 @router.get("/tasks/{task_id}/comments")
 async def list_comments(task_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await _check_task_access(task_id, user.id, db)
+    await _check_task_access_local(task_id, user.id, db)
     result = await db.execute(
         select(Comment, User.display_name)
         .join(User, Comment.user_id == User.id)
@@ -53,7 +53,7 @@ async def list_comments(task_id: int, user: User = Depends(get_current_user), db
 
 @router.post("/tasks/{task_id}/comments")
 async def add_comment(task_id: int, data: CommentCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await _check_task_access(task_id, user.id, db)
+    await _check_task_access_local(task_id, user.id, db)
     comment = Comment(task_id=task_id, user_id=user.id, text=data.text)
     db.add(comment)
     await db.commit()
@@ -70,7 +70,7 @@ async def add_comment(task_id: int, data: CommentCreate, user: User = Depends(ge
 
 @router.delete("/tasks/{task_id}/comments/{comment_id}")
 async def delete_comment(task_id: int, comment_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await _check_task_access(task_id, user.id, db)
+    await _check_task_access_local(task_id, user.id, db)
     comment = await db.get(Comment, comment_id)
     if not comment or comment.task_id != task_id:
         raise HTTPException(404, "Commento non trovato")

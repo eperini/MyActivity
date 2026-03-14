@@ -25,7 +25,7 @@ async def quick_add_task(
     db: AsyncSession = Depends(get_db),
 ):
     # Verify list access
-    from app.api.routes.tasks import _check_list_access
+    from app.api.routes.access import _check_list_access
     await _check_list_access(data.list_id, user.id, db)
 
     parsed = parse_quick_add(data.text)

@@ -254,6 +254,7 @@ export default function DatePicker({ value, timeValue, onChange, onTimeChange, o
 /** Compact date input that opens the custom DatePicker as a dropdown */
 export function DateInput({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
   const [open, setOpen] = useState(false);
+  const closedByTriggerRef = useRef(false);
 
   const displayDate = (() => {
     try {
@@ -267,13 +268,22 @@ export function DateInput({ value, onChange, className }: { value: string; onCha
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onMouseDown={() => {
+          if (open) closedByTriggerRef.current = true;
+        }}
+        onClick={() => {
+          if (closedByTriggerRef.current) {
+            closedByTriggerRef.current = false;
+            return;
+          }
+          setOpen(!open);
+        }}
         className={className || "bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500 transition-colors text-left min-w-[130px]"}
       >
         {displayDate}
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50">
+        <div className="absolute bottom-full left-0 mb-1 z-50">
           <DatePicker
             value={value}
             onChange={(d) => { if (d) onChange(d); setOpen(false); }}

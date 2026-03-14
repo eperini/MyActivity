@@ -11,7 +11,7 @@ Usa SQLAlchemy sincrono (psycopg2) per evitare problemi di event loop con Celery
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, false as sa_false, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
@@ -327,7 +327,7 @@ def send_daily_reports(self):
             # Query tasks (from lists + project-only tasks owned by user)
             base_q = select(Task).where(
                 or_(
-                    Task.list_id.in_(list_ids) if list_ids else False,
+                    Task.list_id.in_(list_ids) if list_ids else sa_false(),
                     Task.list_id.is_(None) & (Task.created_by == user.id),
                 ),
                 Task.status != TaskStatus.DONE,
@@ -376,7 +376,7 @@ def send_daily_reports(self):
             upcoming_tasks = db.execute(
                 select(Task).where(
                     or_(
-                        Task.list_id.in_(list_ids) if list_ids else False,
+                        Task.list_id.in_(list_ids) if list_ids else sa_false(),
                         Task.list_id.is_(None) & (Task.created_by == user.id),
                     ),
                     Task.status != TaskStatus.DONE,

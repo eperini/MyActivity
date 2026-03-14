@@ -35,7 +35,7 @@ async def create_task_via_shortcut(
     list_id = data.list_id
     if list_id:
         # Verify list access
-        from app.api.routes.tasks import _check_list_access
+        from app.api.routes.access import _check_list_access
         await _check_list_access(list_id, user.id, db)
     if not list_id:
         result = await db.execute(

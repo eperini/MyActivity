@@ -261,7 +261,7 @@ async def get_jira_user_mappings(
     ]
 
     zeno_users_result = (await db.execute(
-        select(User).where(~User.email.like("%@test.com")).order_by(User.display_name)
+        select(User).order_by(User.display_name)
     )).scalars().all()
 
     return JiraUserMappingsResponse(
@@ -349,6 +349,11 @@ async def map_jira_user(
     if not mapping:
         raise HTTPException(status_code=404, detail="Mapping non trovato")
 
+    if data.zeno_user_id is not None:
+        zeno_user = await db.get(User, data.zeno_user_id)
+        if not zeno_user:
+            raise HTTPException(status_code=404, detail="Utente Zeno non trovato")
+
     mapping.zeno_user_id = data.zeno_user_id
     await db.commit()
     return {"detail": "Mapping aggiornato"}
@@ -385,7 +390,7 @@ async def push_task_to_jira(
         raise HTTPException(status_code=404, detail="Task non trovato")
 
     # Verify access
-    from app.api.routes.tasks import _check_task_access
+    from app.api.routes.access import _check_task_access
     await _check_task_access(task, user.id, db)
 
     if not task.project_id:
@@ -447,7 +452,7 @@ async def unlink_task_from_jira(
     if not task:
         raise HTTPException(status_code=404, detail="Task non trovato")
 
-    from app.api.routes.tasks import _check_task_access
+    from app.api.routes.access import _check_task_access
     await _check_task_access(task, user.id, db)
 
     task.jira_issue_key = None

@@ -71,21 +71,21 @@ async def delete_tag(tag_id: int, user: User = Depends(get_current_user), db: As
     return {"detail": "Tag eliminato"}
 
 
-async def _check_task_access(task_id: int, user_id: int, db: AsyncSession) -> Task:
+async def _check_task_access_local(task_id: int, user_id: int, db: AsyncSession) -> Task:
     """Verify user has access to the task."""
-    from app.api.routes.tasks import _check_task_access as _check_access
+    from app.api.routes.access import _check_task_access
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(404, "Task non trovato")
     if task.created_by == user_id:
         return task
-    await _check_access(task, user_id, db)
+    await _check_task_access(task, user_id, db)
     return task
 
 
 @router.post("/tasks/{task_id}/tags/{tag_id}")
 async def add_tag_to_task(task_id: int, tag_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await _check_task_access(task_id, user.id, db)
+    await _check_task_access_local(task_id, user.id, db)
     tag = await db.get(Tag, tag_id)
     if not tag or tag.user_id != user.id:
         raise HTTPException(404, "Tag non trovato")
@@ -102,7 +102,7 @@ async def add_tag_to_task(task_id: int, tag_id: int, user: User = Depends(get_cu
 
 @router.delete("/tasks/{task_id}/tags/{tag_id}")
 async def remove_tag_from_task(task_id: int, tag_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await _check_task_access(task_id, user.id, db)
+    await _check_task_access_local(task_id, user.id, db)
     await db.execute(
         delete(task_tags).where(task_tags.c.task_id == task_id, task_tags.c.tag_id == tag_id)
     )

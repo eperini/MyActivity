@@ -3,6 +3,7 @@ from datetime import time
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -224,6 +225,13 @@ async def admin_delete_user(
     target = await db.get(User, user_id)
     if not target:
         raise HTTPException(404, "Utente non trovato")
-    await db.delete(target)
-    await db.commit()
+    try:
+        await db.delete(target)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Impossibile eliminare: l'utente ha risorse associate. Riassegna o elimina prima le sue liste e progetti.",
+        )
     return {"detail": "Utente eliminato"}

@@ -8,7 +8,7 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task
 from app.models.dependency import TaskDependency, DependencyType
-from app.api.routes.tasks import _check_task_access
+from app.api.routes.access import _check_task_access
 
 router = APIRouter()
 
