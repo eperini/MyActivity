@@ -91,6 +91,7 @@ export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefres
   const [previewDates, setPreviewDates] = useState<string[]>([]);
   const [loadingRec, setLoadingRec] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
 
   // Tags
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -250,12 +251,12 @@ export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefres
               <Calendar size={16} className="text-zinc-500" />
               {task.due_date ? (
                 <span className={overdue ? "text-red-400" : "text-zinc-300"}>
-                  {formatRelativeDate(task.due_date)}
+                  Scadenza: {formatRelativeDate(task.due_date)}
                   {task.due_time && ` alle ${task.due_time}`}
                   {overdue && " (scaduto)"}
                 </span>
               ) : (
-                <span className="text-zinc-600">Aggiungi data...</span>
+                <span className="text-zinc-600">Aggiungi scadenza...</span>
               )}
             </button>
             {showDatePicker && (
@@ -266,6 +267,32 @@ export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefres
                   onChange={(d) => onUpdate(task.id, { due_date: d } as Partial<Task>)}
                   onTimeChange={(t) => onUpdate(task.id, { due_time: t } as Partial<Task>)}
                   onClose={() => setShowDatePicker(false)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Start date */}
+          <div className="relative">
+            <button
+              onClick={() => setShowStartDatePicker(!showStartDatePicker)}
+              className="flex items-center gap-3 text-sm w-full text-left"
+            >
+              <Calendar size={16} className="text-zinc-500" />
+              {task.start_date ? (
+                <span className="text-zinc-300">
+                  Inizio: {formatRelativeDate(task.start_date)}
+                </span>
+              ) : (
+                <span className="text-zinc-600">Aggiungi data inizio...</span>
+              )}
+            </button>
+            {showStartDatePicker && (
+              <div className="absolute top-8 left-0 z-50">
+                <DatePicker
+                  value={task.start_date}
+                  onChange={(d) => onUpdate(task.id, { start_date: d } as Partial<Task>)}
+                  onClose={() => setShowStartDatePicker(false)}
                 />
               </div>
             )}
@@ -334,8 +361,8 @@ export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefres
 
           {/* Status */}
           <div className="flex items-center gap-3 text-sm">
-            <div className="flex gap-1">
-              {(["todo", "doing", "done"] as const).map((s) => (
+            <div className="flex gap-1 flex-wrap">
+              {(["todo", "doing", "done", "someday"] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => onUpdate(task.id, { status: s })}
@@ -345,11 +372,13 @@ export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefres
                         ? "bg-green-600 text-white"
                         : s === "doing"
                         ? "bg-blue-600 text-white"
+                        : s === "someday"
+                        ? "bg-purple-600 text-white"
                         : "bg-zinc-700 text-white"
                       : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                   }`}
                 >
-                  {s === "todo" ? "Da fare" : s === "doing" ? "In corso" : "Fatto"}
+                  {s === "todo" ? "Da fare" : s === "doing" ? "In corso" : s === "done" ? "Fatto" : "Prima o Poi"}
                 </button>
               ))}
             </div>

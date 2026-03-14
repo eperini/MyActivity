@@ -26,6 +26,7 @@ class TaskCreate(BaseModel):
     priority: int = Field(default=4, ge=1, le=4)
     due_date: date | None = None
     due_time: time | None = None
+    start_date: date | None = None
     parent_id: int | None = None
     project_id: int | None = None
     heading_id: int | None = None
@@ -38,6 +39,7 @@ class TaskUpdate(BaseModel):
     status: TaskStatus | None = None
     due_date: date | None = None
     due_time: time | None = None
+    start_date: date | None = None
     assigned_to: int | None = None
     project_id: int | None = None
     heading_id: int | None = None
@@ -61,6 +63,7 @@ class TaskResponse(BaseModel):
     status: TaskStatus
     due_date: date | None
     due_time: time | None
+    start_date: date | None = None
     project_id: int | None = None
     heading_id: int | None = None
     parent_id: int | None

@@ -15,6 +15,7 @@ class TaskStatus(str, PyEnum):
     TODO = "todo"
     DOING = "doing"
     DONE = "done"
+    SOMEDAY = "someday"
 
 
 class Task(Base):
@@ -29,6 +30,7 @@ class Task(Base):
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.TODO, index=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     due_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)

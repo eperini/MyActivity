@@ -115,40 +115,58 @@ export default function HomePage() {
 
   // Filter tasks based on selected view
   const filteredTasks = tasks.filter((task) => {
+    if (task.status === "someday" && selectedView !== "someday") return false;
     if (task.status === "done" && selectedView !== "completed") return false;
 
     switch (selectedView) {
       case "today": {
-        const d = effectiveDate(task);
-        if (!d) return false;
-        const diff = differenceInDays(parseISO(d), new Date());
-        return diff <= 0; // today + overdue
+        const sd = task.start_date;
+        const dd = effectiveDate(task);
+        const today = new Date();
+        const startOk = sd && differenceInDays(parseISO(sd), today) <= 0;
+        const dueOk = dd && differenceInDays(parseISO(dd), today) <= 0;
+        return startOk || dueOk;
       }
       case "next7": {
-        const d = effectiveDate(task);
-        if (!d) return false;
-        const diff = differenceInDays(parseISO(d), new Date());
-        return diff <= 7; // next 7 days + overdue
+        const sd = task.start_date;
+        const dd = effectiveDate(task);
+        const today = new Date();
+        const startOk = sd && differenceInDays(parseISO(sd), today) <= 7;
+        const dueOk = dd && differenceInDays(parseISO(dd), today) <= 7;
+        return startOk || dueOk;
       }
       case "inbox":
-        return task.status !== "done";
+        return task.status !== "done" && task.status !== "someday";
       case "completed":
         return task.status === "done";
+      case "someday":
+        return task.status === "someday";
       default:
         return true;
     }
   });
 
   // Count tasks per view
-  const activeTasks = tasks.filter((t) => t.status !== "done");
+  const activeTasks = tasks.filter((t) => t.status !== "done" && t.status !== "someday");
   const taskCounts: Record<string, number> = {
-    today: activeTasks.filter((t) => { const d = effectiveDate(t); if (!d) return false; return differenceInDays(parseISO(d), new Date()) <= 0; }).length,
+    today: activeTasks.filter((t) => {
+      const sd = t.start_date;
+      const dd = effectiveDate(t);
+      const today = new Date();
+      const startOk = sd && differenceInDays(parseISO(sd), today) <= 0;
+      const dueOk = dd && differenceInDays(parseISO(dd), today) <= 0;
+      return startOk || dueOk;
+    }).length,
     next7: activeTasks.filter((t) => {
-      const d = effectiveDate(t);
-      if (!d) return false;
-      return differenceInDays(parseISO(d), new Date()) <= 7;
+      const sd = t.start_date;
+      const dd = effectiveDate(t);
+      const today = new Date();
+      const startOk = sd && differenceInDays(parseISO(sd), today) <= 7;
+      const dueOk = dd && differenceInDays(parseISO(dd), today) <= 7;
+      return startOk || dueOk;
     }).length,
     inbox: activeTasks.length,
+    someday: tasks.filter((t) => t.status === "someday").length,
     habits: habits.length,
   };
 
@@ -158,6 +176,7 @@ export default function HomePage() {
     next7: "Prossimi 7 Giorni",
     inbox: "Inbox",
     completed: "Completati",
+    someday: "Prima o Poi",
     calendar: "Calendario",
     habits: "Abitudini",
     eisenhower: "Eisenhower",
@@ -240,7 +259,7 @@ export default function HomePage() {
   }
 
   // Should show FAB?
-  const showFab = ["inbox", "today", "next7", "completed", "habits"].includes(selectedView) || selectedView.startsWith("project-");
+  const showFab = ["inbox", "today", "next7", "completed", "habits", "someday"].includes(selectedView) || selectedView.startsWith("project-");
 
   // Keyboard shortcuts
   const shortcutActions = useMemo(
@@ -408,7 +427,7 @@ export default function HomePage() {
     if (isEisenhowerView) {
       return (
         <EisenhowerMatrix
-          tasks={tasks.filter((t) => t.status !== "done")}
+          tasks={tasks.filter((t) => t.status !== "done" && t.status !== "someday")}
           onSelectTask={(task) => { setSelectedTask(task); }}
           onToggleTask={handleToggle}
         />

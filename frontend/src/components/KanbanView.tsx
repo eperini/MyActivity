@@ -27,11 +27,11 @@ const PRIORITY_DOTS: Record<number, string> = {
 
 export default function KanbanView({ tasks, onSelectTask, onToggleTask, onUpdateTask }: KanbanViewProps) {
 
-  // Group by status
-  // Group by status
+  // Group by status (exclude someday tasks from kanban)
+  const kanbanTasks = tasks.filter((t) => t.status !== "someday");
   const columns = COLUMNS.map((col) => ({
     ...col,
-    tasks: tasks.filter((t) => t.status === col.id),
+    tasks: kanbanTasks.filter((t) => t.status === col.id),
   }));
 
   // Drag state

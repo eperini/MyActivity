@@ -6,7 +6,7 @@ export interface User {
   is_admin: boolean;
 }
 
-export type TaskStatus = "todo" | "doing" | "done";
+export type TaskStatus = "todo" | "doing" | "done" | "someday";
 
 export interface Tag {
   id: number;
@@ -34,6 +34,7 @@ export interface Task {
   status: TaskStatus;
   due_date: string | null;
   due_time: string | null;
+  start_date: string | null;
   project_id: number | null;
   heading_id: number | null;
   custom_fields?: Record<string, unknown>;
