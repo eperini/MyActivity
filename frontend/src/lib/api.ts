@@ -1,4 +1,4 @@
-import type { Task, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig, TempoPushLog, TempoPendingLog, Epic, QuickLogProject, ProjectInvitation, ZenoNotification } from "@/types";
+import type { Task, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, PomodoroSession, PomodoroStats, Tag, TaskComment, TaskTemplate, Area, Project, ProjectMember, ProjectHeading, ProjectStats, ProjectCustomField, TaskDependencies, AutomationRule, Sprint, SprintDetail, TimeLog, WeeklyTimeData, JiraConfig, JiraProject, ReportHistoryItem, ReportConfigItem, ReportGenerateResult, ReportType, TempoUser, TempoImportLog, TempoConfig, TempoPushLog, TempoPendingLog, Epic, QuickLogProject, ProjectInvitation, ZenoNotification } from "@/types";
 
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
@@ -366,6 +366,18 @@ export const addProjectMember = (id: number, email: string, role = "edit") =>
   request<ProjectMember>(`/projects/${id}/members`, { method: "POST", body: JSON.stringify({ email, role }) });
 export const removeProjectMember = (projectId: number, memberId: number) =>
   request<{ detail: string }>(`/projects/${projectId}/members/${memberId}`, { method: "DELETE" });
+
+// Headings
+export const getProjectHeadings = (projectId: number) =>
+  request<ProjectHeading[]>(`/projects/${projectId}/headings`);
+export const createProjectHeading = (projectId: number, data: { name: string }) =>
+  request<ProjectHeading>(`/projects/${projectId}/headings`, { method: "POST", body: JSON.stringify(data) });
+export const updateProjectHeading = (projectId: number, headingId: number, data: { name?: string }) =>
+  request<ProjectHeading>(`/projects/${projectId}/headings/${headingId}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteProjectHeading = (projectId: number, headingId: number) =>
+  request<{ detail: string }>(`/projects/${projectId}/headings/${headingId}`, { method: "DELETE" });
+export const reorderProjectHeadings = (projectId: number, ids: number[]) =>
+  request<{ detail: string }>(`/projects/${projectId}/headings/reorder`, { method: "PATCH", body: JSON.stringify({ ids }) });
 
 // Custom Fields
 export const getProjectFields = (projectId: number) =>

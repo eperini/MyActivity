@@ -20,6 +20,7 @@ from app.models.jira import JiraConfig
 from app.models.report import ReportConfig, ReportHistory, ReportType, ReportFrequency
 from app.models.tempo import TempoUser, TempoImportLog, TempoPushLog
 from app.models.epic import Epic, EpicStatus
+from app.models.heading import ProjectHeading
 from app.models.sharing import (
     ProjectRole, InvitationStatus, NotificationType,
     UserProjectArea, ProjectInvitation, AppNotification,
@@ -40,6 +41,7 @@ __all__ = [
     "ReportConfig", "ReportHistory", "ReportType", "ReportFrequency",
     "TempoUser", "TempoImportLog", "TempoPushLog",
     "Epic", "EpicStatus",
+    "ProjectHeading",
     "ProjectRole", "InvitationStatus", "NotificationType",
     "UserProjectArea", "ProjectInvitation", "AppNotification",
 ]

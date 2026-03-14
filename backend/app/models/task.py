@@ -32,6 +32,7 @@ class Task(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    heading_id: Mapped[int | None] = mapped_column(ForeignKey("project_headings.id", ondelete="SET NULL"), nullable=True, index=True)
     custom_fields: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     google_event_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
@@ -45,6 +46,7 @@ class Task(Base):
     )
 
     project: Mapped["Project | None"] = relationship(back_populates="tasks")
+    heading: Mapped["ProjectHeading | None"] = relationship(back_populates="tasks")
     recurrence: Mapped["RecurrenceRule | None"] = relationship(back_populates="task", uselist=False)
     instances: Mapped[list["TaskInstance"]] = relationship(back_populates="task")
     reminders: Mapped[list["TaskReminder"]] = relationship(

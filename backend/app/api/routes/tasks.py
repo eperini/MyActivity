@@ -28,6 +28,7 @@ class TaskCreate(BaseModel):
     due_time: time | None = None
     parent_id: int | None = None
     project_id: int | None = None
+    heading_id: int | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -39,6 +40,7 @@ class TaskUpdate(BaseModel):
     due_time: time | None = None
     assigned_to: int | None = None
     project_id: int | None = None
+    heading_id: int | None = None
     estimated_minutes: int | None = None
 
 
@@ -60,6 +62,7 @@ class TaskResponse(BaseModel):
     due_date: date | None
     due_time: time | None
     project_id: int | None = None
+    heading_id: int | None = None
     parent_id: int | None
     has_recurrence: bool = False
     next_occurrence: date | None = None

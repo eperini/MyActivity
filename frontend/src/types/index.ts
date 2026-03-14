@@ -35,6 +35,7 @@ export interface Task {
   due_date: string | null;
   due_time: string | null;
   project_id: number | null;
+  heading_id: number | null;
   custom_fields?: Record<string, unknown>;
   parent_id: number | null;
   has_recurrence?: boolean;
@@ -236,6 +237,13 @@ export interface Project {
   completed_count: number;
   is_shared?: boolean;
   current_user_role?: ProjectRole | null;
+}
+
+export interface ProjectHeading {
+  id: number;
+  project_id: number;
+  name: string;
+  position: number;
 }
 
 export interface ProjectMember {

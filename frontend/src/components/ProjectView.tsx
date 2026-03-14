@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Task, Project, ProjectStats, Epic } from "@/types";
-import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProjectEpics, createEpic, createEpicTimeLog, deleteEpic, pushEpicToJira } from "@/lib/api";
+import type { Task, Project, ProjectStats, Epic, ProjectHeading } from "@/types";
+import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProjectEpics, createEpic, createEpicTimeLog, deleteEpic, pushEpicToJira, getProjectHeadings, createProjectHeading, deleteProjectHeading } from "@/lib/api";
 import { useToast } from "./Toast";
 import TaskItem from "./TaskItem";
 import AddTaskForm from "./AddTaskForm";
@@ -45,6 +45,9 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
   const [stats, setStats] = useState<ProjectStats | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
+  const [headings, setHeadings] = useState<ProjectHeading[]>([]);
+  const [showNewHeading, setShowNewHeading] = useState(false);
+  const [newHeadingName, setNewHeadingName] = useState("");
   const [showAddTask, setShowAddTask] = useState(false);
   const [showFieldEditor, setShowFieldEditor] = useState(false);
   const [showAutomations, setShowAutomations] = useState(false);
@@ -64,16 +67,18 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
   useEffect(() => {
     async function load() {
       try {
-        const [p, s, allTasks, ep] = await Promise.all([
+        const [p, s, allTasks, ep, hd] = await Promise.all([
           getProject(projectId),
           getProjectStats(projectId),
           getTasks(),
           getProjectEpics(projectId),
+          getProjectHeadings(projectId),
         ]);
         setProject(p);
         setStats(s);
         setTasks(allTasks.filter((t) => t.project_id === projectId && !t.parent_id));
         setEpics(ep);
+        setHeadings(hd);
       } catch {
         showToast("Errore caricamento progetto");
       }
@@ -128,6 +133,30 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
     }
   }
 
+  async function handleCreateHeading() {
+    if (!newHeadingName.trim()) return;
+    try {
+      const heading = await createProjectHeading(projectId, { name: newHeadingName.trim() });
+      setHeadings(prev => [...prev, heading]);
+      setNewHeadingName("");
+      setShowNewHeading(false);
+    } catch {
+      showToast("Errore creazione sezione");
+    }
+  }
+
+  async function handleDeleteHeading(headingId: number) {
+    try {
+      await deleteProjectHeading(projectId, headingId);
+      setHeadings(prev => prev.filter(h => h.id !== headingId));
+      // Clear heading_id from local tasks
+      setTasks(prev => prev.map(t => t.heading_id === headingId ? { ...t, heading_id: null } : t));
+      showToast("Sezione eliminata", "success");
+    } catch {
+      showToast("Errore eliminazione sezione");
+    }
+  }
+
   async function handleDeleteEpic(epicId: number) {
     try {
       await deleteEpic(projectId, epicId);
@@ -148,6 +177,13 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
 
   const activeTasks = tasks.filter((t) => t.status !== "done");
   const doneTasks = tasks.filter((t) => t.status === "done");
+
+  // Group active tasks by heading
+  const ungroupedActive = activeTasks.filter(t => !t.heading_id);
+  const groupedActive = headings.map(h => ({
+    heading: h,
+    tasks: activeTasks.filter(t => t.heading_id === h.id),
+  }));
 
   const statusColors: Record<string, string> = {
     active: "bg-green-500/20 text-green-400",
@@ -326,10 +362,10 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
               Aggiungi task al progetto
             </button>
 
-            {/* Active tasks */}
-            {activeTasks.length > 0 && (
+            {/* Ungrouped active tasks */}
+            {ungroupedActive.length > 0 && (
               <div className="space-y-1">
-                {activeTasks.map((task) => (
+                {ungroupedActive.map((task) => (
                   <TaskItem
                     key={task.id}
                     task={task}
@@ -341,7 +377,60 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
               </div>
             )}
 
-            {activeTasks.length === 0 && doneTasks.length === 0 && (
+            {/* Heading sections */}
+            {groupedActive.map(({ heading, tasks: hTasks }) => (
+              <div key={heading.id}>
+                <div className="flex items-center gap-2 mt-4 mb-2 px-2">
+                  <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">{heading.name}</span>
+                  <div className="flex-1 border-t border-zinc-800" />
+                  <span className="text-[10px] text-zinc-600">{hTasks.length}</span>
+                  <button onClick={() => handleDeleteHeading(heading.id)} className="text-zinc-600 hover:text-red-400 transition-colors">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  {hTasks.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      onToggle={() => handleToggle(task)}
+                      onSelect={() => onSelectTask(task)}
+                      isSelected={false}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* Add heading button */}
+            {showNewHeading ? (
+              <div className="flex gap-2 items-center mt-4">
+                <input
+                  value={newHeadingName}
+                  onChange={e => setNewHeadingName(e.target.value)}
+                  placeholder="Nome sezione..."
+                  autoFocus
+                  onKeyDown={e => { if (e.key === "Enter") handleCreateHeading(); if (e.key === "Escape") { setShowNewHeading(false); setNewHeadingName(""); } }}
+                  className="flex-1 bg-zinc-900 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none placeholder-zinc-600 border border-zinc-700"
+                />
+                <button onClick={handleCreateHeading} className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs text-white">
+                  Crea
+                </button>
+                <button onClick={() => { setShowNewHeading(false); setNewHeadingName(""); }} className="p-2 text-zinc-500 hover:text-zinc-300">
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNewHeading(true)}
+                className="w-full flex items-center gap-2 px-3 py-2 mt-4 rounded-lg border border-dashed border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500 transition-colors text-sm"
+              >
+                <Plus size={16} />
+                Aggiungi sezione
+              </button>
+            )}
+
+            {activeTasks.length === 0 && doneTasks.length === 0 && headings.length === 0 && (
               <div className="text-center py-12 text-zinc-500 text-sm">
                 Nessun task in questo progetto
               </div>

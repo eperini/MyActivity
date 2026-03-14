@@ -54,6 +54,7 @@ class Project(Base):
     automations: Mapped[list["AutomationRule"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     sprints: Mapped[list["Sprint"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     epics: Mapped[list["Epic"]] = relationship(back_populates="project", cascade="all, delete-orphan", order_by="Epic.position")
+    headings: Mapped[list["ProjectHeading"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
 
 class ProjectMember(Base):
