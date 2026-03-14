@@ -1,7 +1,7 @@
 "use client";
 
-import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw, FolderOpen, ChevronDown, ChevronRight, FileBarChart, Bell, RefreshCw } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { Calendar, Inbox, Clock, CheckCircle2, Trash2, Plus, X, Zap, Grid2x2, Timer, MoreHorizontal, Pencil, CalendarDays, Users, BarChart3, Settings, Columns3, GripVertical, RotateCcw, FolderOpen, ChevronDown, ChevronRight, FileBarChart, Bell, RefreshCw, Star } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { TaskList, Area, Project } from "@/types";
 import { createList, updateList, deleteList, reorderLists, resetListOrder, getAreas, getProjects, createArea, updateArea, deleteArea, createProject, updateProject, deleteProject, getUnreadNotificationCount, getJiraConfigs, triggerJiraSync, importJiraUsers, getJiraUserMappings, mapJiraUser } from "@/lib/api";
 import type { JiraUserMapping } from "@/lib/api";
@@ -72,6 +72,37 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
   const [jiraUserMappings, setJiraUserMappings] = useState<JiraUserMapping[]>([]);
   const [jiraUsersLoading, setJiraUsersLoading] = useState(false);
   const [zenoUsers, setZenoUsers] = useState<{ id: number; display_name: string; email: string }[]>([]);
+  // Favorites (persisted in localStorage)
+  const [favoriteNavs, setFavoriteNavs] = useState<Set<string>>(new Set());
+  const [favoriteProjects, setFavoriteProjects] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    try {
+      const navs = JSON.parse(localStorage.getItem("zeno_fav_navs") || "[]");
+      const projs = JSON.parse(localStorage.getItem("zeno_fav_projects") || "[]");
+      setFavoriteNavs(new Set(navs));
+      setFavoriteProjects(new Set(projs));
+    } catch { /* ignore */ }
+  }, []);
+
+  const toggleFavNav = useCallback((id: string) => {
+    setFavoriteNavs(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem("zeno_fav_navs", JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
+  const toggleFavProject = useCallback((id: number) => {
+    setFavoriteProjects(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem("zeno_fav_projects", JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
   const contextRef = useRef<HTMLDivElement>(null);
   const projectContextRef = useRef<HTMLDivElement>(null);
 
@@ -285,33 +316,111 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
   }
 
   const sidebarContent = (
-    <aside className="w-full md:w-56 h-full bg-zinc-900 flex flex-col py-4 text-sm overflow-y-auto">
+    <aside className="w-full md:w-80 h-full bg-zinc-900 flex flex-col py-4 text-sm overflow-y-auto">
+      {/* Favorites section */}
+      {(favoriteNavs.size > 0 || favoriteProjects.size > 0) && (
+        <>
+          <div className="px-3 space-y-0.5">
+            <div className="flex items-center px-3 mb-1">
+              <Star size={12} className="text-yellow-400 mr-1.5" />
+              <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Preferiti</span>
+            </div>
+            {NAV_ITEMS.filter(item => favoriteNavs.has(item.id)).map((item) => {
+              const Icon = item.icon;
+              const isActive = selectedView === item.id;
+              const count = item.id === "notifications" ? unreadNotifCount : (taskCounts[item.id] || 0);
+              const isNotifBadge = item.id === "notifications" && count > 0;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNav(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors group ${
+                    isActive
+                      ? "bg-zinc-800 text-white"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span className="flex-1 text-left text-base md:text-sm">{item.label}</span>
+                  {isNotifBadge ? (
+                    <span className="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium min-w-[18px] text-center">
+                      {count}
+                    </span>
+                  ) : count > 0 ? (
+                    <span className="text-xs text-zinc-500 group-hover:hidden">{count}</span>
+                  ) : null}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleFavNav(item.id); }}
+                    className="text-yellow-400 hover:text-yellow-300 hidden group-hover:block"
+                  >
+                    <Star size={12} fill="currentColor" />
+                  </button>
+                </button>
+              );
+            })}
+            {projects.filter(p => favoriteProjects.has(p.id)).map((project) => {
+              const isActive = selectedView === `project-${project.id}`;
+              return (
+                <button
+                  key={`fav-proj-${project.id}`}
+                  onClick={() => handleNav(`project-${project.id}`)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors group ${
+                    isActive
+                      ? "bg-zinc-800 text-white"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <FolderOpen size={18} style={{ color: project.color || "#6366F1" }} />
+                  <span className="flex-1 text-left text-base md:text-sm truncate">{project.name}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleFavProject(project.id); }}
+                    className="text-yellow-400 hover:text-yellow-300 hidden group-hover:block"
+                  >
+                    <Star size={12} fill="currentColor" />
+                  </button>
+                </button>
+              );
+            })}
+          </div>
+          <div className="mx-4 my-3 border-t border-zinc-700" />
+        </>
+      )}
+
       {/* Navigation */}
       <nav className="px-3 space-y-0.5">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = selectedView === item.id;
+          const isFav = favoriteNavs.has(item.id);
           const count = item.id === "notifications" ? unreadNotifCount : (taskCounts[item.id] || 0);
           const isNotifBadge = item.id === "notifications" && count > 0;
           return (
             <button
               key={item.id}
               onClick={() => handleNav(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg transition-colors group ${
                 isActive
                   ? "bg-zinc-800 text-white"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
               }`}
             >
-              <Icon size={20} className="md:w-[18px] md:h-[18px]" />
+              <Icon size={18} />
               <span className="flex-1 text-left text-base md:text-sm">{item.label}</span>
               {isNotifBadge ? (
                 <span className="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium min-w-[18px] text-center">
                   {count}
                 </span>
               ) : count > 0 ? (
-                <span className="text-xs text-zinc-500">{count}</span>
+                <span className="text-xs text-zinc-500 group-hover:hidden">{count}</span>
               ) : null}
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleFavNav(item.id); }}
+                className={`hidden group-hover:block transition-colors ${
+                  isFav ? "text-yellow-400 hover:text-yellow-300" : "text-zinc-600 hover:text-yellow-400"
+                }`}
+              >
+                <Star size={12} fill={isFav ? "currentColor" : "none"} />
+              </button>
             </button>
           );
         })}
@@ -638,6 +747,14 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
                     {project.completed_count}/{project.task_count}
                   </span>
                 )}
+                <span
+                  onClick={(e) => { e.stopPropagation(); toggleFavProject(project.id); }}
+                  className={`hidden group-hover:block transition-colors cursor-pointer ${
+                    favoriteProjects.has(project.id) ? "text-yellow-400 hover:text-yellow-300" : "text-zinc-600 hover:text-yellow-400"
+                  }`}
+                >
+                  <Star size={12} fill={favoriteProjects.has(project.id) ? "currentColor" : "none"} />
+                </span>
                 <button
                   onClick={(e) => handleProjectContextMenu(e, "project", project.id)}
                   className="text-zinc-600 hover:text-zinc-300 hidden group-hover:block"
@@ -767,6 +884,14 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
                               {project.completed_count}/{project.task_count}
                             </span>
                           )}
+                          <span
+                            onClick={(e) => { e.stopPropagation(); toggleFavProject(project.id); }}
+                            className={`hidden group-hover:block transition-colors cursor-pointer ${
+                              favoriteProjects.has(project.id) ? "text-yellow-400 hover:text-yellow-300" : "text-zinc-600 hover:text-yellow-400"
+                            }`}
+                          >
+                            <Star size={12} fill={favoriteProjects.has(project.id) ? "currentColor" : "none"} />
+                          </span>
                           <button
                             onClick={(e) => handleProjectContextMenu(e, "project", project.id)}
                             className="text-zinc-600 hover:text-zinc-300 hidden group-hover:block"
@@ -867,7 +992,7 @@ export default function Sidebar({ lists, selectedView, onSelectView, taskCounts,
             onClick={onClose}
           />
           {/* Panel */}
-          <div className="absolute inset-y-0 left-0 w-72 animate-slide-in">
+          <div className="absolute inset-y-0 left-0 w-80 animate-slide-in">
             {sidebarContent}
           </div>
         </div>
