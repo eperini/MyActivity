@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X, Cloud, Sun, Moon, Users, Settings as SettingsIcon, Database, Plug } from "lucide-react";
 import useTheme from "@/hooks/useTheme";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, linkJiraAccount } from "@/lib/api";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, linkJiraAccount, changePassword, getIntegrationSettings, updateIntegrationSettings } from "@/lib/api";
+import type { IntegrationSettings } from "@/lib/api";
 import type { TickTickImportResult } from "@/lib/api";
 import type { TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
 import { useToast } from "@/components/Toast";
@@ -710,6 +711,17 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
               </div>
             </div>
           )}
+
+          {/* API Keys Configuration (admin) */}
+          {isAdmin && (
+            <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+              <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <Key size={16} />
+                Chiavi API Integrazioni
+              </h3>
+              <IntegrationKeysForm />
+            </div>
+          )}
         </>
       )}
 
@@ -928,6 +940,55 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
       {/* ═══════════ TAB: ACCOUNT ═══════════ */}
       {activeTab === "account" && (
         <>
+          {/* Change Password */}
+          <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+            <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+              <Key size={16} />
+              Cambia password
+            </h3>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const currentPwd = (form.elements.namedItem("currentPwd") as HTMLInputElement).value;
+                const newPwd = (form.elements.namedItem("newPwd") as HTMLInputElement).value;
+                const confirmPwd = (form.elements.namedItem("confirmPwd") as HTMLInputElement).value;
+                if (newPwd !== confirmPwd) {
+                  showToast("Le password non coincidono");
+                  return;
+                }
+                if (newPwd.length < 8) {
+                  showToast("La nuova password deve avere almeno 8 caratteri");
+                  return;
+                }
+                try {
+                  await changePassword(currentPwd, newPwd);
+                  showToast("Password aggiornata", "success");
+                  form.reset();
+                } catch (err) {
+                  showToast(err instanceof Error ? err.message : "Errore nel cambio password");
+                }
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="text-xs text-zinc-500 block mb-1">Password attuale</label>
+                <input name="currentPwd" type="password" required className="w-full max-w-xs bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 block mb-1">Nuova password</label>
+                <input name="newPwd" type="password" required minLength={8} className="w-full max-w-xs bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 block mb-1">Conferma nuova password</label>
+                <input name="confirmPwd" type="password" required minLength={8} className="w-full max-w-xs bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500" />
+              </div>
+              <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium text-white transition-colors">
+                Aggiorna password
+              </button>
+            </form>
+          </div>
+
           {/* API Key for iOS Shortcuts */}
           <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
             <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
@@ -990,6 +1051,109 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
       )}
 
       </div>
+    </div>
+  );
+}
+
+function IntegrationKeysForm() {
+  const { showToast } = useToast();
+  const [settings, setSettings] = useState<IntegrationSettings | null>(null);
+  const [jiraUrl, setJiraUrl] = useState("");
+  const [jiraEmail, setJiraEmail] = useState("");
+  const [jiraToken, setJiraToken] = useState("");
+  const [tempoToken, setTempoToken] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getIntegrationSettings()
+      .then((s) => {
+        setSettings(s);
+        setJiraUrl(s.jira_base_url);
+        setJiraEmail(s.jira_email);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const updates: Record<string, string> = {};
+      if (settings && jiraUrl !== settings.jira_base_url) updates.jira_base_url = jiraUrl;
+      if (settings && jiraEmail !== settings.jira_email) updates.jira_email = jiraEmail;
+      if (jiraToken) updates.jira_api_token = jiraToken;
+      if (tempoToken) updates.tempo_api_token = tempoToken;
+      if (Object.keys(updates).length === 0) {
+        showToast("Nessuna modifica");
+        setSaving(false);
+        return;
+      }
+      await updateIntegrationSettings(updates);
+      showToast("Impostazioni salvate", "success");
+      setJiraToken("");
+      setTempoToken("");
+      // Refresh
+      const s = await getIntegrationSettings();
+      setSettings(s);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore salvataggio");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!settings) return <div className="text-xs text-zinc-500">Caricamento...</div>;
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-zinc-500 block mb-1">Jira Base URL</label>
+        <input
+          value={jiraUrl}
+          onChange={(e) => setJiraUrl(e.target.value)}
+          placeholder="https://yourteam.atlassian.net"
+          className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500 placeholder-zinc-600"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-zinc-500 block mb-1">Jira Email</label>
+        <input
+          value={jiraEmail}
+          onChange={(e) => setJiraEmail(e.target.value)}
+          placeholder="user@example.com"
+          className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500 placeholder-zinc-600"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-zinc-500 block mb-1">
+          Jira API Token {settings.jira_api_token_set && <span className="text-green-400 ml-1">(configurato)</span>}
+        </label>
+        <input
+          value={jiraToken}
+          onChange={(e) => setJiraToken(e.target.value)}
+          type="password"
+          placeholder={settings.jira_api_token_set ? "••••••••  (lascia vuoto per non modificare)" : "Inserisci il token"}
+          className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500 placeholder-zinc-600"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-zinc-500 block mb-1">
+          Tempo API Token {settings.tempo_api_token_set && <span className="text-green-400 ml-1">(configurato)</span>}
+        </label>
+        <input
+          value={tempoToken}
+          onChange={(e) => setTempoToken(e.target.value)}
+          type="password"
+          placeholder={settings.tempo_api_token_set ? "••••••••  (lascia vuoto per non modificare)" : "Inserisci il token"}
+          className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-zinc-500 placeholder-zinc-600"
+        />
+      </div>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition-colors"
+      >
+        {saving ? "Salvataggio..." : "Salva impostazioni"}
+      </button>
     </div>
   );
 }

@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -195,19 +195,32 @@ async def delete_time_log(
 
 @router.get("/time/week")
 async def get_weekly_time(
+    week_offset: int = Query(0, ge=-52, le=52),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     today = date.today()
-    week_start = today - timedelta(days=today.weekday())  # Monday
+    week_start = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)  # Monday
     week_end = week_start + timedelta(days=6)  # Sunday
+
+    # Find tempo_user IDs linked to this Zeno user
+    tempo_user_ids_result = await db.execute(
+        select(TempoUser.id).where(TempoUser.zeno_user_id == user.id)
+    )
+    linked_tempo_ids = [r[0] for r in tempo_user_ids_result.all()]
+
+    # User filter: user_id matches OR tempo_user_id is linked
+    user_filter = or_(
+        TimeLog.user_id == user.id,
+        TimeLog.tempo_user_id.in_(linked_tempo_ids) if linked_tempo_ids else False,
+    )
 
     # All logs for the week (task logs + epic logs)
     task_result = await db.execute(
         select(TimeLog, Task.title, Task.project_id)
         .join(Task, TimeLog.task_id == Task.id)
         .where(
-            TimeLog.user_id == user.id,
+            user_filter,
             TimeLog.logged_at >= week_start,
             TimeLog.logged_at <= week_end,
         )
@@ -217,7 +230,7 @@ async def get_weekly_time(
         select(TimeLog, Epic.name, Epic.project_id)
         .join(Epic, TimeLog.epic_id == Epic.id)
         .where(
-            TimeLog.user_id == user.id,
+            user_filter,
             TimeLog.logged_at >= week_start,
             TimeLog.logged_at <= week_end,
         )

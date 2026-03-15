@@ -166,6 +166,110 @@ async def update_preferences(
     return {"detail": "Preferenze aggiornate"}
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/me/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change current user's password."""
+    if not verify_password(data.current_password, user.password_hash):
+        raise HTTPException(400, "Password attuale non corretta")
+    user.password_hash = hash_password(data.new_password)
+    await db.commit()
+    return {"detail": "Password aggiornata"}
+
+
+class IntegrationSettingsResponse(BaseModel):
+    jira_base_url: str
+    jira_email: str
+    jira_api_token_set: bool
+    tempo_api_token_set: bool
+
+
+class IntegrationSettingsUpdate(BaseModel):
+    jira_base_url: str | None = None
+    jira_email: str | None = None
+    jira_api_token: str | None = None
+    tempo_api_token: str | None = None
+
+
+@router.get("/admin/integrations", response_model=IntegrationSettingsResponse)
+async def get_integration_settings(user: User = Depends(get_current_user)):
+    """Get integration settings (admin only)."""
+    if not user.is_admin:
+        raise HTTPException(403, "Solo admin")
+    return IntegrationSettingsResponse(
+        jira_base_url=settings.JIRA_BASE_URL,
+        jira_email=settings.JIRA_EMAIL,
+        jira_api_token_set=bool(settings.JIRA_API_TOKEN),
+        tempo_api_token_set=bool(settings.TEMPO_API_TOKEN),
+    )
+
+
+@router.patch("/admin/integrations")
+async def update_integration_settings(
+    data: IntegrationSettingsUpdate,
+    user: User = Depends(get_current_user),
+):
+    """Update integration settings (admin only). Updates in-memory and .env file."""
+    if not user.is_admin:
+        raise HTTPException(403, "Solo admin")
+
+    updates: dict[str, str] = {}
+    if data.jira_base_url is not None:
+        settings.JIRA_BASE_URL = data.jira_base_url
+        updates["JIRA_BASE_URL"] = data.jira_base_url
+    if data.jira_email is not None:
+        settings.JIRA_EMAIL = data.jira_email
+        updates["JIRA_EMAIL"] = data.jira_email
+    if data.jira_api_token is not None:
+        settings.JIRA_API_TOKEN = data.jira_api_token
+        updates["JIRA_API_TOKEN"] = data.jira_api_token
+    if data.tempo_api_token is not None:
+        settings.TEMPO_API_TOKEN = data.tempo_api_token
+        updates["TEMPO_API_TOKEN"] = data.tempo_api_token
+
+    # Persist to .env file
+    if updates:
+        _update_env_file(updates)
+
+    return {"detail": "Impostazioni aggiornate"}
+
+
+def _update_env_file(updates: dict[str, str]):
+    """Update or append key=value pairs in the .env file."""
+    import pathlib
+    env_path = pathlib.Path("/app/.env")
+    if not env_path.exists():
+        env_path = pathlib.Path(".env")
+    lines: list[str] = []
+    if env_path.exists():
+        lines = env_path.read_text().splitlines()
+
+    updated_keys: set[str] = set()
+    new_lines: list[str] = []
+    for line in lines:
+        key = line.split("=", 1)[0].strip() if "=" in line else ""
+        if key in updates:
+            new_lines.append(f"{key}={updates[key]}")
+            updated_keys.add(key)
+        else:
+            new_lines.append(line)
+
+    # Append keys not found in file
+    for key, value in updates.items():
+        if key not in updated_keys:
+            new_lines.append(f"{key}={value}")
+
+    env_path.write_text("\n".join(new_lines) + "\n")
+
+
 @router.get("/users")
 async def list_users(
     user: User = Depends(get_current_user),

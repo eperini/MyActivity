@@ -6,7 +6,7 @@ import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProje
 import { useToast } from "./Toast";
 import TaskItem from "./TaskItem";
 import AddTaskForm from "./AddTaskForm";
-import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X, Users, Grid2x2 } from "lucide-react";
+import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X, Users, Grid2x2, FolderOpen, Link, Check, Pencil } from "lucide-react";
 import CustomFieldEditor from "./CustomFieldEditor";
 import TimeLogForm from "./TimeLogForm";
 import AutomationsView from "./AutomationsView";
@@ -52,7 +52,8 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
   const [showFieldEditor, setShowFieldEditor] = useState(false);
   const [showAutomations, setShowAutomations] = useState(false);
   const [showSprints, setShowSprints] = useState(false);
-  const [activeTab, setActiveTab] = useState<"tasks" | "epics" | "members">("tasks");
+  const [activeTab, setActiveTab] = useState<string>("tasks"); // "tasks" | "epics" | "members" | "link-0" | "link-1" | "link-2" | "add-link"
+  const [savingLinks, setSavingLinks] = useState(false);
 
   // Epic inline form
   const [showNewEpic, setShowNewEpic] = useState(false);
@@ -338,7 +339,7 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
                 : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            <Zap size={12} className="text-yellow-400" />
+            <Zap size={12} className="text-purple-400" />
             Epic ({epics.length})
           </button>
           <button
@@ -353,6 +354,34 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
             <Users size={12} />
             Membri
           </button>
+          {(project.drive_links || []).map((link, i) => (
+            <button
+              key={i}
+              onClick={() => setActiveTab(`link-${i}`)}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                activeTab === `link-${i}`
+                  ? "bg-zinc-700 text-zinc-200"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <FolderOpen size={12} />
+              {link.name}
+            </button>
+          ))}
+          {(project.drive_links || []).length < 3 && (
+            <button
+              onClick={() => setActiveTab("add-link")}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                activeTab === "add-link"
+                  ? "bg-zinc-700 text-zinc-200"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+              title="Aggiungi pagina web"
+            >
+              <Plus size={12} />
+              <FolderOpen size={12} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -378,8 +407,63 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        {activeTab === "members" ? (
+      <div className={`flex-1 ${activeTab.startsWith("link-") || activeTab === "add-link" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-6 py-4"}`}>
+        {activeTab.startsWith("link-") ? (() => {
+          const linkIndex = parseInt(activeTab.split("-")[1]);
+          const link = (project.drive_links || [])[linkIndex];
+          if (!link) return null;
+          return (
+            <DriveIframeView
+              link={link}
+              saving={savingLinks}
+              onRename={async (newName) => {
+                const links = [...(project.drive_links || [])];
+                links[linkIndex] = { ...links[linkIndex], name: newName };
+                setSavingLinks(true);
+                try {
+                  await updateProject(project.id, { drive_links: links } as Partial<Project>);
+                  setProject({ ...project, drive_links: links });
+                } catch {
+                  showToast("Errore rinomina");
+                } finally {
+                  setSavingLinks(false);
+                }
+              }}
+              onRemove={async () => {
+                const links = (project.drive_links || []).filter((_, i) => i !== linkIndex);
+                setSavingLinks(true);
+                try {
+                  await updateProject(project.id, { drive_links: links.length ? links : null } as Partial<Project>);
+                  setProject({ ...project, drive_links: links.length ? links : null });
+                  setActiveTab("tasks");
+                  showToast("Pagina rimossa", "success");
+                } catch {
+                  showToast("Errore rimozione");
+                } finally {
+                  setSavingLinks(false);
+                }
+              }}
+            />
+          );
+        })() : activeTab === "add-link" ? (
+          <AddLinkView
+            saving={savingLinks}
+            onSave={async (name, url) => {
+              const links = [...(project.drive_links || []), { name, url }];
+              setSavingLinks(true);
+              try {
+                await updateProject(project.id, { drive_links: links } as Partial<Project>);
+                setProject({ ...project, drive_links: links });
+                setActiveTab(`link-${links.length - 1}`);
+                showToast("Pagina aggiunta", "success");
+              } catch {
+                showToast("Errore salvataggio");
+              } finally {
+                setSavingLinks(false);
+              }
+            }}
+          />
+        ) : activeTab === "members" ? (
           <ProjectMembersPanel
             projectId={projectId}
             currentUserRole={project?.current_user_role}
@@ -498,7 +582,7 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
               {epics.map(epic => (
                 <div key={epic.id}>
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-800/50 group transition-colors">
-                    <Zap size={14} className="text-yellow-400/60 flex-shrink-0" />
+                    <Zap size={14} className="text-purple-400/60 flex-shrink-0" />
                     <span className="text-sm text-zinc-200 flex-1 truncate">{epic.name}</span>
                     {epic.jira_issue_key ? (
                       <a
@@ -625,6 +709,153 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
           onClose={() => setShowAddTask(false)}
         />
       )}
+    </div>
+  );
+}
+
+/** Convert a Google Drive URL to embeddable format */
+function toEmbedUrl(url: string): string {
+  const folderMatch = url.match(/drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch) return `https://drive.google.com/embeddedfolderview?id=${folderMatch[1]}#grid`;
+  const docMatch = url.match(/docs\.google\.com\/(document|spreadsheets|presentation)\/d\/([a-zA-Z0-9_-]+)/);
+  if (docMatch) return `https://docs.google.com/${docMatch[1]}/d/${docMatch[2]}/preview`;
+  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  return url;
+}
+
+function DriveIframeView({
+  link,
+  saving,
+  onRename,
+  onRemove,
+}: {
+  link: { name: string; url: string };
+  saving: boolean;
+  onRename: (name: string) => void;
+  onRemove: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(link.name);
+  const embedUrl = toEmbedUrl(link.url);
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-zinc-800 bg-zinc-900/50">
+        {editing ? (
+          <div className="flex items-center gap-1.5 flex-1">
+            <input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && editName.trim()) { onRename(editName.trim()); setEditing(false); }
+                if (e.key === "Escape") { setEditName(link.name); setEditing(false); }
+              }}
+              className="bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 text-xs text-zinc-200 outline-none w-40"
+            />
+            <button
+              onClick={() => { if (editName.trim()) { onRename(editName.trim()); setEditing(false); } }}
+              className="text-xs text-blue-400 hover:text-blue-300"
+            >
+              <Check size={12} />
+            </button>
+            <button
+              onClick={() => { setEditName(link.name); setEditing(false); }}
+              className="text-xs text-zinc-500 hover:text-zinc-300"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <FolderOpen size={14} className="text-zinc-400" />
+            <span className="text-xs text-zinc-300 font-medium">{link.name}</span>
+            <button
+              onClick={() => { setEditName(link.name); setEditing(true); }}
+              className="text-zinc-600 hover:text-zinc-400 transition-colors"
+              title="Rinomina"
+            >
+              <Pencil size={11} />
+            </button>
+            <span className="text-xs text-zinc-600 truncate flex-1">{link.url}</span>
+          </>
+        )}
+        <a
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 flex-shrink-0"
+        >
+          Apri <ExternalLink size={10} />
+        </a>
+        <button
+          onClick={onRemove}
+          disabled={saving}
+          className="text-xs text-zinc-500 hover:text-red-400 transition-colors flex-shrink-0"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+      <iframe
+        src={embedUrl}
+        className="flex-1 w-full border-0 bg-white"
+        allow="autoplay"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+      />
+    </div>
+  );
+}
+
+function AddLinkView({
+  saving,
+  onSave,
+}: {
+  saving: boolean;
+  onSave: (name: string, url: string) => void;
+}) {
+  const [name, setName] = useState("Drive");
+  const [url, setUrl] = useState("");
+
+  return (
+    <div className="flex-1 flex items-center justify-center px-6">
+      <div className="text-center max-w-sm space-y-4">
+        <FolderOpen size={40} className="mx-auto text-zinc-600" />
+        <p className="text-sm text-zinc-400">
+          Collega una pagina web a questo progetto
+        </p>
+        <div className="space-y-2">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nome tab (es. Documenti, Appunti...)"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-300 outline-none placeholder-zinc-600 focus:border-zinc-500 transition-colors"
+          />
+          <div className="relative">
+            <Link size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Incolla URL (Google Drive, Notion, ecc.)..."
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-300 outline-none placeholder-zinc-600 focus:border-zinc-500 transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && url.trim() && name.trim()) onSave(name.trim(), url.trim());
+              }}
+            />
+          </div>
+        </div>
+        <button
+          onClick={() => url.trim() && name.trim() && onSave(name.trim(), url.trim())}
+          disabled={saving || !url.trim() || !name.trim()}
+          className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg text-sm text-white font-medium transition-colors flex items-center justify-center gap-1.5"
+        >
+          <Check size={14} />
+          Aggiungi
+        </button>
+        <p className="text-[11px] text-zinc-600">
+          Supporta Google Drive, Docs, Sheets, Notion e qualsiasi URL. Max 3 pagine.
+        </p>
+      </div>
     </div>
   );
 }

@@ -314,6 +314,33 @@ export const generateApiKey = () =>
 export const revokeApiKey = () =>
   request<{ detail: string }>("/auth/me/api-key", { method: "DELETE" });
 
+// Change password
+export const changePassword = (current_password: string, new_password: string) =>
+  request<{ detail: string }>("/auth/me/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password, new_password }),
+  });
+
+// Integration settings (admin)
+export interface IntegrationSettings {
+  jira_base_url: string;
+  jira_email: string;
+  jira_api_token_set: boolean;
+  tempo_api_token_set: boolean;
+}
+export const getIntegrationSettings = () =>
+  request<IntegrationSettings>("/auth/admin/integrations");
+export const updateIntegrationSettings = (data: {
+  jira_base_url?: string;
+  jira_email?: string;
+  jira_api_token?: string;
+  tempo_api_token?: string;
+}) =>
+  request<{ detail: string }>("/auth/admin/integrations", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+
 // User profile & preferences
 export interface UserProfile {
   id: number;
@@ -434,8 +461,38 @@ export const updateTimeLog = (taskId: number, logId: number, data: { minutes?: n
   request<TimeLog>(`/tasks/${taskId}/time/${logId}`, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteTimeLog = (taskId: number, logId: number) =>
   request<{ detail: string }>(`/tasks/${taskId}/time/${logId}`, { method: "DELETE" });
-export const getWeeklyTime = () =>
-  request<WeeklyTimeData>("/time/week");
+export const getWeeklyTime = (weekOffset = 0) =>
+  request<WeeklyTimeData>(`/time/week?week_offset=${weekOffset}`);
+
+export interface TimeReportData {
+  total_minutes: number;
+  total_formatted: string;
+  group_by: string;
+  items: Array<{
+    date?: string;
+    week_start?: string;
+    project_id?: number | null;
+    project_name?: string;
+    task_id?: number | null;
+    epic_id?: number | null;
+    task_title?: string;
+    minutes: number;
+    formatted: string;
+  }>;
+}
+export const getTimeReport = (params: {
+  date_from?: string;
+  date_to?: string;
+  group_by?: string;
+  project_id?: number;
+}) => {
+  const q = new URLSearchParams();
+  if (params.date_from) q.set("date_from", params.date_from);
+  if (params.date_to) q.set("date_to", params.date_to);
+  if (params.group_by) q.set("group_by", params.group_by);
+  if (params.project_id) q.set("project_id", String(params.project_id));
+  return request<TimeReportData>(`/time/report?${q.toString()}`);
+};
 
 // Jira
 export const getJiraConfigs = () =>

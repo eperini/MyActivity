@@ -161,7 +161,7 @@ async def trigger_tempo_import(
             svc = TempoImportService(sync_db)
             log = svc.run_import(req.date_from, req.date_to, user.id)
             return {
-                "import_log_id": log.id,
+                "id": log.id,
                 "status": log.status,
                 "period_from": log.period_from.isoformat(),
                 "period_to": log.period_to.isoformat(),
@@ -170,6 +170,8 @@ async def trigger_tempo_import(
                 "worklogs_updated": log.worklogs_updated,
                 "worklogs_skipped": log.worklogs_skipped,
                 "error_message": log.error_message,
+                "started_at": log.started_at.isoformat() if log.started_at else None,
+                "completed_at": log.completed_at.isoformat() if log.completed_at else None,
             }
     else:
         # Async via Celery for long periods
@@ -191,10 +193,17 @@ async def trigger_tempo_import(
             user_id=user.id,
         )
         return {
-            "import_log_id": import_log.id,
+            "id": import_log.id,
             "status": "running",
             "period_from": req.date_from.isoformat(),
             "period_to": req.date_to.isoformat(),
+            "worklogs_found": 0,
+            "worklogs_created": 0,
+            "worklogs_updated": 0,
+            "worklogs_skipped": 0,
+            "error_message": None,
+            "started_at": import_log.started_at.isoformat() if import_log.started_at else None,
+            "completed_at": None,
         }
 
 

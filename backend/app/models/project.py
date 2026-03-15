@@ -1,7 +1,7 @@
 from datetime import datetime, date, timezone
 from enum import Enum as PyEnum
 
-from sqlalchemy import String, Text, Integer, Boolean, ForeignKey, DateTime, Date, Enum, UniqueConstraint
+from sqlalchemy import String, Text, Integer, Boolean, ForeignKey, DateTime, Date, Enum, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -38,6 +38,7 @@ class Project(Base):
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
     show_undated_eisenhower: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    drive_links: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{name, url}] max 3
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

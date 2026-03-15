@@ -1,11 +1,28 @@
 """Tempo Cloud API client — async + sync versions."""
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
+from functools import lru_cache
 
 import httpx
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=256)
+def _resolve_jira_issue_id(issue_key: str) -> int:
+    """Resolve a Jira issue key (e.g. PROJ-123) to its numeric ID via Jira REST API."""
+    with httpx.Client() as client:
+        resp = client.get(
+            f"{settings.JIRA_BASE_URL}/rest/api/3/issue/{issue_key}?fields=id",
+            auth=(settings.JIRA_EMAIL, settings.JIRA_API_TOKEN),
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return int(resp.json()["id"])
 
 
 class TempoService:
@@ -99,8 +116,9 @@ class TempoService:
         self, jira_issue_key: str, author_account_id: str,
         started_date: date, time_spent_seconds: int, description: str = "",
     ) -> dict:
+        issue_id = _resolve_jira_issue_id(jira_issue_key)
         payload = {
-            "issueKey": jira_issue_key,
+            "issueId": issue_id,
             "authorAccountId": author_account_id,
             "startDate": started_date.isoformat(),
             "timeSpentSeconds": time_spent_seconds,
@@ -145,8 +163,9 @@ class TempoService:
         self, jira_issue_key: str, author_account_id: str,
         started_date: date, time_spent_seconds: int, description: str = "",
     ) -> dict:
+        issue_id = _resolve_jira_issue_id(jira_issue_key)
         payload = {
-            "issueKey": jira_issue_key,
+            "issueId": issue_id,
             "authorAccountId": author_account_id,
             "startDate": started_date.isoformat(),
             "timeSpentSeconds": time_spent_seconds,

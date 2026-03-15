@@ -236,6 +236,7 @@ export interface Project {
   client_name: string | null;
   position: number;
   show_undated_eisenhower: boolean;
+  drive_links: { name: string; url: string }[] | null;
   task_count: number;
   completed_count: number;
   is_shared?: boolean;

@@ -27,6 +27,7 @@ class ProjectCreate(BaseModel):
     target_date: date | None = None
     client_name: str | None = Field(default=None, max_length=200)
     show_undated_eisenhower: bool = False
+    drive_links: list[dict] | None = None  # [{name, url}] max 3
 
 
 class ProjectUpdate(BaseModel):
@@ -41,6 +42,7 @@ class ProjectUpdate(BaseModel):
     target_date: date | None = None
     client_name: str | None = Field(default=None, max_length=200)
     show_undated_eisenhower: bool | None = None
+    drive_links: list[dict] | None = None  # [{name, url}] max 3
 
 
 class ProjectResponse(BaseModel):
@@ -58,6 +60,7 @@ class ProjectResponse(BaseModel):
     client_name: str | None
     position: int
     show_undated_eisenhower: bool = False
+    drive_links: list[dict] | None = None  # [{name, url}] max 3
     task_count: int = 0
     completed_count: int = 0
     is_shared: bool = False
@@ -209,7 +212,7 @@ async def get_projects(
             id=p.id, area_id=p.area_id, name=p.name, description=p.description,
             project_type=p.project_type, status=p.status, color=p.color, icon=p.icon,
             owner_id=p.owner_id, start_date=p.start_date, target_date=p.target_date,
-            client_name=p.client_name, position=p.position, show_undated_eisenhower=p.show_undated_eisenhower,
+            client_name=p.client_name, position=p.position, show_undated_eisenhower=p.show_undated_eisenhower, drive_links=p.drive_links,
             task_count=counts.get(p.id, (0, 0))[0],
             completed_count=counts.get(p.id, (0, 0))[1],
             is_shared=member_counts.get(p.id, 1) > 1,
@@ -244,6 +247,7 @@ async def create_project(
         target_date=data.target_date,
         client_name=data.client_name,
         show_undated_eisenhower=data.show_undated_eisenhower,
+        drive_links=data.drive_links,
     )
     db.add(project)
     await db.flush()
@@ -273,7 +277,7 @@ async def create_project(
         status=project.status, color=project.color, icon=project.icon,
         owner_id=project.owner_id, start_date=project.start_date,
         target_date=project.target_date, client_name=project.client_name,
-        position=project.position, show_undated_eisenhower=project.show_undated_eisenhower,
+        position=project.position, show_undated_eisenhower=project.show_undated_eisenhower, drive_links=project.drive_links,
         task_count=0, completed_count=0,
     )
 
@@ -298,7 +302,7 @@ async def get_project(
         status=project.status, color=project.color, icon=project.icon,
         owner_id=project.owner_id, start_date=project.start_date,
         target_date=project.target_date, client_name=project.client_name,
-        position=project.position, show_undated_eisenhower=project.show_undated_eisenhower,
+        position=project.position, show_undated_eisenhower=project.show_undated_eisenhower, drive_links=project.drive_links,
         task_count=row.total, completed_count=row.done,
     )
 
@@ -330,7 +334,7 @@ async def update_project(
         status=project.status, color=project.color, icon=project.icon,
         owner_id=project.owner_id, start_date=project.start_date,
         target_date=project.target_date, client_name=project.client_name,
-        position=project.position, show_undated_eisenhower=project.show_undated_eisenhower,
+        position=project.position, show_undated_eisenhower=project.show_undated_eisenhower, drive_links=project.drive_links,
         task_count=row.total, completed_count=row.done,
     )
 

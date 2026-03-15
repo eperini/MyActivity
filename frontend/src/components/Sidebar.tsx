@@ -807,6 +807,13 @@ export default function Sidebar({ selectedView, onSelectView, taskCounts, isOpen
           <Trash2 size={20} className="md:w-[18px] md:h-[18px]" />
           <span className="text-base md:text-sm">Cestino</span>
         </button>
+        <button
+          onClick={() => window.location.reload()}
+          className="w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors"
+        >
+          <RefreshCw size={20} className="md:w-[18px] md:h-[18px]" />
+          <span className="text-base md:text-sm">Ricarica</span>
+        </button>
       </div>
     </aside>
   );

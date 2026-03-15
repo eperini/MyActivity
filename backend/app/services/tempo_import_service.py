@@ -3,15 +3,36 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 
+import httpx
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.task import Task
+from app.models.epic import Epic
 from app.models.time_log import TimeLog
 from app.models.tempo import TempoUser, TempoImportLog
 from app.services.tempo_service import TempoService
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=512)
+def _resolve_jira_issue_key(issue_id: int) -> str | None:
+    """Resolve a Jira issue numeric ID to its key (e.g. PROJ-123)."""
+    try:
+        with httpx.Client() as client:
+            resp = client.get(
+                f"{settings.JIRA_BASE_URL}/rest/api/3/issue/{issue_id}?fields=",
+                auth=(settings.JIRA_EMAIL, settings.JIRA_API_TOKEN),
+                timeout=15,
+            )
+            resp.raise_for_status()
+            return resp.json()["key"]
+    except Exception as e:
+        logger.warning("Cannot resolve Jira issue ID %s: %s", issue_id, e)
+        return None
 
 
 class TempoImportService:
@@ -71,21 +92,29 @@ class TempoImportService:
 
     def _process_worklog(self, wl: dict) -> str:
         tempo_id = wl["tempoWorklogId"]
-        jira_key = wl["issue"]["key"]
+        issue_data = wl.get("issue", {})
+        jira_key = issue_data.get("key")
 
-        # Find the Zeno task matching the Jira issue key
-        task = self.db.query(Task).filter(
-            Task.jira_issue_key == jira_key
-        ).first()
+        # Tempo API v4 only returns issue.id, not issue.key — resolve it
+        if not jira_key and issue_data.get("id"):
+            jira_key = _resolve_jira_issue_key(int(issue_data["id"]))
 
+        if not jira_key:
+            return "skipped"
+
+        # Find the Zeno task or epic matching the Jira issue key
+        task = self.db.query(Task).filter(Task.jira_issue_key == jira_key).first()
+        epic = None
         if not task:
+            epic = self.db.query(Epic).filter(Epic.jira_issue_key == jira_key).first()
+        if not task and not epic:
             return "skipped"
 
         # Resolve Tempo user
         author = wl["author"]
         tempo_user = self._get_or_create_tempo_user(
             account_id=author["accountId"],
-            display_name=author["displayName"],
+            display_name=author.get("displayName") or author.get("accountId", "Unknown"),
         )
 
         # Determine effective user_id
@@ -110,7 +139,8 @@ class TempoImportService:
             return "updated"
         else:
             new_log = TimeLog(
-                task_id=task.id,
+                task_id=task.id if task else None,
+                epic_id=epic.id if epic else None,
                 user_id=effective_user_id,
                 tempo_user_id=effective_tempo_user_id,
                 logged_at=date.fromisoformat(wl["startDate"]),
