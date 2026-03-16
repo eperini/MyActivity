@@ -53,7 +53,6 @@ export default function AddTaskForm({ defaultProjectId, onCreated, onClose }: Ad
   useEffect(() => {
     getProjects().then((p) => {
       setProjects(p);
-      if (!defaultProjectId && p.length > 0) setProjectId(p[0].id);
     }).catch(() => {});
   }, [defaultProjectId]);
 

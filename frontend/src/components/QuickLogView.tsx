@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Zap, Clock, Search, ExternalLink, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { Zap, Clock, Search, ExternalLink, ChevronLeft, ChevronRight, Calendar, Upload, Download } from "lucide-react";
 import type { QuickLogProject, Epic, WeeklyTimeData } from "@/types";
-import { getQuickLogEpics, createEpicTimeLog, getWeeklyTime } from "@/lib/api";
+import { getQuickLogEpics, createEpicTimeLog, getWeeklyTime, triggerTempoPush, triggerTempoImport } from "@/lib/api";
 import { useToast } from "./Toast";
 import TimeLogForm from "./TimeLogForm";
 
@@ -58,6 +58,10 @@ export default function QuickLogView() {
   const [mins, setMins] = useState(0);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Tempo sync
+  const [pushing, setPushing] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // Weekly panel state
   const [weekOffset, setWeekOffset] = useState(0);
@@ -142,6 +146,37 @@ export default function QuickLogView() {
     }
   }
 
+  async function handlePushTempo() {
+    setPushing(true);
+    try {
+      const result = await triggerTempoPush();
+      showToast(`Push completato: ${result.logs_pushed ?? 0} worklog inviati`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore push Tempo");
+    } finally {
+      setPushing(false);
+    }
+  }
+
+  async function handleImportTempo() {
+    setImporting(true);
+    try {
+      // Import last 7 days
+      const now = new Date();
+      const from = new Date(now);
+      from.setDate(from.getDate() - 7);
+      const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const result = await triggerTempoImport(fmt(from), fmt(now));
+      showToast(`Import completato: ${result.worklogs_created ?? 0} worklog importati`, "success");
+      loadData();
+      loadWeek();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore import Tempo");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   // Filter epics by search
   const filtered = projects
     .map(p => ({
@@ -198,10 +233,29 @@ export default function QuickLogView() {
     <div className="flex-1 flex overflow-hidden">
       {/* Left: Epic list */}
       <div className="flex-1 overflow-y-auto p-6 min-w-0">
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
-          <Zap size={20} className="text-yellow-400" />
-          Quick Log Ore
-        </h2>
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Zap size={20} className="text-yellow-400" />
+            Quick Log Ore
+          </h2>
+          <div className="flex-1" />
+          <button
+            onClick={handlePushTempo}
+            disabled={pushing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 disabled:opacity-50 transition-colors"
+          >
+            <Upload size={14} className={pushing ? "animate-pulse" : ""} />
+            {pushing ? "Invio..." : "Invia a Tempo"}
+          </button>
+          <button
+            onClick={handleImportTempo}
+            disabled={importing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 disabled:opacity-50 transition-colors"
+          >
+            <Download size={14} className={importing ? "animate-pulse" : ""} />
+            {importing ? "Importo..." : "Aggiorna da Tempo"}
+          </button>
+        </div>
 
         {/* Filters */}
         <div className="flex items-center gap-3 mb-6">
