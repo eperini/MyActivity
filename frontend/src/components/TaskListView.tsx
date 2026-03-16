@@ -29,6 +29,7 @@ interface TaskListViewProps {
   selectedTask: Task | null;
   onSelectTask: (task: Task) => void;
   onToggleTask: (task: Task) => void;
+  onTimeLog?: (task: Task) => void;
   onTaskCreated: () => void;
 }
 
@@ -39,12 +40,14 @@ function SortableTaskItem({
   isSelected,
   onSelect,
   onToggle,
+  onTimeLog,
   isDraggable,
 }: {
   task: Task;
   isSelected: boolean;
   onSelect: (task: Task) => void;
   onToggle: (task: Task) => void;
+  onTimeLog?: (task: Task) => void;
   isDraggable: boolean;
 }) {
   const {
@@ -79,6 +82,7 @@ function SortableTaskItem({
           isSelected={isSelected}
           onSelect={onSelect}
           onToggle={onToggle}
+          onTimeLog={onTimeLog}
         />
       </div>
     </div>
@@ -91,6 +95,7 @@ export default function TaskListView({
   selectedTask,
   onSelectTask,
   onToggleTask,
+  onTimeLog,
   onTaskCreated,
 }: TaskListViewProps) {
   const [showAddForm, setShowAddForm] = useState(false);
@@ -309,6 +314,7 @@ export default function TaskListView({
                     isSelected={selectedTask?.id === task.id}
                     onSelect={onSelectTask}
                     onToggle={onToggleTask}
+                    onTimeLog={onTimeLog}
                     isDraggable={isManualSort}
                   />
                 ))}

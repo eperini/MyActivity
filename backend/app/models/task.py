@@ -3,7 +3,7 @@ from enum import Enum as PyEnum
 
 from sqlalchemy import (
     String, Text, ForeignKey, DateTime, Date, Time,
-    Integer, Enum, SmallInteger
+    Integer, Enum, SmallInteger, Boolean
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -58,6 +58,7 @@ class Task(Base):
     parent: Mapped["Task | None"] = relationship(back_populates="subtasks", remote_side="Task.id")
     tags: Mapped[list["Tag"]] = relationship(secondary="task_tags", back_populates="tasks")
     comments: Mapped[list["Comment"]] = relationship(back_populates="task")
+    time_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     estimated_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     jira_issue_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
     jira_issue_id: Mapped[str | None] = mapped_column(String(50), nullable=True)

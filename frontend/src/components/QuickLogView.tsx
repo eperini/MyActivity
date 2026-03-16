@@ -317,7 +317,7 @@ export default function QuickLogView() {
       </div>
 
       {/* Right: Weekly timesheet */}
-      <div className="w-[420px] flex-shrink-0 border-l border-zinc-800 overflow-y-auto bg-zinc-900/30">
+      <div className="w-[630px] flex-shrink-0 border-l border-zinc-800 overflow-y-auto bg-zinc-900/30">
         <div className="p-4 space-y-4">
           {/* Week navigation */}
           <div className="flex items-center justify-between">

@@ -45,6 +45,7 @@ export interface Task {
   subtask_count?: number;
   subtask_done_count?: number;
   estimated_minutes?: number | null;
+  time_only?: boolean;
   time_logged_minutes?: number;
   time_logged_formatted?: string;
   position?: number;

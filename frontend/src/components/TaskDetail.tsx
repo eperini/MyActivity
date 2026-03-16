@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { ArrowLeft, Calendar, Flag, Repeat, Trash2, X, Tag as TagIcon, MessageCircle, UserCircle, Send, ListChecks, Bookmark, Plus, ExternalLink, Link2, Unlink } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, Flag, Repeat, Trash2, X, Tag as TagIcon, MessageCircle, UserCircle, Send, ListChecks, Bookmark, Plus, ExternalLink, Link2, Unlink } from "lucide-react";
 import type { Task, RecurrenceRule, Tag, TaskComment, ProjectMember } from "@/types";
 import { formatRelativeDate, isOverdue } from "@/lib/dates";
 import { getRecurrence, getRecurrencePreview, deleteRecurrence, getTags, addTagToTask, removeTagFromTask, createTag, getComments, addComment, deleteComment, getProjectMembers, updateTask as apiUpdateTask, getSubtasks, createSubtask, toggleSubtask, deleteTask as apiDeleteTask, createTemplateFromTask, pushTaskToJira, unlinkTaskFromJira } from "@/lib/api";
@@ -359,10 +359,30 @@ export default function TaskDetail({ task, onClose, onUpdate, onDelete, onRefres
             </div>
           )}
 
+          {/* Time-only toggle */}
+          <div className="flex items-center gap-3 text-sm">
+            <Clock size={16} className="text-zinc-500" />
+            <button
+              onClick={() => onUpdate(task.id, { time_only: !task.time_only } as Partial<Task>)}
+              className={`px-3 py-1 rounded text-xs transition-colors ${
+                task.time_only
+                  ? "bg-blue-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+              }`}
+            >
+              {task.time_only ? "Solo ore (attivo)" : "Solo ore"}
+            </button>
+            {task.time_only && (
+              <span className="text-[10px] text-zinc-500">Non completabile, solo registrazione ore</span>
+            )}
+          </div>
+
           {/* Status */}
           <div className="flex items-center gap-3 text-sm">
             <div className="flex gap-1 flex-wrap">
-              {(["todo", "doing", "done", "someday"] as const).map((s) => (
+              {(["todo", "doing", "done", "someday"] as const)
+                .filter((s) => !task.time_only || s !== "done")
+                .map((s) => (
                 <button
                   key={s}
                   onClick={() => onUpdate(task.id, { status: s })}

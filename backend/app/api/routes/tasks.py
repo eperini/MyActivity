@@ -30,6 +30,7 @@ class TaskCreate(BaseModel):
     parent_id: int | None = None
     project_id: int | None = None
     heading_id: int | None = None
+    time_only: bool = False
 
 
 class TaskUpdate(BaseModel):
@@ -44,6 +45,7 @@ class TaskUpdate(BaseModel):
     project_id: int | None = None
     heading_id: int | None = None
     estimated_minutes: int | None = None
+    time_only: bool | None = None
 
 
 class TagResponse(BaseModel):
@@ -73,6 +75,7 @@ class TaskResponse(BaseModel):
     subtask_count: int = 0
     subtask_done_count: int = 0
     estimated_minutes: int | None = None
+    time_only: bool = False
     time_logged_minutes: int = 0
     time_logged_formatted: str = ""
     jira_issue_key: str | None = None
@@ -241,7 +244,7 @@ async def get_tasks(
         query = query.where(Task.status == status)
     if tag_id:
         query = query.where(Task.id.in_(select(task_tags.c.task_id).where(task_tags.c.tag_id == tag_id)))
-    query = query.order_by(Task.priority, Task.due_date)
+    query = query.order_by(Task.position, Task.id)
 
     result = await db.execute(query)
     tasks = result.scalars().all()
@@ -286,6 +289,24 @@ async def create_task(
     return enriched[0]
 
 
+@router.patch("/reorder")
+async def reorder_tasks(
+    data: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reorder tasks within a list or by status (for kanban)."""
+    ids = data.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids richiesti")
+    for i, tid in enumerate(ids):
+        task = await db.get(Task, tid)
+        if task and task.created_by == user.id:
+            task.position = i
+    await db.commit()
+    return {"detail": "Riordinato"}
+
+
 @router.patch("/{task_id}", response_model=TaskResponse)
 async def update_task(
     task_id: int,
@@ -319,6 +340,12 @@ async def update_task(
         target_user = await db.get(User, update_data["assigned_to"])
         if not target_user:
             raise HTTPException(status_code=404, detail="Utente assegnato non trovato")
+    # Block completing time_only tasks
+    if "status" in update_data and update_data["status"] == TaskStatus.DONE:
+        is_time_only = update_data.get("time_only", task.time_only)
+        if is_time_only:
+            raise HTTPException(400, "I task solo-ore non possono essere completati")
+
     for field, value in update_data.items():
         setattr(task, field, value)
 
@@ -472,19 +499,3 @@ async def reorder_subtasks(
     return {"detail": "Riordinato"}
 
 
-@router.patch("/reorder")
-async def reorder_tasks(
-    data: dict,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Reorder tasks within a list or by status (for kanban)."""
-    ids = data.get("ids", [])
-    if not ids:
-        raise HTTPException(status_code=400, detail="ids richiesti")
-    for i, tid in enumerate(ids):
-        task = await db.get(Task, tid)
-        if task and task.created_by == user.id:
-            task.position = i
-    await db.commit()
-    return {"detail": "Riordinato"}

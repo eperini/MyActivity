@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Task, Project, ProjectStats, Epic, ProjectHeading } from "@/types";
-import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProjectEpics, createEpic, createEpicTimeLog, deleteEpic, pushEpicToJira, getProjectHeadings, createProjectHeading, deleteProjectHeading, updateProject } from "@/lib/api";
+import type { Task, Project, ProjectStats, Epic, ProjectHeading, TimeLog } from "@/types";
+import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProjectEpics, createEpic, createEpicTimeLog, deleteEpic, pushEpicToJira, getProjectHeadings, createProjectHeading, deleteProjectHeading, updateProject, createTimeLog, reorderTasks, getEpicTimeLogs, deleteEpicTimeLog } from "@/lib/api";
 import { useToast } from "./Toast";
 import TaskItem from "./TaskItem";
 import AddTaskForm from "./AddTaskForm";
-import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X, Users, Grid2x2, FolderOpen, Link, Check, Pencil } from "lucide-react";
+import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X, Users, Grid2x2, FolderOpen, Link, Check, Pencil, GripVertical, ChevronDown } from "lucide-react";
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import CustomFieldEditor from "./CustomFieldEditor";
 import TimeLogForm from "./TimeLogForm";
 import AutomationsView from "./AutomationsView";
@@ -25,6 +28,54 @@ const STATUS_COLORS: Record<string, string> = {
   done: "text-green-400",
 };
 
+function SortableProjectTaskItem({
+  task,
+  onToggle,
+  onTimeLog,
+  onSelect,
+}: {
+  task: Task;
+  onToggle: () => void;
+  onTimeLog: () => void;
+  onSelect: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center">
+      <div
+        {...attributes}
+        {...listeners}
+        className="flex-shrink-0 px-1 cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400 touch-none"
+      >
+        <GripVertical size={14} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <TaskItem
+          task={task}
+          isSelected={false}
+          onSelect={() => onSelect()}
+          onToggle={() => onToggle()}
+          onTimeLog={() => onTimeLog()}
+        />
+      </div>
+    </div>
+  );
+}
+
 function formatMins(m: number): string {
   const h = Math.floor(m / 60);
   const r = m % 60;
@@ -37,9 +88,10 @@ interface ProjectViewProps {
   projectId: number;
   onSelectTask: (task: Task) => void;
   onRefresh: () => void;
+  refreshKey?: number;
 }
 
-export default function ProjectView({ projectId, onSelectTask, onRefresh }: ProjectViewProps) {
+export default function ProjectView({ projectId, onSelectTask, onRefresh, refreshKey }: ProjectViewProps) {
   const { showToast } = useToast();
   const [project, setProject] = useState<Project | null>(null);
   const [stats, setStats] = useState<ProjectStats | null>(null);
@@ -58,6 +110,10 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
   // Epic inline form
   const [showNewEpic, setShowNewEpic] = useState(false);
   const [newEpicName, setNewEpicName] = useState("");
+  const [epicLogsOpen, setEpicLogsOpen] = useState<number | null>(null);
+  const [epicLogs, setEpicLogs] = useState<TimeLog[]>([]);
+  const [epicLogsLoading, setEpicLogsLoading] = useState(false);
+
   const [logEpicId, setLogEpicId] = useState<number | null>(null);
   const [logHours, setLogHours] = useState(0);
   const [logMins, setLogMins] = useState(0);
@@ -65,33 +121,69 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
   const [logNote, setLogNote] = useState("");
   const [logSaving, setLogSaving] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [p, s, allTasks, ep, hd] = await Promise.all([
-          getProject(projectId),
-          getProjectStats(projectId),
-          getTasks(),
-          getProjectEpics(projectId),
-          getProjectHeadings(projectId),
-        ]);
-        setProject(p);
-        setStats(s);
-        setTasks(allTasks.filter((t) => t.project_id === projectId && !t.parent_id));
-        setEpics(ep);
-        setHeadings(hd);
-      } catch {
-        showToast("Errore caricamento progetto");
-      }
+  async function loadProjectData() {
+    try {
+      const [p, s, allTasks, ep, hd] = await Promise.all([
+        getProject(projectId),
+        getProjectStats(projectId),
+        getTasks(),
+        getProjectEpics(projectId),
+        getProjectHeadings(projectId),
+      ]);
+      setProject(p);
+      setStats(s);
+      setTasks(allTasks.filter((t) => t.project_id === projectId && !t.parent_id));
+      setEpics(ep);
+      setHeadings(hd);
+    } catch {
+      showToast("Errore caricamento progetto");
     }
-    load();
+  }
+
+  useEffect(() => {
+    loadProjectData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, refreshKey]);
+
+  const [timeLogTask, setTimeLogTask] = useState<Task | null>(null);
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  async function handleTaskDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = tasks.findIndex(t => t.id === active.id);
+    const newIdx = tasks.findIndex(t => t.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    // Optimistic local reorder
+    const reordered = [...tasks];
+    const [moved] = reordered.splice(oldIdx, 1);
+    reordered.splice(newIdx, 0, moved);
+    setTasks(reordered);
+    try {
+      await reorderTasks(reordered.map(t => t.id));
+    } catch {
+      onRefresh();
+    }
+  }
 
   async function handleToggle(task: Task) {
+    if (task.time_only) {
+      setTimeLogTask(task);
+      return;
+    }
     const newStatus = task.status === "done" ? "todo" : "done";
     try {
       await updateTask(task.id, { status: newStatus });
+      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
+      setStats(prev => prev ? {
+        ...prev,
+        completed_tasks: newStatus === "done" ? prev.completed_tasks + 1 : prev.completed_tasks - 1,
+        completion_pct: Math.round(((newStatus === "done" ? prev.completed_tasks + 1 : prev.completed_tasks - 1) / prev.total_tasks) * 100),
+      } : prev);
       onRefresh();
     } catch {
       showToast("Errore aggiornamento task");
@@ -127,10 +219,48 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
       ));
       setLogEpicId(null);
       showToast("Ore registrate", "success");
+      // Refresh logs if open
+      if (epicLogsOpen === epic.id) {
+        const logs = await getEpicTimeLogs(epic.id);
+        setEpicLogs(logs);
+      }
     } catch {
       showToast("Errore nel salvataggio");
     } finally {
       setLogSaving(false);
+    }
+  }
+
+  async function toggleEpicLogs(epicId: number) {
+    if (epicLogsOpen === epicId) {
+      setEpicLogsOpen(null);
+      setEpicLogs([]);
+      return;
+    }
+    setEpicLogsOpen(epicId);
+    setEpicLogsLoading(true);
+    try {
+      const logs = await getEpicTimeLogs(epicId);
+      setEpicLogs(logs);
+    } catch {
+      showToast("Errore caricamento log");
+    } finally {
+      setEpicLogsLoading(false);
+    }
+  }
+
+  async function handleDeleteEpicLog(epicId: number, logId: number, minutes: number) {
+    try {
+      await deleteEpicTimeLog(epicId, logId);
+      setEpicLogs(prev => prev.filter(l => l.id !== logId));
+      setEpics(prev => prev.map(e =>
+        e.id === epicId
+          ? { ...e, total_logged_minutes: e.total_logged_minutes - minutes, total_logged_formatted: formatMins(e.total_logged_minutes - minutes) }
+          : e
+      ));
+      showToast("Log eliminato", "success");
+    } catch {
+      showToast("Errore eliminazione log");
     }
   }
 
@@ -176,14 +306,25 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
     );
   }
 
+  function sortTasks(list: Task[]) {
+    return [...list].sort((a, b) => {
+      const aDate = a.due_date || "";
+      const bDate = b.due_date || "";
+      if (aDate && !bDate) return -1;
+      if (!aDate && bDate) return 1;
+      if (aDate && bDate) return aDate.localeCompare(bDate);
+      return (a.position ?? 0) - (b.position ?? 0);
+    });
+  }
+
   const activeTasks = tasks.filter((t) => t.status !== "done");
   const doneTasks = tasks.filter((t) => t.status === "done");
 
   // Group active tasks by heading
-  const ungroupedActive = activeTasks.filter(t => !t.heading_id);
+  const ungroupedActive = sortTasks(activeTasks.filter(t => !t.heading_id));
   const groupedActive = headings.map(h => ({
     heading: h,
-    tasks: activeTasks.filter(t => t.heading_id === h.id),
+    tasks: sortTasks(activeTasks.filter(t => t.heading_id === h.id)),
   }));
 
   const statusColors: Record<string, string> = {
@@ -482,19 +623,27 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
             </button>
 
             {/* Ungrouped active tasks */}
-            {ungroupedActive.length > 0 && (
-              <div className="space-y-1">
-                {ungroupedActive.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    onToggle={() => handleToggle(task)}
-                    onSelect={() => onSelectTask(task)}
-                    isSelected={false}
-                  />
-                ))}
-              </div>
-            )}
+            <DndContext
+              sensors={dndSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleTaskDragEnd}
+            >
+              <SortableContext items={ungroupedActive.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                {ungroupedActive.length > 0 && (
+                  <div className="space-y-1">
+                    {ungroupedActive.map((task) => (
+                      <SortableProjectTaskItem
+                        key={task.id}
+                        task={task}
+                        onToggle={() => handleToggle(task)}
+                        onTimeLog={() => setTimeLogTask(task)}
+                        onSelect={() => onSelectTask(task)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </SortableContext>
+            </DndContext>
 
             {/* Heading sections */}
             {groupedActive.map(({ heading, tasks: hTasks }) => (
@@ -507,17 +656,25 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
                     <Trash2 size={12} />
                   </button>
                 </div>
-                <div className="space-y-1">
-                  {hTasks.map((task) => (
-                    <TaskItem
-                      key={task.id}
-                      task={task}
-                      onToggle={() => handleToggle(task)}
-                      onSelect={() => onSelectTask(task)}
-                      isSelected={false}
-                    />
-                  ))}
-                </div>
+                <DndContext
+                  sensors={dndSensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleTaskDragEnd}
+                >
+                  <SortableContext items={hTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-1">
+                      {hTasks.map((task) => (
+                        <SortableProjectTaskItem
+                          key={task.id}
+                          task={task}
+                          onToggle={() => handleToggle(task)}
+                          onTimeLog={() => setTimeLogTask(task)}
+                          onSelect={() => onSelectTask(task)}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
               </div>
             ))}
 
@@ -611,9 +768,14 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
                         Push Jira
                       </button>
                     )}
-                    <span className="text-xs text-zinc-400 w-16 text-right flex-shrink-0">
+                    <button
+                      onClick={() => toggleEpicLogs(epic.id)}
+                      className="flex items-center gap-0.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex-shrink-0"
+                      title="Vedi log ore"
+                    >
                       {epic.total_logged_formatted}
-                    </span>
+                      <ChevronDown size={12} className={`transition-transform ${epicLogsOpen === epic.id ? "rotate-180" : ""}`} />
+                    </button>
                     <span className={`text-[10px] ${STATUS_COLORS[epic.status]} flex-shrink-0`}>
                       {STATUS_LABELS[epic.status] || epic.status}
                     </span>
@@ -658,6 +820,35 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
                         onCancel={() => setLogEpicId(null)}
                         saving={logSaving}
                       />
+                    </div>
+                  )}
+
+                  {/* Epic time logs list */}
+                  {epicLogsOpen === epic.id && (
+                    <div className="ml-6 mr-3 mb-3">
+                      {epicLogsLoading ? (
+                        <p className="text-xs text-zinc-500 py-2">Caricamento...</p>
+                      ) : epicLogs.length === 0 ? (
+                        <p className="text-xs text-zinc-500 py-2">Nessun log registrato</p>
+                      ) : (
+                        <div className="border border-zinc-700/50 rounded-lg overflow-hidden">
+                          {epicLogs.map((log) => (
+                            <div key={log.id} className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-zinc-800/50 group/log border-b border-zinc-800/50 last:border-0">
+                              <span className="text-zinc-500 w-20 flex-shrink-0">{log.logged_at}</span>
+                              <span className="text-emerald-400 font-medium w-12 flex-shrink-0">{log.formatted}</span>
+                              <span className="text-zinc-400 flex-1 truncate">{log.note || "—"}</span>
+                              <span className="text-zinc-600 text-[10px] flex-shrink-0">{log.user_name}</span>
+                              <button
+                                onClick={() => handleDeleteEpicLog(epic.id, log.id, log.minutes)}
+                                className="p-1 opacity-0 group-hover/log:opacity-100 text-zinc-600 hover:text-red-400 transition-all flex-shrink-0"
+                                title="Elimina log"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -705,9 +896,28 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh }: Proj
       {showAddTask && (
         <AddTaskForm
           defaultProjectId={projectId}
-          onCreated={() => { setShowAddTask(false); onRefresh(); }}
+          onCreated={() => { setShowAddTask(false); loadProjectData(); onRefresh(); }}
           onClose={() => setShowAddTask(false)}
         />
+      )}
+
+      {/* Time log modal for time_only tasks */}
+      {timeLogTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setTimeLogTask(null)}>
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative bg-zinc-800 border border-zinc-700 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <Clock size={18} className="text-blue-400" />
+              <h3 className="text-sm font-medium text-white">Registra ore</h3>
+            </div>
+            <p className="text-xs text-zinc-400 mb-4 truncate">{timeLogTask.title}</p>
+            <TimeLogModalForm
+              taskId={timeLogTask.id}
+              onSaved={() => { setTimeLogTask(null); onRefresh(); }}
+              onCancel={() => setTimeLogTask(null)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -857,5 +1067,45 @@ function AddLinkView({
         </p>
       </div>
     </div>
+  );
+}
+
+function TimeLogModalForm({ taskId, onSaved, onCancel }: { taskId: number; onSaved: () => void; onCancel: () => void }) {
+  const { showToast } = useToast();
+  const [hours, setHours] = useState(0);
+  const [mins, setMins] = useState(0);
+  const [logDate, setLogDate] = useState(new Date().toISOString().split("T")[0]);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    const totalMins = hours * 60 + mins;
+    if (totalMins <= 0) return;
+    setSaving(true);
+    try {
+      await createTimeLog(taskId, { minutes: totalMins, logged_at: logDate, note: note.trim() || undefined });
+      showToast("Ore registrate", "success");
+      onSaved();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore nel salvataggio");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <TimeLogForm
+      logDate={logDate}
+      onDateChange={setLogDate}
+      hours={hours}
+      onHoursChange={setHours}
+      mins={mins}
+      onMinsChange={setMins}
+      note={note}
+      onNoteChange={setNote}
+      onSave={handleSave}
+      onCancel={onCancel}
+      saving={saving}
+    />
   );
 }

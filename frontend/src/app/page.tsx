@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { Task, Habit } from "@/types";
 import {
-  getTasks, updateTask, deleteTask,
+  getTasks, updateTask, deleteTask, createTimeLog,
   getHabits, getWeekLogs, toggleHabitLog, deleteHabit, logout,
   getProfile, updatePreferences,
 } from "@/lib/api";
@@ -58,12 +58,16 @@ export default function HomePage() {
   const [selectedHabit, setSelectedHabit] = useState<Habit | null>(null);
   const [showAddHabit, setShowAddHabit] = useState(false);
   const [pomodoroRefreshKey, setPomodoroRefreshKey] = useState(0);
+  const [projectRefreshKey, setProjectRefreshKey] = useState(0);
 
   // Calendar add task
   const [calendarAddDate, setCalendarAddDate] = useState<string | null>(null);
 
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Time log modal for time_only tasks
+  const [timeLogTask, setTimeLogTask] = useState<Task | null>(null);
 
   // Onboarding tour
   const { registerNavigator, startTour, state: onboardingState } = useOnboarding();
@@ -72,6 +76,7 @@ export default function HomePage() {
     try {
       const t = await getTasks();
       setTasks(t);
+      setProjectRefreshKey(k => k + 1);
     } catch {
       router.push("/login");
     } finally {
@@ -219,6 +224,10 @@ export default function HomePage() {
     : viewTitles[selectedView] || "Task";
 
   async function handleToggle(task: Task) {
+    if (task.time_only) {
+      setTimeLogTask(task);
+      return;
+    }
     const newStatus = task.status === "done" ? "todo" : "done";
     try {
       await updateTask(task.id, { status: newStatus });
@@ -469,6 +478,7 @@ export default function HomePage() {
             projectId={projectId}
             onSelectTask={setSelectedTask}
             onRefresh={loadData}
+            refreshKey={projectRefreshKey}
           />
           {!isMobile && selectedTask && (
             <TaskDetail
@@ -503,6 +513,7 @@ export default function HomePage() {
           selectedTask={selectedTask}
           onSelectTask={setSelectedTask}
           onToggleTask={handleToggle}
+          onTimeLog={setTimeLogTask}
           onTaskCreated={loadData}
         />
         {/* Desktop only: side panel */}
@@ -631,6 +642,15 @@ export default function HomePage() {
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
 
+      {/* Time log modal for time_only tasks */}
+      {timeLogTask && (
+        <TimeLogModal
+          task={timeLogTask}
+          onClose={() => setTimeLogTask(null)}
+          onSaved={() => { setTimeLogTask(null); loadData(); }}
+        />
+      )}
+
       {/* Bottom tab bar */}
       <BottomTabBar
         selectedView={selectedView}
@@ -704,6 +724,71 @@ function AddTaskFromCalendar({ date, onCreated, onClose }: {
         >
           Crea
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Time log modal for time_only tasks
+import { Clock } from "lucide-react";
+import TimeLogForm from "@/components/TimeLogForm";
+
+function TimeLogModal({ task, onClose, onSaved }: {
+  task: Task;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { showToast } = useToast();
+  const [hours, setHours] = useState(0);
+  const [mins, setMins] = useState(0);
+  const [logDate, setLogDate] = useState(new Date().toISOString().split("T")[0]);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    const totalMins = hours * 60 + mins;
+    if (totalMins <= 0) return;
+    setSaving(true);
+    try {
+      await createTimeLog(task.id, {
+        minutes: totalMins,
+        logged_at: logDate,
+        note: note.trim() || undefined,
+      });
+      showToast("Ore registrate", "success");
+      onSaved();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Errore nel salvataggio");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div
+        className="relative bg-zinc-800 border border-zinc-700 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <Clock size={18} className="text-blue-400" />
+          <h3 className="text-sm font-medium text-white">Registra ore</h3>
+        </div>
+        <p className="text-xs text-zinc-400 mb-4 truncate">{task.title}</p>
+        <TimeLogForm
+          logDate={logDate}
+          onDateChange={setLogDate}
+          hours={hours}
+          onHoursChange={setHours}
+          mins={mins}
+          onMinsChange={setMins}
+          note={note}
+          onNoteChange={setNote}
+          onSave={handleSave}
+          onCancel={onClose}
+          saving={saving}
+        />
       </div>
     </div>
   );

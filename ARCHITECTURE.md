@@ -292,17 +292,18 @@ SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
 
 ### 8. Route ordering FastAPI
 
-**Regola**: Le route statiche (`/reorder`, `/reset-order`) devono essere definite PRIMA delle route parametriche (`/{list_id}`) per evitare che FastAPI matchi "reorder" come parametro intero.
+**Regola**: Le route statiche (`/reorder`, `/reset-order`) devono essere definite PRIMA delle route parametriche (`/{list_id}`, `/{task_id}`) per evitare che FastAPI matchi "reorder" come parametro intero. Questo vale anche per `PATCH /tasks/reorder` che deve precedere `PATCH /tasks/{task_id}`.
 
 ### 9. Ordinamento liste: manuale + automatico
 
 **Logica**: Se almeno una lista ha `position > 0`, tutte le liste vengono ordinate per position (manuale). Altrimenti, vengono ordinate per numero di task (decrescente, automatico). Il reset azzera tutte le position a 0.
 
-### 10. Task defaults
+### 10. Task defaults e ordinamento
 
 - **Data**: default a "oggi" alla creazione
 - **Assegnazione**: auto-assegnato al creatore se non specificato
-- **Ordinamento**: per data in tutte le viste lista
+- **Ordinamento lista task**: query backend ordina per `position, id` (non piu' `priority, due_date`) per supportare riordino manuale
+- **Ordinamento ProjectView**: task con due_date prima (ordine ascendente), poi task senza data (ordine per position manuale). Stesso ordinamento sia per task non raggruppati che per task dentro sezioni heading
 - **Vista Oggi/Prossimi 7gg**: include task scaduti (overdue)
 
 ### 11. Aree e Progetti (v2) — Backward compatibility
@@ -586,8 +587,9 @@ notifications                  ├── user_id (FK)
 ### Task (con list access check)
 | Metodo | Path | Descrizione |
 |---|---|---|
-| GET | `/api/tasks/` | Task con filtri (list_id, status, tag_id) |
+| GET | `/api/tasks/` | Task con filtri (list_id, status, tag_id), ordinati per position, id |
 | POST | `/api/tasks/` | Crea task (auto-assign, default oggi) |
+| PATCH | `/api/tasks/reorder` | Riordina task via drag-and-drop (array di {id, position}) |
 | PATCH | `/api/tasks/{id}` | Aggiorna task (incluso cambio lista) |
 | DELETE | `/api/tasks/{id}` | Elimina task |
 | GET | `/api/tasks/{id}/subtasks` | Subtask di un task |
@@ -744,6 +746,12 @@ notifications                  ├── user_id (FK)
 | PATCH | `/api/projects/{id}/automations/{aid}/toggle` | Attiva/disattiva regola |
 | DELETE | `/api/projects/{id}/automations/{aid}` | Elimina regola |
 
+### Epic Time Logs (v2)
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/epics/{id}/time` | Lista time log dell'epic (data, durata, nota, utente) |
+| DELETE | `/api/epics/{id}/time/{log_id}` | Elimina singolo time log |
+
 ### Sprint (v2)
 | Metodo | Path | Descrizione |
 |---|---|---|
@@ -794,6 +802,12 @@ Invito famiglia, Google Calendar, backup, push notifications, report giornaliero
 
 ### 12. Vista Progetto (v2)
 Header con nome progetto, badge stato, tipo, descrizione. Barra progresso (task completati / totali). Lista task filtrata per project_id con form di creazione inline. Pannelli laterali per Campi Custom, Automazioni e Sprint (mutuamente esclusivi).
+
+**Drag-and-drop task**: I task nel tab Task possono essere riordinati tramite drag-and-drop (dnd-kit con handle GripVertical). L'ordine viene persistito al backend via `PATCH /tasks/reorder`.
+
+**Epic time logs**: Nel tab Epic, cliccando sulle ore totali si espande la lista dei time log per quell'epic. Ogni log mostra data, durata, nota e utente. I log possono essere eliminati singolarmente tramite icona trash.
+
+**Gestione stato locale**: ProjectView gestisce il proprio ciclo di reload dati. Toggle task (completa/ripristina), aggiunta nuovi task, e modifiche dal pannello TaskDetail (es. toggle "Solo ore") aggiornano la vista immediatamente senza ricaricare la pagina. Usa una prop `refreshKey` dal componente padre per restare sincronizzato.
 
 ### 13. Campi Custom (v2)
 Pannello collassabile in TaskDetail per i task con project_id. Renderizza input appropriato per tipo campo (text, number, date, select, multi_select, boolean, url). Editor separato per le definizioni dei campi del progetto.

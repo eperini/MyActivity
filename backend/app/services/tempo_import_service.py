@@ -18,6 +18,23 @@ from app.services.tempo_service import TempoService
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=64)
+def _resolve_jira_display_name(account_id: str) -> str | None:
+    """Resolve a Jira account ID to its display name."""
+    try:
+        with httpx.Client() as client:
+            resp = client.get(
+                f"{settings.JIRA_BASE_URL}/rest/api/3/user?accountId={account_id}",
+                auth=(settings.JIRA_EMAIL, settings.JIRA_API_TOKEN),
+                timeout=15,
+            )
+            resp.raise_for_status()
+            return resp.json().get("displayName")
+    except Exception as e:
+        logger.warning("Cannot resolve Jira user %s: %s", account_id, e)
+        return None
+
+
 @lru_cache(maxsize=512)
 def _resolve_jira_issue_key(issue_id: int) -> str | None:
     """Resolve a Jira issue numeric ID to its key (e.g. PROJ-123)."""
@@ -110,11 +127,17 @@ class TempoImportService:
         if not task and not epic:
             return "skipped"
 
-        # Resolve Tempo user
+        # Resolve Tempo user — prefer Jira display name over Tempo's
         author = wl["author"]
+        account_id = author["accountId"]
+        display_name = (
+            _resolve_jira_display_name(account_id)
+            or author.get("displayName")
+            or account_id
+        )
         tempo_user = self._get_or_create_tempo_user(
-            account_id=author["accountId"],
-            display_name=author.get("displayName") or author.get("accountId", "Unknown"),
+            account_id=account_id,
+            display_name=display_name,
         )
 
         # Determine effective user_id

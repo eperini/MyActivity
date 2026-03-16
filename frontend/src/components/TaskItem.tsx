@@ -9,6 +9,7 @@ interface TaskItemProps {
   isSelected: boolean;
   onSelect: (task: Task) => void;
   onToggle: (task: Task) => void;
+  onTimeLog?: (task: Task) => void;
 }
 
 const PRIORITY_COLORS: Record<number, string> = {
@@ -25,7 +26,7 @@ const PRIORITY_CHECK_COLORS: Record<number, string> = {
   4: "text-zinc-500",
 };
 
-export default function TaskItem({ task, isSelected, onSelect, onToggle }: TaskItemProps) {
+export default function TaskItem({ task, isSelected, onSelect, onToggle, onTimeLog }: TaskItemProps) {
   const isDone = task.status === "done";
   const displayDate = task.has_recurrence && task.next_occurrence ? task.next_occurrence : task.due_date;
   const overdue = displayDate ? isOverdue(displayDate) : false;
@@ -39,22 +40,35 @@ export default function TaskItem({ task, isSelected, onSelect, onToggle }: TaskI
           : "border-l-transparent hover:bg-zinc-800/40"
       }`}
     >
-      {/* Checkbox */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle(task);
-        }}
-        className={`mt-0.5 w-5 h-5 md:w-[18px] md:h-[18px] rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-          isDone ? "bg-zinc-600 border-zinc-600 animate-check" : PRIORITY_COLORS[task.priority] || PRIORITY_COLORS[4]
-        }`}
-      >
-        {isDone && (
-          <svg width="10" height="8" viewBox="0 0 10 8" fill="none" className="text-white">
-            <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </button>
+      {/* Checkbox or Time-only clock */}
+      {task.time_only ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onTimeLog?.(task);
+          }}
+          className="mt-0.5 w-5 h-5 md:w-[18px] md:h-[18px] flex-shrink-0 flex items-center justify-center text-blue-400 hover:text-blue-300 transition-colors"
+          title="Registra ore"
+        >
+          <Clock size={18} />
+        </button>
+      ) : (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle(task);
+          }}
+          className={`mt-0.5 w-5 h-5 md:w-[18px] md:h-[18px] rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+            isDone ? "bg-zinc-600 border-zinc-600 animate-check" : PRIORITY_COLORS[task.priority] || PRIORITY_COLORS[4]
+          }`}
+        >
+          {isDone && (
+            <svg width="10" height="8" viewBox="0 0 10 8" fill="none" className="text-white">
+              <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+      )}
 
       {/* Content */}
       <div className="flex-1 min-w-0">
