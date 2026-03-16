@@ -205,7 +205,7 @@ myActivity/
         │   ├── TaskListView.tsx  # Lista task filtrata + ordinamento
         │   ├── TaskItem.tsx      # Riga task (checkbox, badge, date, subtask progress)
         │   ├── TaskDetail.tsx    # Pannello dettaglio (edit, subtask, tag, commenti, template, custom fields, dipendenze) [v2]
-        │   ├── AddTaskForm.tsx   # Creazione task (structured + quick + template, defaultProjectId) [v2]
+        │   ├── AddTaskForm.tsx   # Creazione task (structured + quick + template, defaultProjectId). Senza defaultProjectId → "Nessun progetto" [v2]
         │   ├── DatePicker.tsx    # Calendario popup (shortcuts + griglia + orario)
         │   ├── DayCalendar.tsx   # Vista giornaliera con timeline
         │   ├── CalendarView.tsx  # Calendario mensile con task
@@ -228,6 +228,7 @@ myActivity/
         │   ├── CustomFieldEditor.tsx  # Editor definizioni campi custom [v2]
         │   ├── DependenciesPanel.tsx  # Pannello dipendenze in TaskDetail [v2]
         │   ├── AutomationsView.tsx    # Editor regole automazione [v2]
+        │   ├── QuickLogView.tsx        # Quick log ore: epics, timer, Tempo sync (push/import)
         │   └── SprintBoard.tsx        # Board sprint con metriche [v2]
         ├── hooks/
         │   └── useIsMobile.ts    # Breakpoint md (768px)
@@ -302,6 +303,7 @@ SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
 
 - **Data**: default a "oggi" alla creazione
 - **Assegnazione**: auto-assegnato al creatore se non specificato
+- **Progetto**: se `defaultProjectId` e' fornito (es. da ProjectView), il selettore lo preseleziona; altrimenti (es. dalla vista Oggi) il default e' "Nessun progetto" cosi' l'utente sceglie esplicitamente
 - **Ordinamento lista task**: query backend ordina per `position, id` (non piu' `priority, due_date`) per supportare riordino manuale
 - **Ordinamento ProjectView**: task con due_date prima (ordine ascendente), poi task senza data (ordine per position manuale). Stesso ordinamento sia per task non raggruppati che per task dentro sezioni heading
 - **Vista Oggi/Prossimi 7gg**: include task scaduti (overdue)
@@ -820,6 +822,9 @@ Editor regole con lista toggle, creazione form con trigger/action type dinamici.
 
 ### 16. Sprint Board (v2)
 Selettore sprint, form creazione, vista dettaglio con barra progresso e metriche (task totali, completati, %, giorni rimanenti). Aggiunta/rimozione task, transizioni di stato (planned → active → completed).
+
+### 17. Quick Log (QuickLogView)
+Vista per il log rapido delle ore sugli epic. Header con due pulsanti per la sincronizzazione Tempo: "Invia a Tempo" (push delle ore locali tramite `triggerTempoPush`) e "Aggiorna da Tempo" (import worklogs degli ultimi 7 giorni tramite `triggerTempoImport`). Entrambi i pulsanti mostrano stato di caricamento durante l'operazione e un toast con il risultato.
 
 ---
 
