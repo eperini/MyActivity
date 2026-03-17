@@ -108,9 +108,12 @@ export interface WeeklyTimeData {
     minutes: number;
     formatted: string;
     logs: {
-      task_id: number;
+      id: number;
+      task_id: number | null;
+      epic_id?: number | null;
       task_title: string;
       minutes: number;
+      formatted: string;
       logged_at: string;
       note: string | null;
     }[];

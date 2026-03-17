@@ -182,6 +182,7 @@ myActivity/
 │       │   ├── google_calendar.py     # Push/pull/delete eventi
 │       │   ├── google_drive.py        # Upload backup + rotazione
 │       │   ├── email_service.py       # SMTP Gmail per report
+│       │   ├── tempo_push_service.py  # Push ore a Tempo (aggregazione per entity/giorno, note concatenate)
 │       │   └── quickadd_parser.py     # Parser italiano (regex-based)
 │       └── workers/
 │           ├── celery_app.py     # Celery config, beat schedule
@@ -203,7 +204,7 @@ myActivity/
         ├── components/
         │   ├── Sidebar.tsx       # Navigazione + liste + aree/progetti [v2] + drag & drop reorder
         │   ├── TaskListView.tsx  # Lista task filtrata + ordinamento
-        │   ├── TaskItem.tsx      # Riga task (checkbox, badge, date, subtask progress)
+        │   ├── TaskItem.tsx      # Riga task (orologio + checkbox, colonne allineate: Jira/ore/ricorrenza/data)
         │   ├── TaskDetail.tsx    # Pannello dettaglio (edit, subtask, tag, commenti, template, custom fields, dipendenze) [v2]
         │   ├── AddTaskForm.tsx   # Creazione task (structured + quick + template, defaultProjectId). Senza defaultProjectId → "Nessun progetto" [v2]
         │   ├── DatePicker.tsx    # Calendario popup (shortcuts + griglia + orario)
@@ -228,7 +229,9 @@ myActivity/
         │   ├── CustomFieldEditor.tsx  # Editor definizioni campi custom [v2]
         │   ├── DependenciesPanel.tsx  # Pannello dipendenze in TaskDetail [v2]
         │   ├── AutomationsView.tsx    # Editor regole automazione [v2]
-        │   ├── QuickLogView.tsx        # Quick log ore: epics, timer, Tempo sync (push/import)
+        │   ├── TimeLogForm.tsx          # Form registrazione ore (shortcut 30m-8h, date picker, nota)
+        │   ├── TimeLogPanel.tsx         # Pannello time log in TaskDetail (lista log, edit inline, aggiungi)
+        │   ├── QuickLogView.tsx         # Quick log ore: lista epic + timesheet settimanale con dettaglio giorno
         │   └── SprintBoard.tsx        # Board sprint con metriche [v2]
         ├── hooks/
         │   └── useIsMobile.ts    # Breakpoint md (768px)
@@ -752,6 +755,7 @@ notifications                  ├── user_id (FK)
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/epics/{id}/time` | Lista time log dell'epic (data, durata, nota, utente) |
+| PATCH | `/api/epics/{id}/time/{log_id}` | Modifica time log (minuti, nota) |
 | DELETE | `/api/epics/{id}/time/{log_id}` | Elimina singolo time log |
 
 ### Sprint (v2)
@@ -807,9 +811,15 @@ Header con nome progetto, badge stato, tipo, descrizione. Barra progresso (task 
 
 **Drag-and-drop task**: I task nel tab Task possono essere riordinati tramite drag-and-drop (dnd-kit con handle GripVertical). L'ordine viene persistito al backend via `PATCH /tasks/reorder`.
 
-**Epic time logs**: Nel tab Epic, cliccando sulle ore totali si espande la lista dei time log per quell'epic. Ogni log mostra data, durata, nota e utente. I log possono essere eliminati singolarmente tramite icona trash.
+**Epic time logs**: Nel tab Epic, cliccando sulle ore totali si espande la lista dei time log per quell'epic. Ogni log mostra data, durata, nota e utente. I log possono essere eliminati singolarmente tramite icona trash e modificati inline (PATCH endpoint).
 
 **Gestione stato locale**: ProjectView gestisce il proprio ciclo di reload dati. Toggle task (completa/ripristina), aggiunta nuovi task, e modifiche dal pannello TaskDetail (es. toggle "Solo ore") aggiornano la vista immediatamente senza ricaricare la pagina. Usa una prop `refreshKey` dal componente padre per restare sincronizzato.
+
+**Ordinamento task**: I task sono ordinati con `sortTasks()`: prima i task "solo ore" (time_only), poi per due_date ascendente, poi per position manuale. Lo stesso ordinamento vale sia per task non raggruppati che per task dentro sezioni heading.
+
+**Pulsanti differenziati**: "Aggiungi task al progetto" usa stile prominente (sfondo blu, font medium) per distinguerlo da "Nuova sezione" (stile dashed, testo piu' piccolo, icona LayoutList).
+
+**Allineamento colonne task**: Le informazioni sulla destra di ogni task (Jira key, ore loggate, ricorrenza, scadenza) hanno larghezze fisse per allineare le colonne tra le diverse righe.
 
 ### 13. Campi Custom (v2)
 Pannello collassabile in TaskDetail per i task con project_id. Renderizza input appropriato per tipo campo (text, number, date, select, multi_select, boolean, url). Editor separato per le definizioni dei campi del progetto.
@@ -824,7 +834,13 @@ Editor regole con lista toggle, creazione form con trigger/action type dinamici.
 Selettore sprint, form creazione, vista dettaglio con barra progresso e metriche (task totali, completati, %, giorni rimanenti). Aggiunta/rimozione task, transizioni di stato (planned → active → completed).
 
 ### 17. Quick Log (QuickLogView)
-Vista per il log rapido delle ore sugli epic. Header con due pulsanti per la sincronizzazione Tempo: "Invia a Tempo" (push delle ore locali tramite `triggerTempoPush`) e "Aggiorna da Tempo" (import worklogs degli ultimi 7 giorni tramite `triggerTempoImport`). Entrambi i pulsanti mostrano stato di caricamento durante l'operazione e un toast con il risultato.
+Vista a due colonne per il log rapido delle ore sugli epic.
+
+**Colonna sinistra (lista epic)**: Filtro per progetto e ricerca testuale. Ogni epic mostra icona orologio per registrare ore, Jira key con link, ore totali, stato e data ultimo log. Cliccando l'orologio si apre il form TimeLogForm inline. Header con due pulsanti Tempo: "Invia a Tempo" (push ore locali) e "Aggiorna da Tempo" (import worklogs ultimi 7 giorni). La colonna sinistra puo' essere nascosta con un toggle per ottimizzare la visualizzazione su tablet.
+
+**Colonna destra (timesheet settimanale)**: Tabella con navigazione settimanale (frecce + click per settimana corrente). Righe per progetto con minuti giornalieri. Totali per giorno e per settimana. Barra progresso vs 40h. Cliccando su una colonna giorno si espande un pannello dettaglio con tutti i log del giorno. Ogni log mostra ore, task, progetto evidenziato con badge, nota. I log sono modificabili inline (edit ore/minuti/nota) e cancellabili con conferma a due step (click trash → bottone "Elimina" + X annulla).
+
+**Toggle colonna**: Icona PanelLeftClose/PanelLeftOpen nel header del timesheet permette di nascondere/mostrare la colonna epic. Quando nascosta, il timesheet si espande a piena larghezza.
 
 ---
 
@@ -834,7 +850,7 @@ Vista per il log rapido delle ore sugli epic. Header con due pulsanti per la sin
 |---|---|---|
 | `generate_recurring_instances` | Ogni giorno alle 00:05 | Genera TaskInstance per i prossimi 7 giorni |
 | `check_and_send_notifications` | Ogni 60 secondi | Verifica e invia notifiche (Telegram + Push) |
-| `send_daily_reports` | Ogni 5 minuti | Report giornaliero (email + push + Telegram) |
+| `send_daily_reports` | Ogni 5 minuti | Report giornaliero (email + push + Telegram). Finestra 10 min per compensare schedule drift. Utenti con telegram_chat_id ricevono report anche senza email/push attivi |
 | `backup_to_drive` | Ogni giorno alle 03:00 | pg_dump + gzip + upload Google Drive |
 | `evaluate_automations` | On-demand (Celery task) | Esegue regole automazione per task (depth max 3) [v2] |
 

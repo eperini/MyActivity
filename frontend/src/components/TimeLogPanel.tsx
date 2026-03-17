@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, Plus, Trash2, X, RefreshCw, AlertTriangle } from "lucide-react";
+import { Clock, Plus, Trash2, X, RefreshCw, AlertTriangle, Pencil } from "lucide-react";
 import type { TimeLog } from "@/types";
-import { getTimeLogs, createTimeLog, deleteTimeLog, skipTempoPush, pushLogNow } from "@/lib/api";
+import { getTimeLogs, createTimeLog, deleteTimeLog, updateTimeLog, skipTempoPush, pushLogNow } from "@/lib/api";
 import { useToast } from "./Toast";
 import { format, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
@@ -26,6 +26,12 @@ export default function TimeLogPanel({ taskId, estimatedMinutes, timeLoggedMinut
   const [logDate, setLogDate] = useState(new Date().toISOString().split("T")[0]);
   const [saving, setSaving] = useState(false);
   const [pushingId, setPushingId] = useState<number | null>(null);
+  const [editingLog, setEditingLog] = useState<TimeLog | null>(null);
+  const [editHours, setEditHours] = useState(0);
+  const [editMins, setEditMins] = useState(0);
+  const [editNote, setEditNote] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     getTimeLogs(taskId)
@@ -73,6 +79,35 @@ export default function TimeLogPanel({ taskId, estimatedMinutes, timeLoggedMinut
       onRefresh?.();
     } catch {
       showToast("Errore nell'eliminazione del log");
+    }
+  }
+
+  function startEdit(log: TimeLog) {
+    setEditingLog(log);
+    setEditHours(Math.floor(log.minutes / 60));
+    setEditMins(log.minutes % 60);
+    setEditNote(log.note || "");
+    setEditDate(log.logged_at);
+  }
+
+  async function handleEditSave() {
+    if (!editingLog) return;
+    const totalMins = editHours * 60 + editMins;
+    if (totalMins <= 0) return;
+    setEditSaving(true);
+    try {
+      const updated = await updateTimeLog(taskId, editingLog.id, {
+        minutes: totalMins,
+        logged_at: editDate,
+        note: editNote.trim() || undefined,
+      });
+      setLogs(prev => prev.map(l => l.id === editingLog.id ? updated : l));
+      setEditingLog(null);
+      onRefresh?.();
+    } catch {
+      showToast("Errore nel salvataggio");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -207,6 +242,23 @@ export default function TimeLogPanel({ taskId, estimatedMinutes, timeLoggedMinut
         <div className="ml-7 space-y-1 max-h-40 overflow-y-auto">
           {logs.map((log) => (
             <div key={log.id}>
+              {editingLog?.id === log.id ? (
+                <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
+                  <TimeLogForm
+                    logDate={editDate}
+                    onDateChange={setEditDate}
+                    hours={editHours}
+                    onHoursChange={setEditHours}
+                    mins={editMins}
+                    onMinsChange={setEditMins}
+                    note={editNote}
+                    onNoteChange={setEditNote}
+                    onSave={handleEditSave}
+                    onCancel={() => setEditingLog(null)}
+                    saving={editSaving}
+                  />
+                </div>
+              ) : (
               <div className="flex items-center gap-2 text-xs group/log">
                 <span className="text-zinc-500 w-14 flex-shrink-0">
                   {format(parseISO(log.logged_at), "d MMM", { locale: it })}
@@ -219,12 +271,20 @@ export default function TimeLogPanel({ taskId, estimatedMinutes, timeLoggedMinut
                   {pushBadge(log)}
                 </span>
                 <button
+                  onClick={() => startEdit(log)}
+                  className="opacity-0 group-hover/log:opacity-100 text-zinc-600 hover:text-blue-400 transition-all flex-shrink-0"
+                  title="Modifica"
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
                   onClick={() => handleDelete(log.id)}
                   className="opacity-0 group-hover/log:opacity-100 text-zinc-600 hover:text-red-400 transition-all flex-shrink-0"
                 >
                   <Trash2 size={12} />
                 </button>
               </div>
+              )}
               {/* Warning for pending log without Jira */}
               {log.source === "manual" && log.tempo_push_status === "pending" && !log.jira_issue_key && (
                 <div className="ml-14 mt-0.5 mb-1 flex items-start gap-1.5 text-[10px] text-yellow-400/80">

@@ -40,8 +40,8 @@ export default function TaskItem({ task, isSelected, onSelect, onToggle, onTimeL
           : "border-l-transparent hover:bg-zinc-800/40"
       }`}
     >
-      {/* Checkbox or Time-only clock */}
-      {task.time_only ? (
+      {/* Time log clock (for time_only always, for others if onTimeLog provided) */}
+      {(task.time_only || onTimeLog) && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -50,9 +50,11 @@ export default function TaskItem({ task, isSelected, onSelect, onToggle, onTimeL
           className="mt-0.5 w-5 h-5 md:w-[18px] md:h-[18px] flex-shrink-0 flex items-center justify-center text-blue-400 hover:text-blue-300 transition-colors"
           title="Registra ore"
         >
-          <Clock size={18} />
+          <Clock size={16} />
         </button>
-      ) : (
+      )}
+      {/* Checkbox (hidden for time_only tasks) */}
+      {!task.time_only && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -108,36 +110,44 @@ export default function TaskItem({ task, isSelected, onSelect, onToggle, onTimeL
 
       {/* Jira + Time + Recurrence + Due date */}
       <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-        {task.jira_issue_key && (
-          <a
-            href={task.jira_url || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-0.5 text-[10px] text-blue-400 hover:text-blue-300"
-          >
-            <ExternalLink size={9} />
-            {task.jira_issue_key}
-          </a>
-        )}
-        {(task.time_logged_minutes ?? 0) > 0 && (
-          <span className="flex items-center gap-0.5 text-[10px] text-emerald-400">
-            <Clock size={10} />
-            {task.time_logged_formatted}
-          </span>
-        )}
-        {task.has_recurrence && (
-          <Repeat size={12} className="text-blue-400" />
-        )}
-        {displayDate && (
-          <span
-            className={`text-xs ${
-              overdue ? "text-red-400" : "text-zinc-500"
-            }`}
-          >
-            {formatRelativeDate(displayDate)}
-          </span>
-        )}
+        <span className="w-20 text-right">
+          {task.jira_issue_key ? (
+            <a
+              href={task.jira_url || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-0.5 text-[10px] text-blue-400 hover:text-blue-300"
+            >
+              <ExternalLink size={9} />
+              {task.jira_issue_key}
+            </a>
+          ) : null}
+        </span>
+        <span className="w-10 text-right">
+          {(task.time_logged_minutes ?? 0) > 0 ? (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-400 justify-end">
+              <Clock size={10} />
+              {task.time_logged_formatted}
+            </span>
+          ) : <span className="text-[10px] text-zinc-700">&mdash;</span>}
+        </span>
+        <span className="w-4 text-center">
+          {task.has_recurrence && (
+            <Repeat size={12} className="text-blue-400" />
+          )}
+        </span>
+        <span className="w-12 text-right">
+          {displayDate ? (
+            <span
+              className={`text-xs ${
+                overdue ? "text-red-400" : "text-zinc-500"
+              }`}
+            >
+              {formatRelativeDate(displayDate)}
+            </span>
+          ) : null}
+        </span>
       </div>
     </div>
   );

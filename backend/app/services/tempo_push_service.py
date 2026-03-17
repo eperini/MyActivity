@@ -1,7 +1,12 @@
-"""Tempo push service — push Zeno manual time logs to Tempo Cloud."""
+"""Tempo push service — push Zeno manual time logs to Tempo Cloud.
+
+Aggregation: multiple logs for the same task/epic + user + day are merged
+into a single Tempo worklog (minutes summed, notes concatenated).
+"""
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -34,8 +39,9 @@ class TempoPushService:
             to_push = self._get_logs_to_push()
             push_log.logs_found = len(to_push)
 
-            for log in to_push:
-                result = self._push_single_log(log)
+            groups = self._group_logs(to_push)
+            for group in groups.values():
+                result = self._push_group(group)
                 if result == "pushed":
                     push_log.logs_pushed += 1
                 elif result == "updated":
@@ -77,7 +83,39 @@ class TempoPushService:
             .all()
         )
 
-    def _push_single_log(self, log: TimeLog) -> str:
+    def _group_logs(self, logs: list[TimeLog]) -> dict[tuple, list[TimeLog]]:
+        """Group logs by (entity_type, entity_id, user_id, logged_at)."""
+        groups: dict[tuple, list[TimeLog]] = defaultdict(list)
+        for log in logs:
+            entity_type = "task" if log.task_id else "epic" if log.epic_id else None
+            entity_id = log.task_id or log.epic_id
+            if not entity_type:
+                continue
+            key = (entity_type, entity_id, log.user_id, str(log.logged_at))
+            groups[key].append(log)
+        return groups
+
+    def _push_group(self, logs: list[TimeLog]) -> str:
+        """Push a group of logs as a single Tempo worklog."""
+        # Find the primary log (one with tempo_worklog_id, or first)
+        primary = next((l for l in logs if l.tempo_worklog_id), logs[0])
+        total_minutes = sum(l.minutes for l in logs)
+        notes = [l.note for l in logs if l.note]
+        combined_note = " | ".join(notes) if notes else ""
+
+        result = self._push_single_log(primary, total_minutes, combined_note)
+
+        # Mark all logs in the group with the same status and tempo_worklog_id
+        for log in logs:
+            if log.id != primary.id:
+                log.tempo_push_status = primary.tempo_push_status
+                log.tempo_pushed_at = primary.tempo_pushed_at
+                log.tempo_push_error = primary.tempo_push_error
+                log.tempo_worklog_id = primary.tempo_worklog_id
+        self.db.flush()
+        return result
+
+    def _push_single_log(self, log: TimeLog, total_minutes: int | None = None, combined_note: str | None = None) -> str:
         # Determine jira_issue_key from task or epic
         if log.task_id:
             entity = self.db.get(Task, log.task_id)
@@ -96,7 +134,9 @@ class TempoPushService:
             self.db.flush()
             return "error"
 
-        time_spent_seconds = log.minutes * 60
+        minutes = total_minutes if total_minutes is not None else log.minutes
+        note = combined_note if combined_note is not None else (log.note or "")
+        time_spent_seconds = minutes * 60
 
         try:
             if log.tempo_worklog_id:
@@ -104,7 +144,7 @@ class TempoPushService:
                     tempo_worklog_id=log.tempo_worklog_id,
                     time_spent_seconds=time_spent_seconds,
                     started_date=log.logged_at,
-                    description=log.note or "",
+                    description=note,
                 )
                 log.tempo_push_status = "pushed"
                 log.tempo_pushed_at = datetime.now(timezone.utc)
@@ -117,7 +157,7 @@ class TempoPushService:
                     author_account_id=user.jira_account_id,
                     started_date=log.logged_at,
                     time_spent_seconds=time_spent_seconds,
-                    description=log.note or "",
+                    description=note,
                 )
                 log.tempo_worklog_id = result["tempoWorklogId"]
                 log.tempo_push_status = "pushed"

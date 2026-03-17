@@ -3,6 +3,7 @@
 import { DateInput } from "./DatePicker";
 
 const DURATION_SHORTCUTS = [
+  { label: "30m", hours: 0, mins: 30 },
   { label: "1h", hours: 1, mins: 0 },
   { label: "1,5h", hours: 1, mins: 30 },
   { label: "2h", hours: 2, mins: 0 },

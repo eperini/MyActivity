@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Zap, Clock, Search, ExternalLink, ChevronLeft, ChevronRight, Calendar, Upload, Download } from "lucide-react";
+import { Zap, Clock, Search, ExternalLink, ChevronLeft, ChevronRight, Calendar, Upload, Download, Pencil, Check, X, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { QuickLogProject, Epic, WeeklyTimeData } from "@/types";
-import { getQuickLogEpics, createEpicTimeLog, getWeeklyTime, triggerTempoPush, triggerTempoImport } from "@/lib/api";
+import { getQuickLogEpics, createEpicTimeLog, getWeeklyTime, triggerTempoPush, triggerTempoImport, updateTimeLog, updateEpicTimeLog, deleteTimeLog, deleteEpicTimeLog } from "@/lib/api";
 import { useToast } from "./Toast";
 import TimeLogForm from "./TimeLogForm";
 
@@ -63,6 +63,14 @@ export default function QuickLogView() {
   const [pushing, setPushing] = useState(false);
   const [importing, setImporting] = useState(false);
 
+  // Day detail expand + inline edit
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
+  const [editingLogId, setEditingLogId] = useState<number | null>(null);
+  const [editHours, setEditHours] = useState(0);
+  const [editMins, setEditMins] = useState(0);
+  const [editNote, setEditNote] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
   // Weekly panel state
   const [weekOffset, setWeekOffset] = useState(0);
   const [weekData, setWeekData] = useState<WeeklyTimeData | null>(null);
@@ -70,7 +78,7 @@ export default function QuickLogView() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [filterProject]);
 
   useEffect(() => {
     loadWeek();
@@ -177,6 +185,63 @@ export default function QuickLogView() {
     }
   }
 
+  function startEditLog(log: { id: number; minutes: number; note: string | null }) {
+    setEditingLogId(log.id);
+    setEditHours(Math.floor(log.minutes / 60));
+    setEditMins(log.minutes % 60);
+    setEditNote(log.note || "");
+  }
+
+  async function handleEditLogSave(log: { id: number; task_id: number | null; epic_id?: number | null; logged_at: string }) {
+    const totalMins = editHours * 60 + editMins;
+    if (totalMins <= 0) return;
+    setEditSaving(true);
+    try {
+      if (log.task_id) {
+        await updateTimeLog(log.task_id, log.id, { minutes: totalMins, note: editNote.trim() || undefined });
+      } else if (log.epic_id) {
+        await updateEpicTimeLog(log.epic_id, log.id, { minutes: totalMins, note: editNote.trim() || undefined });
+      }
+      setEditingLogId(null);
+      loadWeek();
+    } catch {
+      showToast("Errore nel salvataggio");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  async function handleDeleteLog(log: { id: number; task_id: number | null; epic_id?: number | null }) {
+    try {
+      if (log.task_id) {
+        await deleteTimeLog(log.task_id, log.id);
+      } else if (log.epic_id) {
+        await deleteEpicTimeLog(log.epic_id, log.id);
+      }
+      setConfirmDeleteId(null);
+      loadWeek();
+      loadData();
+    } catch {
+      showToast("Errore nell'eliminazione");
+    }
+  }
+
+  // Get all logs for a specific day across all projects
+  const dayLogs = useMemo(() => {
+    if (!expandedDay || !weekData) return [];
+    const logs: { id: number; task_id: number | null; epic_id?: number | null; task_title: string; project_name: string; minutes: number; formatted: string; logged_at: string; note: string | null }[] = [];
+    for (const p of weekData.by_project) {
+      for (const l of p.logs) {
+        if (l.logged_at === expandedDay) {
+          logs.push({ ...l, project_name: p.project_name });
+        }
+      }
+    }
+    return logs;
+  }, [expandedDay, weekData]);
+
   // Filter epics by search
   const filtered = projects
     .map(p => ({
@@ -229,10 +294,12 @@ export default function QuickLogView() {
     ? `${new Date(weekData.week_start + "T00:00:00").toLocaleDateString("it-IT", { day: "numeric", month: "short" })} – ${new Date(weekData.week_end + "T00:00:00").toLocaleDateString("it-IT", { day: "numeric", month: "short", year: "numeric" })}`
     : "";
 
+  const [showEpicList, setShowEpicList] = useState(true);
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Left: Epic list */}
-      <div className="flex-1 overflow-y-auto p-6 min-w-0">
+      <div className={`overflow-y-auto p-6 min-w-0 transition-all ${showEpicList ? "flex-1" : "hidden"}`}>
         <div className="flex items-center gap-3 mb-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <Zap size={20} className="text-yellow-400" />
@@ -308,6 +375,13 @@ export default function QuickLogView() {
                     return (
                       <div key={epic.id}>
                         <div className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-800/50 group transition-colors">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); isOpen ? setOpenEpicId(null) : openForm(epic.id); }}
+                            className="flex-shrink-0 text-blue-400 hover:text-blue-300 transition-colors"
+                            title="Registra ore"
+                          >
+                            <Clock size={16} />
+                          </button>
                           <Zap size={14} className="text-purple-400/60 flex-shrink-0" />
                           <span className="text-sm text-zinc-200 flex-1 truncate">{epic.name}</span>
                           {epic.jira_issue_key && (
@@ -334,17 +408,10 @@ export default function QuickLogView() {
                               <span className="text-[10px] text-zinc-500">{lastLabel}</span>
                             </span>
                           )}
-                          <button
-                            onClick={() => isOpen ? setOpenEpicId(null) : openForm(epic.id)}
-                            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-zinc-500 hover:text-blue-400 hover:bg-zinc-700/50 transition-colors flex-shrink-0"
-                          >
-                            <Clock size={12} />
-                            {isOpen ? "Chiudi" : "Log ore"}
-                          </button>
                         </div>
 
                         {isOpen && (
-                          <div className="ml-6 mr-3 mb-3 bg-zinc-800/70 rounded-xl p-4 border border-zinc-700/50">
+                          <div className="ml-6 mr-3 mb-3 bg-zinc-800/70 rounded-xl p-4 border border-zinc-700/50 overflow-x-auto">
                             <TimeLogForm
                               logDate={logDate}
                               onDateChange={setLogDate}
@@ -371,14 +438,23 @@ export default function QuickLogView() {
       </div>
 
       {/* Right: Weekly timesheet */}
-      <div className="w-[630px] flex-shrink-0 border-l border-zinc-800 overflow-y-auto bg-zinc-900/30">
+      <div className={`flex-shrink-0 border-l border-zinc-800 overflow-y-auto bg-zinc-900/30 ${showEpicList ? "w-[630px]" : "flex-1"}`}>
         <div className="p-4 space-y-4">
           {/* Week navigation */}
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-              <Calendar size={14} className="text-blue-400" />
-              Timesheet
-            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowEpicList(!showEpicList)}
+                className="p-1 text-zinc-500 hover:text-zinc-200 transition-colors"
+                title={showEpicList ? "Nascondi lista epic" : "Mostra lista epic"}
+              >
+                {showEpicList ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+              </button>
+              <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <Calendar size={14} className="text-blue-400" />
+                Timesheet
+              </h3>
+            </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setWeekOffset(w => w - 1)}
@@ -416,8 +492,11 @@ export default function QuickLogView() {
                       {weekDays.map(d => (
                         <th
                           key={d.date}
-                          className={`text-center px-1 py-2 font-medium w-12 ${
-                            d.isToday ? "text-blue-400" : "text-zinc-500"
+                          onClick={() => setExpandedDay(expandedDay === d.date ? null : d.date)}
+                          className={`text-center px-1 py-2 font-medium w-12 cursor-pointer transition-colors ${
+                            expandedDay === d.date
+                              ? "bg-blue-600/20 text-blue-400"
+                              : d.isToday ? "text-blue-400 hover:bg-zinc-700/50" : "text-zinc-500 hover:bg-zinc-700/50"
                           }`}
                         >
                           <div>{d.dayName}</div>
@@ -484,6 +563,118 @@ export default function QuickLogView() {
                   )}
                 </table>
               </div>
+
+              {/* Day detail panel */}
+              {expandedDay && (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-zinc-300">
+                      {(() => {
+                        const d = new Date(expandedDay + "T00:00:00");
+                        return d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+                      })()}
+                    </span>
+                    <button onClick={() => { setExpandedDay(null); setEditingLogId(null); }} className="text-zinc-500 hover:text-zinc-300">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  {dayLogs.length === 0 ? (
+                    <p className="text-xs text-zinc-600 py-2">Nessuna ora registrata</p>
+                  ) : (
+                    dayLogs.map(log => (
+                      <div key={log.id}>
+                        {editingLogId === log.id ? (
+                          <div className="flex items-center gap-2 py-1.5 px-2 bg-zinc-700/30 rounded-lg">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min={0}
+                                max={23}
+                                value={editHours}
+                                onChange={e => setEditHours(Math.max(0, parseInt(e.target.value) || 0))}
+                                className="w-10 bg-zinc-900 border border-zinc-600 rounded px-1.5 py-1 text-xs text-zinc-300 outline-none text-center"
+                              />
+                              <span className="text-[10px] text-zinc-500">h</span>
+                              <input
+                                type="number"
+                                min={0}
+                                max={59}
+                                value={editMins}
+                                onChange={e => setEditMins(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                                className="w-10 bg-zinc-900 border border-zinc-600 rounded px-1.5 py-1 text-xs text-zinc-300 outline-none text-center"
+                              />
+                              <span className="text-[10px] text-zinc-500">m</span>
+                            </div>
+                            <input
+                              value={editNote}
+                              onChange={e => setEditNote(e.target.value)}
+                              placeholder="Nota..."
+                              className="flex-1 bg-zinc-900 border border-zinc-600 rounded px-2 py-1 text-xs text-zinc-300 outline-none placeholder-zinc-600"
+                              onKeyDown={e => {
+                                if (e.key === "Enter") handleEditLogSave(log);
+                                if (e.key === "Escape") setEditingLogId(null);
+                              }}
+                            />
+                            <button
+                              onClick={() => handleEditLogSave(log)}
+                              disabled={editSaving || (editHours * 60 + editMins <= 0)}
+                              className="p-1 text-blue-400 hover:text-blue-300 disabled:text-zinc-600"
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button onClick={() => setEditingLogId(null)} className="p-1 text-zinc-500 hover:text-zinc-300">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs py-1.5 px-2 rounded-lg hover:bg-zinc-700/30 group/dlog">
+                            <span className="text-emerald-400 font-medium w-12 flex-shrink-0">{log.formatted}</span>
+                            <span className="text-zinc-300 flex-1 truncate">{log.task_title}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-zinc-700/60 text-zinc-400 text-[10px] font-medium flex-shrink-0">{log.project_name}</span>
+                            {log.note && <span className="text-zinc-500 text-[10px] truncate max-w-[100px]" title={log.note}>{log.note}</span>}
+                            <button
+                              onClick={() => startEditLog(log)}
+                              className="opacity-0 group-hover/dlog:opacity-100 p-0.5 text-zinc-600 hover:text-blue-400 transition-all"
+                              title="Modifica"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                            {confirmDeleteId === log.id ? (
+                              <span className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleDeleteLog(log)}
+                                  className="px-1.5 py-0.5 rounded bg-red-600/20 text-red-400 text-[10px] hover:bg-red-600/30 transition-colors"
+                                >
+                                  Elimina
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="p-0.5 text-zinc-500 hover:text-zinc-300"
+                                >
+                                  <X size={11} />
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteId(log.id)}
+                                className="opacity-0 group-hover/dlog:opacity-100 p-0.5 text-zinc-600 hover:text-red-400 transition-all"
+                                title="Elimina"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                  <div className="flex items-center justify-end pt-1 border-t border-zinc-700/50">
+                    <span className="text-xs text-zinc-400 font-medium">
+                      Totale: {formatMins(dayLogs.reduce((s, l) => s + l.minutes, 0))}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Weekly summary bar */}
               <div className="flex items-center justify-between px-1">

@@ -6,7 +6,7 @@ import { getProject, getProjectStats, updateTask, deleteTask, getTasks, getProje
 import { useToast } from "./Toast";
 import TaskItem from "./TaskItem";
 import AddTaskForm from "./AddTaskForm";
-import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X, Users, Grid2x2, FolderOpen, Link, Check, Pencil, GripVertical, ChevronDown } from "lucide-react";
+import { Plus, BarChart3, Settings2, Zap, CalendarRange, Clock, ExternalLink, Trash2, X, Users, Grid2x2, FolderOpen, Link, Check, Pencil, GripVertical, ChevronDown, LayoutList } from "lucide-react";
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -308,6 +308,10 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh, refres
 
   function sortTasks(list: Task[]) {
     return [...list].sort((a, b) => {
+      // Time-only tasks first
+      if (a.time_only && !b.time_only) return -1;
+      if (!a.time_only && b.time_only) return 1;
+      // Then by due date
       const aDate = a.due_date || "";
       const bDate = b.due_date || "";
       if (aDate && !bDate) return -1;
@@ -616,7 +620,7 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh, refres
             {/* Add task button */}
             <button
               onClick={() => setShowAddTask(true)}
-              className="w-full flex items-center gap-2 px-3 py-2 mb-4 rounded-lg border border-dashed border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500 transition-colors text-sm"
+              className="w-full flex items-center gap-2 px-3 py-2 mb-4 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 hover:border-blue-500/50 transition-colors text-sm font-medium"
             >
               <Plus size={16} />
               Aggiungi task al progetto
@@ -699,10 +703,10 @@ export default function ProjectView({ projectId, onSelectTask, onRefresh, refres
             ) : (
               <button
                 onClick={() => setShowNewHeading(true)}
-                className="w-full flex items-center gap-2 px-3 py-2 mt-4 rounded-lg border border-dashed border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500 transition-colors text-sm"
+                className="w-full flex items-center gap-2 px-3 py-2 mt-4 rounded-lg border border-dashed border-zinc-700 text-zinc-600 hover:text-zinc-400 hover:border-zinc-500 transition-colors text-xs"
               >
-                <Plus size={16} />
-                Aggiungi sezione
+                <LayoutList size={14} />
+                Nuova sezione
               </button>
             )}
 

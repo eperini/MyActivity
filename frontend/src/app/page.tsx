@@ -126,6 +126,9 @@ export default function HomePage() {
     setSelectedView(view);
     if (view === "habits") {
       setSelectedTask(null);
+    } else if (view.startsWith("project-")) {
+      setSelectedTask(null);
+      setSelectedHabit(null);
     } else {
       setSelectedHabit(null);
     }

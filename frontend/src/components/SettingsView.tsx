@@ -109,11 +109,34 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
 
   function handleCopyInvite() {
     const url = `${window.location.origin}/login`;
-    const text = `Ciao! Ti invito a usare Zeno per gestire task e abitudini insieme.\n\nRegistrati qui: ${url}\n\nDopo la registrazione, potro condividere i progetti con te.`;
-    navigator.clipboard.writeText(text).then(() => {
+    const text = `Ciao! Ti invito a usare Zeno per gestire task e abitudini insieme.\n\nRegistrati qui: ${url}\n\nDopo la registrazione, potrò condividere i progetti con te.`;
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => {
+        setInviteCopied(true);
+        setTimeout(() => setInviteCopied(false), 2000);
+      }).catch(() => {
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text: string) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
-    });
+    } catch {
+      showToast("Impossibile copiare negli appunti");
+    }
+    document.body.removeChild(ta);
   }
 
   async function handleTogglePush() {

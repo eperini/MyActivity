@@ -289,7 +289,11 @@ def send_daily_reports(self):
         # Find users with daily report enabled (email or push)
         users = db.execute(
             select(User).where(
-                or_(User.daily_report_email == True, User.daily_report_push == True)
+                or_(
+                    User.daily_report_email == True,
+                    User.daily_report_push == True,
+                    User.telegram_chat_id.isnot(None),
+                )
             )
         ).scalars().all()
 
@@ -298,10 +302,10 @@ def send_daily_reports(self):
             if not user.daily_report_time:
                 continue
 
-            # Check if it's time to send (within 5-minute window)
+            # Check if it's time to send (within 10-minute window to handle schedule drift)
             report_dt = datetime.combine(today, user.daily_report_time, tzinfo=rome_tz)
             diff_minutes = (now_rome - report_dt).total_seconds() / 60
-            if diff_minutes < 0 or diff_minutes >= 5:
+            if diff_minutes < 0 or diff_minutes >= 10:
                 continue
 
             # Check if already sent today
@@ -458,8 +462,7 @@ def send_daily_reports(self):
                     text += f"\n{'  ·  '.join(stats_parts)}"
 
                 from app.services.telegram_service import send_message_sync
-                if user.daily_report_email or user.daily_report_push:
-                    send_message_sync(user.telegram_chat_id, text)
+                send_message_sync(user.telegram_chat_id, text)
 
             user.daily_report_last_sent = now_utc
             sent_count += 1

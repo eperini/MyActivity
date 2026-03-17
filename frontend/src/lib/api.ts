@@ -631,6 +631,8 @@ export const getEpicTimeLogs = (epicId: number) =>
   request<TimeLog[]>(`/epics/${epicId}/time`);
 export const createEpicTimeLog = (epicId: number, data: { minutes: number; logged_at: string; note?: string }) =>
   request<TimeLog>(`/epics/${epicId}/time`, { method: "POST", body: JSON.stringify(data) });
+export const updateEpicTimeLog = (epicId: number, logId: number, data: { minutes?: number; logged_at?: string; note?: string }) =>
+  request<TimeLog>(`/epics/${epicId}/time/${logId}`, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteEpicTimeLog = (epicId: number, logId: number) =>
   request<{ detail: string }>(`/epics/${epicId}/time/${logId}`, { method: "DELETE" });
 export const getQuickLogEpics = (params?: { status?: string; project_id?: number; only_with_jira?: boolean }) => {

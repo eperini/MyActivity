@@ -252,10 +252,12 @@ async def get_weekly_time(
             }
         by_project[project_id]["minutes"] += log.minutes
         by_project[project_id]["logs"].append({
+            "id": log.id,
             "task_id": log.task_id,
             "epic_id": log.epic_id,
             "task_title": item_title,
             "minutes": log.minutes,
+            "formatted": format_minutes(log.minutes),
             "logged_at": log.logged_at.isoformat(),
             "note": log.note,
         })

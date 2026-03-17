@@ -388,6 +388,44 @@ async def create_epic_time_log(
     )
 
 
+@router.patch("/epics/{epic_id}/time/{log_id}")
+async def update_epic_time_log(
+    epic_id: int,
+    log_id: int,
+    data: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    epic = await _get_epic_or_404(epic_id, db)
+    await _check_project_access(epic.project_id, user.id, db)
+    log = await db.get(TimeLog, log_id)
+    if not log or log.epic_id != epic_id:
+        raise HTTPException(404, "Log non trovato")
+    if log.user_id != user.id:
+        raise HTTPException(403, "Puoi modificare solo i tuoi log")
+    if "minutes" in data:
+        log.minutes = data["minutes"]
+    if "logged_at" in data:
+        log.logged_at = data["logged_at"]
+    if "note" in data:
+        log.note = data["note"]
+    await db.commit()
+    await db.refresh(log)
+    user_obj = await db.get(User, log.user_id) if log.user_id else None
+    return {
+        "id": log.id,
+        "task_id": log.task_id,
+        "epic_id": log.epic_id,
+        "user_id": log.user_id,
+        "user_name": user_obj.display_name if user_obj else "?",
+        "logged_at": log.logged_at.isoformat(),
+        "minutes": log.minutes,
+        "formatted": format_minutes(log.minutes),
+        "note": log.note,
+        "source": log.source,
+    }
+
+
 @router.delete("/epics/{epic_id}/time/{log_id}")
 async def delete_epic_time_log(
     epic_id: int,
