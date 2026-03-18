@@ -722,3 +722,14 @@ export const updateMemberRole = (projectId: number, memberId: number, role: stri
     method: "PATCH",
     body: JSON.stringify({ role }),
   });
+
+// ─── Telegram ─────────────────────────────────────────
+
+export const getTelegramStatus = () =>
+  request<{ linked: boolean; chat_id: number | null }>("/telegram/status");
+
+export const generateTelegramLink = () =>
+  request<{ code: string; bot_username: string; instructions: string }>("/telegram/link", { method: "POST" });
+
+export const unlinkTelegram = () =>
+  request("/telegram/unlink", { method: "DELETE" });

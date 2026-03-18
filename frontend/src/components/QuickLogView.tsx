@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Zap, Clock, Search, ExternalLink, ChevronLeft, ChevronRight, Calendar, Upload, Download, Pencil, Check, X, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Zap, Clock, Search, ExternalLink, ChevronLeft, ChevronRight, Calendar, Upload, Download, Pencil, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { QuickLogProject, Epic, WeeklyTimeData } from "@/types";
 import { getQuickLogEpics, createEpicTimeLog, getWeeklyTime, triggerTempoPush, triggerTempoImport, updateTimeLog, updateEpicTimeLog, deleteTimeLog, deleteEpicTimeLog } from "@/lib/api";
 import { useToast } from "./Toast";
@@ -295,6 +295,7 @@ export default function QuickLogView() {
     : "";
 
   const [showEpicList, setShowEpicList] = useState(true);
+  const [showTimesheet, setShowTimesheet] = useState(true);
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -306,6 +307,13 @@ export default function QuickLogView() {
             Quick Log Ore
           </h2>
           <div className="flex-1" />
+          <button
+            onClick={() => setShowTimesheet(!showTimesheet)}
+            className="p-1 text-zinc-500 hover:text-zinc-200 transition-colors"
+            title={showTimesheet ? "Nascondi timesheet" : "Mostra timesheet"}
+          >
+            {showTimesheet ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+          </button>
           <button
             onClick={handlePushTempo}
             disabled={pushing}
@@ -438,7 +446,7 @@ export default function QuickLogView() {
       </div>
 
       {/* Right: Weekly timesheet */}
-      <div className={`flex-shrink-0 border-l border-zinc-800 overflow-y-auto bg-zinc-900/30 ${showEpicList ? "w-[630px]" : "flex-1"}`}>
+      <div className={`flex-shrink-0 border-l border-zinc-800 overflow-y-auto bg-zinc-900/30 transition-all ${!showTimesheet ? "hidden" : showEpicList ? "w-[630px]" : "flex-1"}`}>
         <div className="p-4 space-y-4">
           {/* Week navigation */}
           <div className="flex items-center justify-between">

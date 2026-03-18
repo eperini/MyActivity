@@ -229,7 +229,7 @@ myActivity/
         │   ├── CustomFieldEditor.tsx  # Editor definizioni campi custom [v2]
         │   ├── DependenciesPanel.tsx  # Pannello dipendenze in TaskDetail [v2]
         │   ├── AutomationsView.tsx    # Editor regole automazione [v2]
-        │   ├── TimeLogForm.tsx          # Form registrazione ore (shortcut 30m-8h, date picker, nota)
+        │   ├── TimeLogForm.tsx          # Form registrazione ore (shortcut 30m-8h, date picker, nota). Layout compatto per pannelli stretti
         │   ├── TimeLogPanel.tsx         # Pannello time log in TaskDetail (lista log, edit inline, aggiungi)
         │   ├── QuickLogView.tsx         # Quick log ore: lista epic + timesheet settimanale con dettaglio giorno
         │   └── SprintBoard.tsx        # Board sprint con metriche [v2]
@@ -804,7 +804,7 @@ Timer circolare SVG con progress ring (25/5/15 min). Pannello con statistiche e 
 Dashboard con completion rate, weekly/monthly charts, habits overview, focus hours.
 
 ### 11. Impostazioni
-Invito famiglia, Google Calendar, backup, push notifications, report giornaliero, export/import, import TickTick, template, API key, logout.
+Invito famiglia (copia invito con fallback clipboard per HTTP), Google Calendar, backup, push notifications, Telegram (linking/unlinking account con codice via bot), report giornaliero (email + push + Telegram), export/import, import TickTick, template, API key, logout.
 
 ### 12. Vista Progetto (v2)
 Header con nome progetto, badge stato, tipo, descrizione. Barra progresso (task completati / totali). Lista task filtrata per project_id con form di creazione inline. Pannelli laterali per Campi Custom, Automazioni e Sprint (mutuamente esclusivi).
@@ -840,7 +840,7 @@ Vista a due colonne per il log rapido delle ore sugli epic.
 
 **Colonna destra (timesheet settimanale)**: Tabella con navigazione settimanale (frecce + click per settimana corrente). Righe per progetto con minuti giornalieri. Totali per giorno e per settimana. Barra progresso vs 40h. Cliccando su una colonna giorno si espande un pannello dettaglio con tutti i log del giorno. Ogni log mostra ore, task, progetto evidenziato con badge, nota. I log sono modificabili inline (edit ore/minuti/nota) e cancellabili con conferma a due step (click trash → bottone "Elimina" + X annulla).
 
-**Toggle colonna**: Icona PanelLeftClose/PanelLeftOpen nel header del timesheet permette di nascondere/mostrare la colonna epic. Quando nascosta, il timesheet si espande a piena larghezza.
+**Toggle colonne**: Due toggle indipendenti per nascondere/mostrare ciascuna colonna. PanelRightClose/PanelRightOpen nell'header epic per nascondere il timesheet. PanelLeftClose/PanelLeftOpen nell'header timesheet per nascondere la lista epic. Ciascuna colonna si espande a piena larghezza quando l'altra e' nascosta.
 
 ---
 

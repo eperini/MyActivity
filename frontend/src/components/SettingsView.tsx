@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X, Cloud, Sun, Moon, Users, Settings as SettingsIcon, Database, Plug } from "lucide-react";
+import { Bell, BellOff, Download, Upload, FileJson, FileSpreadsheet, CheckCircle2, LogOut, UserPlus, Copy, Check, RefreshCw, Calendar, HardDrive, Mail, Clock, Key, Smartphone, Bookmark, Trash2, Link2, Plus, X, Cloud, Sun, Moon, Users, Settings as SettingsIcon, Database, Plug, MessageCircle } from "lucide-react";
 import useTheme from "@/hooks/useTheme";
-import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, linkJiraAccount, changePassword, getIntegrationSettings, updateIntegrationSettings } from "@/lib/api";
+import { getVapidKey, subscribePush, unsubscribePush, sendTestPush, importTasks, importTickTick, getGoogleCalendarConfig, triggerGoogleSync, triggerBackup, listBackups, getProfile, updatePreferences, generateApiKey, revokeApiKey, exportBlob, logout, getTemplates, deleteTemplate, getJiraConfigs, createJiraConfig, deleteJiraConfig, triggerJiraSync, getJiraProjects, getProjects, createProject, linkJiraAccount, changePassword, getIntegrationSettings, updateIntegrationSettings, getTelegramStatus, generateTelegramLink, unlinkTelegram } from "@/lib/api";
 import type { IntegrationSettings } from "@/lib/api";
 import type { TickTickImportResult } from "@/lib/api";
 import type { TaskTemplate, JiraConfig, JiraProject, Project } from "@/types";
@@ -54,6 +54,12 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [jiraLinking, setJiraLinking] = useState(false);
   const [jiraAccountLinked, setJiraAccountLinked] = useState<string | null>(null);
+  // Telegram
+  const [telegramLinked, setTelegramLinked] = useState(false);
+  const [telegramCode, setTelegramCode] = useState<string | null>(null);
+  const [telegramBotUsername, setTelegramBotUsername] = useState("");
+  const [telegramLoading, setTelegramLoading] = useState(false);
+
   const [activeTab, setActiveTab] = useState("generale");
 
   useEffect(() => {
@@ -74,6 +80,9 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
     getTemplates()
       .then(setTemplates)
       .catch((e) => { if (e.message !== "Non autorizzato") showToast("Errore caricamento template"); });
+    getTelegramStatus()
+      .then((s) => setTelegramLinked(s.linked))
+      .catch(() => {});
     getJiraConfigs()
       .then(setJiraConfigs)
       .catch(() => {});
@@ -357,6 +366,103 @@ export default function SettingsView({ onLogout }: { onLogout?: () => void }) {
                 {pushMessage && (
                   <p className="text-xs text-zinc-400">{pushMessage}</p>
                 )}
+              </>
+            )}
+          </div>
+
+          {/* Telegram */}
+          <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 space-y-4">
+            <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+              <MessageCircle size={16} />
+              Telegram
+            </h3>
+            {telegramLinked ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={16} className="text-green-400" />
+                  <span className="text-sm text-green-400">Account Telegram collegato</span>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Riceverai il report giornaliero e potrai usare i comandi /tasks, /habits, /add, /summary dal bot.
+                </p>
+                <button
+                  onClick={async () => {
+                    setTelegramLoading(true);
+                    try {
+                      await unlinkTelegram();
+                      setTelegramLinked(false);
+                      setTelegramCode(null);
+                      showToast("Telegram scollegato", "success");
+                    } catch {
+                      showToast("Errore nello scollegamento");
+                    } finally {
+                      setTelegramLoading(false);
+                    }
+                  }}
+                  disabled={telegramLoading}
+                  className="px-4 py-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Scollega Telegram
+                </button>
+              </>
+            ) : telegramCode ? (
+              <>
+                <p className="text-sm text-zinc-300">
+                  Apri Telegram, cerca <span className="font-mono text-blue-400">@{telegramBotUsername}</span> e invia:
+                </p>
+                <div className="flex items-center gap-2 bg-zinc-900 rounded-lg p-3 border border-zinc-700">
+                  <code className="text-sm text-yellow-400 flex-1">/start {telegramCode}</code>
+                  <button
+                    onClick={() => {
+                      const text = `/start ${telegramCode}`;
+                      if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text);
+                      } else {
+                        const ta = document.createElement("textarea");
+                        ta.value = text;
+                        ta.style.position = "fixed";
+                        ta.style.left = "-9999px";
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(ta);
+                      }
+                      showToast("Comando copiato", "success");
+                    }}
+                    className="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+                    title="Copia"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Dopo aver inviato il comando, torna qui e ricarica la pagina.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-zinc-500">
+                  Collega il tuo account Telegram per ricevere report e gestire task dal bot.
+                </p>
+                <button
+                  onClick={async () => {
+                    setTelegramLoading(true);
+                    try {
+                      const res = await generateTelegramLink();
+                      setTelegramCode(res.code);
+                      setTelegramBotUsername(res.bot_username);
+                    } catch {
+                      showToast("Errore generazione codice");
+                    } finally {
+                      setTelegramLoading(false);
+                    }
+                  }}
+                  disabled={telegramLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition-colors"
+                >
+                  <MessageCircle size={16} />
+                  {telegramLoading ? "..." : "Collega Telegram"}
+                </button>
               </>
             )}
           </div>
