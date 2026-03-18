@@ -1,0 +1,177 @@
+# ZenoDev - Ambiente di sviluppo parallelo a produzione
+# Porte: backend :8100, DB :5433, Redis :6380
+# Frontend va avviato con: PORT=3100 npm run start (o npm run dev)
+# Database separato: myactivity_dev
+#
+# Uso:
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml logs -f
+#   docker compose -f docker-compose.dev.yml down
+
+services:
+  db-dev:
+    image: postgres:16-alpine
+    container_name: zeno-dev-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: myactivity_dev
+      POSTGRES_USER: myactivity
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5434:5432"
+    networks:
+      - internal-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myactivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-dev:
+    image: redis:7-alpine
+    container_name: zeno-dev-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data_dev:/data
+    ports:
+      - "127.0.0.1:6380:6379"
+    networks:
+      - internal-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zeno-dev-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db-dev:5432/myactivity_dev
+      REDIS_URL: redis://redis-dev:6379/0
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      TELEGRAM_BOT_TOKEN: ""
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_MAILTO: ${VAPID_MAILTO:-mailto:admin@zeno.local}
+      CORS_ORIGINS: http://localhost:3100,https://raffaello-mac-mini.tail7385a5.ts.net:3443
+      GOOGLE_CREDENTIALS_FILE: /app/google-credentials.json
+      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}
+      GOOGLE_SYNC_PROJECT_ID: ${GOOGLE_SYNC_PROJECT_ID:-0}
+      GOOGLE_DRIVE_FOLDER_ID: ""
+      GOOGLE_DRIVE_CLIENT_ID: ""
+      GOOGLE_DRIVE_CLIENT_SECRET: ""
+      GOOGLE_DRIVE_REFRESH_TOKEN: ""
+      BACKUP_KEEP_COUNT: "3"
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_SYNC_INTERVAL_MINUTES: ${JIRA_SYNC_INTERVAL_MINUTES:-15}
+      TEMPO_API_TOKEN: ""
+      TEMPO_BASE_URL: ${TEMPO_BASE_URL:-https://api.tempo.io/4}
+      TEMPO_SYNC_INTERVAL_DAYS: "7"
+      TEMPO_DEFAULT_IMPORT_FROM: "2026-01-01"
+      SMTP_HOST: ""
+      SMTP_PORT: "587"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM: "noreply@zenodev.local"
+    ports:
+      - "8100:8000"
+    volumes:
+      - ./backend/app:/app/app
+    networks:
+      - internal-dev
+      - frontend-dev
+    depends_on:
+      db-dev:
+        condition: service_healthy
+      redis-dev:
+        condition: service_healthy
+
+  celery-worker-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zeno-dev-celery-worker
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db-dev:5432/myactivity_dev
+      REDIS_URL: redis://redis-dev:6379/0
+      TELEGRAM_BOT_TOKEN: ""
+      GOOGLE_DRIVE_FOLDER_ID: ""
+      GOOGLE_DRIVE_CLIENT_ID: ""
+      GOOGLE_DRIVE_CLIENT_SECRET: ""
+      GOOGLE_DRIVE_REFRESH_TOKEN: ""
+      BACKUP_KEEP_COUNT: "3"
+      SMTP_HOST: ""
+      SMTP_PORT: "587"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM: "noreply@zenodev.local"
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_MAILTO: ${VAPID_MAILTO:-mailto:admin@zeno.local}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_SYNC_INTERVAL_MINUTES: ${JIRA_SYNC_INTERVAL_MINUTES:-15}
+      TEMPO_API_TOKEN: ""
+      TEMPO_BASE_URL: ${TEMPO_BASE_URL:-https://api.tempo.io/4}
+      TEMPO_SYNC_INTERVAL_DAYS: "7"
+      TEMPO_DEFAULT_IMPORT_FROM: "2026-01-01"
+    volumes:
+      - ./backend/app:/app/app
+    networks:
+      - internal-dev
+    depends_on:
+      db-dev:
+        condition: service_healthy
+      redis-dev:
+        condition: service_healthy
+
+  celery-beat-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zeno-dev-celery-beat
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://myactivity:${DB_PASSWORD:-changeme}@db-dev:5432/myactivity_dev
+      REDIS_URL: redis://redis-dev:6379/0
+      TELEGRAM_BOT_TOKEN: ""
+      GOOGLE_DRIVE_FOLDER_ID: ""
+      GOOGLE_DRIVE_CLIENT_ID: ""
+      GOOGLE_DRIVE_CLIENT_SECRET: ""
+      GOOGLE_DRIVE_REFRESH_TOKEN: ""
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_SYNC_INTERVAL_MINUTES: ${JIRA_SYNC_INTERVAL_MINUTES:-15}
+      TEMPO_API_TOKEN: ""
+      TEMPO_BASE_URL: ${TEMPO_BASE_URL:-https://api.tempo.io/4}
+      TEMPO_SYNC_INTERVAL_DAYS: "7"
+    networks:
+      - internal-dev
+    depends_on:
+      db-dev:
+        condition: service_healthy
+      redis-dev:
+        condition: service_healthy
+
+networks:
+  internal-dev:
+    driver: bridge
+  frontend-dev:
+    driver: bridge
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:

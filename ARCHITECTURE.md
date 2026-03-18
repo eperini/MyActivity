@@ -56,9 +56,10 @@
 ### Infrastruttura
 | Componente | Tecnologia | Motivazione |
 |---|---|---|
-| Orchestrazione | Docker Compose | 6 servizi, un solo comando per avviare tutto |
+| Orchestrazione | Docker Compose | 6 servizi produzione + 4 servizi dev paralleli |
 | Host | Mac Mini | Self-hosted, sempre acceso, Docker Desktop |
 | Accesso remoto | Tailscale | VPN mesh per accesso da iPhone/altri dispositivi |
+| HTTPS | Caddy + Tailscale certs | Reverse proxy con certificati validi, auto-start via LaunchAgent |
 | Variabili | .env | Secrets fuori dal codice, gitignored |
 | Container | Multi-stage, non-root | Sicurezza e dimensioni immagine ridotte |
 
@@ -67,6 +68,12 @@
 ## Architettura dei Servizi
 
 ```
+                    ┌──────────────────────────────────────┐
+                    │  Caddy (HTTPS reverse proxy :443)    │
+                    │  raffaello-mac-mini.tail*.ts.net     │
+                    └──────┬──────────────┬────────────────┘
+                           │ /api/*       │ /*
+                           ▼              ▼
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐
 │   Frontend   │────▶│   Backend   │────▶│Google Calendar│
 │  Next.js     │:3000│   FastAPI   │:8000│Google Drive   │
@@ -96,7 +103,28 @@
        └──────────────┘
 ```
 
-### Docker Compose - 6 servizi
+### HTTPS con Caddy + Tailscale
+
+**Caddy** funge da reverse proxy HTTPS davanti a frontend e backend. I certificati sono generati da Tailscale (`tailscale cert`) e sono validi su tutti i dispositivi della rete Tailscale.
+
+| URL | Destinazione |
+|---|---|
+| `https://raffaello-mac-mini.tail*.ts.net` | Produzione (frontend :3000, API :8000) |
+| `https://raffaello-mac-mini.tail*.ts.net:3443` | ZenoDev (frontend :3100, API :8100) |
+
+Routing: `/api/*` → backend, tutto il resto → frontend. Il frontend rileva automaticamente HTTPS e usa `window.location.origin/api` invece di `hostname:8000`.
+
+Configurazione: `Caddyfile` nella root del progetto. Certificati in `certs/` (gitignored).
+
+### LaunchAgents (auto-start al login)
+
+| LaunchAgent | Funzione |
+|---|---|
+| `com.zeno.docker-compose` | `docker compose up -d` dopo che Docker Desktop e' pronto |
+| `com.zeno.frontend` | `npm run start` su :3000 dopo che il backend e' pronto |
+| `com.zeno.caddy` | Caddy reverse proxy HTTPS (KeepAlive) |
+
+### Docker Compose Produzione - 6 servizi
 
 1. **db** - PostgreSQL 16 Alpine, volume persistente, rete `internal`
 2. **redis** - Redis 7 Alpine, volume `redis_data`, rete `internal`
@@ -104,6 +132,20 @@
 4. **celery-worker** - Stesso container del backend, comando `celery worker`, rete `internal`
 5. **celery-beat** - Stesso container, comando `celery beat`, rete `internal`
 6. **telegram-bot** - Bot Telegram in polling, rete `internal`
+
+### Docker Compose Dev (ZenoDev) - 4 servizi
+
+File: `docker-compose.dev.yml`. Ambiente di sviluppo parallelo con DB e volumi separati. Telegram, backup, email e Tempo disabilitati per non interferire con la produzione.
+
+| Servizio | Porta | Note |
+|---|---|---|
+| db-dev | 5434 | Database `myactivity_dev` |
+| redis-dev | 6380 | Istanza Redis separata |
+| backend-dev | 8100 | Stesse immagini, env diverse |
+| celery-worker-dev | - | Senza notifiche esterne |
+| celery-beat-dev | - | Scheduler separato |
+
+Comandi: `./dev.sh [up|down|logs|restart|migrate|frontend|status]`
 
 **Network segmentation**: DB e Redis sono raggiungibili solo dalla rete `internal`. Solo il backend e' esposto sulla rete `frontend` (porta 8000).
 
@@ -369,12 +411,14 @@ I campi sono definiti in `ProjectCustomField` e i valori salvati come JSONB (`cu
 - **Member role**: pattern `^(edit|view)$`
 
 ### Infrastruttura
-- **CORS** limitato, metodi e header specifici
+- **HTTPS** via Caddy + certificati Tailscale (validi, no self-signed warnings)
+- **CORS** limitato, metodi e header specifici (include dominio HTTPS Tailscale)
 - **`.env`** con secrets escluso dal git, SECRET_KEY obbligatorio (startup check)
 - **PostgreSQL e Redis non esposti** sull'host (solo rete Docker interna)
 - **Container non-root**: utente `app` dedicato
 - **HTML escape** nei messaggi Telegram e email report
 - **Toast feedback**: tutte le operazioni mostrano errori all'utente
+- **Certificati Tailscale** in `certs/` (gitignored)
 
 ---
 

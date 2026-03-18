@@ -3,7 +3,11 @@ import type { Task, Habit, HabitLog, HabitStats, RecurrenceRule, TaskInstance, P
 function getApiUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
   if (typeof window === "undefined") return "http://localhost:8000/api";
-  // Use same hostname as browser (works with localhost and Tailscale IP)
+  // If served via HTTPS (Caddy reverse proxy), API is on same origin under /api
+  if (window.location.protocol === "https:") {
+    return `${window.location.origin}/api`;
+  }
+  // Direct access: use same hostname with backend port
   return `http://${window.location.hostname}:8000/api`;
 }
 const API_URL = getApiUrl();

@@ -1,0 +1,33 @@
+# Zeno HTTPS reverse proxy via Tailscale certificates
+# Produzione: https://raffaello-mac-mini.tail7385a5.ts.net
+# ZenoDev:    https://raffaello-mac-mini.tail7385a5.ts.net:3443
+
+# ─── Produzione ───────────────────────────────────────
+raffaello-mac-mini.tail7385a5.ts.net {
+	tls /Users/perini/myActivity/certs/tailscale.crt /Users/perini/myActivity/certs/tailscale.key
+
+	# API backend
+	handle /api/* {
+		reverse_proxy localhost:8000
+	}
+
+	# Frontend
+	handle {
+		reverse_proxy localhost:3000
+	}
+}
+
+# ─── ZenoDev ──────────────────────────────────────────
+raffaello-mac-mini.tail7385a5.ts.net:3443 {
+	tls /Users/perini/myActivity/certs/tailscale.crt /Users/perini/myActivity/certs/tailscale.key
+
+	# API backend dev
+	handle /api/* {
+		reverse_proxy localhost:8100
+	}
+
+	# Frontend dev
+	handle {
+		reverse_proxy localhost:3100
+	}
+}
