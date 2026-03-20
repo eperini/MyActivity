@@ -2,17 +2,21 @@
 
 ## Panoramica
 
-**Zeno** (precedentemente myActivity) e' un'applicazione self-hosted per la gestione di task, abitudini e produttivita personale, ispirata a TickTick. Progettata per uso familiare multi-utente, gira interamente su un Mac Mini tramite Docker Desktop.
+**Zeno** (precedentemente myActivity) e' un'applicazione self-hosted per la gestione di task, abitudini e produttivita personale, ispirata a Things 3 e TickTick. Progettata per uso familiare multi-utente, gira interamente su un Mac Mini tramite Docker Desktop.
 
 ### Obiettivi principali
 - Gestione task con ricorrenze avanzate (inclusi pattern lavorativi)
-- Organizzazione gerarchica: Aree → Progetti → Task (v2)
-- Campi custom per progetto con default per tipo (v2)
-- Dipendenze tra task con rilevamento cicli (v2)
-- Automazioni regole-based per progetto (v2)
-- Sprint con metriche di avanzamento (v2)
+- Organizzazione gerarchica Things 3: Aree → Progetti → Headings → Task
+- Campi custom per progetto con default per tipo
+- Dipendenze tra task con rilevamento cicli
+- Automazioni regole-based per progetto
+- Sprint con metriche di avanzamento
+- Epic per progetto con time tracking e sync Jira
+- Time tracking manuale con sync bidirezionale Tempo Cloud
+- Report periodici automatici (PDF/Excel) con invio email
 - Tracking abitudini con streak e statistiche
 - Notifiche proattive via Telegram, Web Push e Email
+- Notifiche in-app con inbox
 - Matrice di Eisenhower per prioritizzazione visiva
 - Kanban board con drag & drop per gestione stati
 - Timer Pomodoro integrato con storico sessioni
@@ -22,6 +26,7 @@
 - Import da TickTick (CSV)
 - Quick add con linguaggio naturale (italiano)
 - iPhone Action Button via iOS Shortcuts
+- Guided tour onboarding interattivo per nuovi utenti
 - Interfaccia in italiano con tema scuro
 
 ---
@@ -32,16 +37,17 @@
 | Componente | Tecnologia | Versione | Motivazione |
 |---|---|---|---|
 | Framework API | FastAPI | 0.115.6 | Async nativo, auto-documentazione OpenAPI, validazione Pydantic |
-| Database | PostgreSQL | 16 (Alpine) | ACID, supporto ARRAY nativo per `frequency_days`, robustezza |
+| Database | PostgreSQL | 16 (Alpine) | ACID, supporto ARRAY nativo per `frequency_days`, JSONB per campi custom |
 | ORM | SQLAlchemy | 2.0.36 | Async con `asyncpg`, mapped columns, relationship resolution |
 | Migrazioni | Alembic | 1.14.0 | Integrazione SQLAlchemy, autogenerate |
 | Cache/Broker | Redis | 7 (Alpine) | Broker Celery, veloce, persistenza opzionale |
-| Task Queue | Celery | 5.4.0 | Beat scheduler per notifiche, istanze ricorrenti, report, backup |
+| Task Queue | Celery | 5.4.0 | Beat scheduler per notifiche, istanze ricorrenti, report, backup, sync |
 | Autenticazione | PyJWT + bcrypt | - | JWT in HttpOnly cookie, bcrypt diretto, API key per shortcuts |
 | Rate Limiting | slowapi | 0.1.9 | Protezione brute-force su auth endpoints |
 | Ricorrenze | python-dateutil | 2.9.0 | Parsing RRULE RFC 5545, calcolo occorrenze |
 | Notifiche | httpx + pywebpush | - | Telegram Bot API, Web Push VAPID, Email SMTP |
 | Google | google-api-python-client | - | Calendar sync, Drive backup |
+| Report | ReportLab + openpyxl | - | Generazione PDF e Excel server-side |
 
 ### Frontend
 | Componente | Tecnologia | Versione | Motivazione |
@@ -56,7 +62,7 @@
 ### Infrastruttura
 | Componente | Tecnologia | Motivazione |
 |---|---|---|
-| Orchestrazione | Docker Compose | 6 servizi produzione + 4 servizi dev paralleli |
+| Orchestrazione | Docker Compose | 6 servizi produzione + 5 servizi dev paralleli |
 | Host | Mac Mini | Self-hosted, sempre acceso, Docker Desktop |
 | Accesso remoto | Tailscale | VPN mesh per accesso da iPhone/altri dispositivi |
 | HTTPS | Caddy + Tailscale certs | Reverse proxy con certificati validi, auto-start via LaunchAgent |
@@ -79,9 +85,10 @@
 │  Next.js     │:3000│   FastAPI   │:8000│Google Drive   │
 │  (produzione)│     │  (uvicorn)  │     └──────────────┘
 └─────────────┘     └──────┬──────┘
-                           │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
+                           │         ┌──────────────┐
+              ┌────────────┼─────────│  Jira REST   │
+              │            │         │  Tempo Cloud  │
+              ▼            ▼         └──────────────┘
        ┌───────────┐ ┌─────────┐ ┌──────────┐
        │ PostgreSQL │ │  Redis  │ │ Telegram │
        │  (interno) │ │(interno)│ │ Bot API  │
@@ -94,7 +101,9 @@
        │ (notifiche,   │    │ (scheduler   │
        │  istanze,     │    │  periodico)  │
        │  report,      │    │              │
-       │  backup)      │    │              │
+       │  backup,      │    │              │
+       │  Tempo sync,  │    │              │
+       │  Jira sync)   │    │              │
        └──────────────┘    └──────────────┘
               │
        ┌──────────────┐
@@ -133,7 +142,7 @@ Configurazione: `Caddyfile` nella root del progetto. Certificati in `certs/` (gi
 5. **celery-beat** - Stesso container, comando `celery beat`, rete `internal`
 6. **telegram-bot** - Bot Telegram in polling, rete `internal`
 
-### Docker Compose Dev (ZenoDev) - 4 servizi
+### Docker Compose Dev (ZenoDev) - 5 servizi
 
 File: `docker-compose.dev.yml`. Ambiente di sviluppo parallelo con DB e volumi separati. Telegram, backup, email e Tempo disabilitati per non interferire con la produzione.
 
@@ -158,6 +167,8 @@ myActivity/
 ├── .env                          # Secrets (gitignored)
 ├── .env.example                  # Template variabili
 ├── docker-compose.yml
+├── docker-compose.dev.yml        # Ambiente dev parallelo (ZenoDev)
+├── Caddyfile                     # Reverse proxy HTTPS config
 ├── ARCHITECTURE.md               # Questo documento
 │
 ├── backend/
@@ -177,26 +188,32 @@ myActivity/
 │       │   └── deps.py           # get_current_user (JWT cookie + Bearer + API key)
 │       ├── models/
 │       │   ├── __init__.py       # Import ALL models (relationship resolution)
-│       │   ├── user.py           # User (email, telegram_chat_id, api_key, is_admin)
-│       │   ├── task_list.py      # TaskList (position) + ListMember (roles)
-│       │   ├── task.py           # Task (priority 1-4, status enum, parent_id, project_id, custom_fields JSONB)
+│       │   ├── user.py           # User (email, telegram_chat_id, api_key, is_admin, has_seen_tour)
+│       │   ├── task.py           # Task (priority 1-4, status enum, project_id, heading_id, time_only, jira fields)
 │       │   ├── recurrence.py     # RecurrenceRule + TaskInstance
-│       │   ├── notification.py   # Notification (channel, offset)
+│       │   ├── notification.py   # TaskReminder (channel, offset)
 │       │   ├── habit.py          # Habit + HabitLog
 │       │   ├── pomodoro.py       # PomodoroSession
-│       │   ├── push.py           # PushSubscription (VAPID)
+│       │   ├── push_subscription.py # PushSubscription (VAPID)
 │       │   ├── tag.py            # Tag + task_tags association
 │       │   ├── comment.py        # Comment
 │       │   ├── template.py       # TaskTemplate (JSON subtasks/recurrence)
-│       │   ├── area.py           # Area (name, color, icon, position, owner_id) [v2]
-│       │   ├── project.py        # Project + ProjectMember (area_id, type, status) [v2]
-│       │   ├── custom_field.py   # ProjectCustomField (field_type, options JSONB) [v2]
-│       │   ├── dependency.py     # TaskDependency (blocks/relates_to/duplicates) [v2]
-│       │   ├── automation.py     # AutomationRule (trigger/action types, JSONB config) [v2]
-│       │   └── sprint.py         # Sprint + sprint_tasks association (planned/active/completed) [v2]
+│       │   ├── area.py           # Area (name, color, icon, position, owner_id)
+│       │   ├── project.py        # Project + ProjectMember (area_id, type, status)
+│       │   ├── heading.py        # ProjectHeading (name, position) — sezioni Things 3
+│       │   ├── custom_field.py   # ProjectCustomField (field_type, options JSONB)
+│       │   ├── dependency.py     # TaskDependency (blocks/relates_to/duplicates)
+│       │   ├── automation.py     # AutomationRule (trigger/action types, JSONB config)
+│       │   ├── sprint.py         # Sprint + sprint_tasks association
+│       │   ├── epic.py           # Epic (project_id, status, jira fields, time_logs)
+│       │   ├── time_log.py       # TimeLog (task/epic, minutes, Tempo sync) + TimeLogDeleted
+│       │   ├── tempo.py          # TempoUser + TempoImportLog + TempoPushLog
+│       │   ├── jira.py           # JiraConfig + JiraUserMapping
+│       │   ├── sharing.py        # ProjectInvitation + AppNotification + UserProjectArea
+│       │   └── report.py         # ReportConfig + ReportHistory
 │       ├── api/routes/
+│       │   ├── access.py         # _check_task_access() helper
 │       │   ├── auth.py           # Register, login, logout, profile, API key
-│       │   ├── lists.py          # CRUD liste + reorder + members
 │       │   ├── tasks.py          # CRUD task + subtasks + enrichment
 │       │   ├── recurrences.py    # Set/get/delete ricorrenza
 │       │   ├── habits.py         # CRUD abitudini, toggle, logs, stats
@@ -212,76 +229,112 @@ myActivity/
 │       │   ├── quickadd.py       # Quick add con linguaggio naturale
 │       │   ├── shortcut.py       # API key endpoint per iOS Shortcuts
 │       │   ├── templates.py      # CRUD template + from-task + instantiate
-│       │   ├── areas.py          # CRUD aree + reorder [v2]
-│       │   ├── projects.py       # CRUD progetti + members + stats [v2]
-│       │   ├── custom_fields.py  # CRUD campi custom + reorder [v2]
-│       │   ├── dependencies.py   # Dipendenze task + cycle detection [v2]
-│       │   ├── automations.py    # CRUD regole automazione + toggle [v2]
-│       │   └── sprints.py        # CRUD sprint + add/remove task [v2]
+│       │   ├── areas.py          # CRUD aree + reorder
+│       │   ├── projects.py       # CRUD progetti + members + stats
+│       │   ├── headings.py       # CRUD headings + reorder
+│       │   ├── custom_fields.py  # CRUD campi custom + reorder
+│       │   ├── dependencies.py   # Dipendenze task + cycle detection
+│       │   ├── automations.py    # CRUD regole automazione + toggle
+│       │   ├── sprints.py        # CRUD sprint + add/remove task
+│       │   ├── epics.py          # CRUD epic + reorder + Jira push + time logs
+│       │   ├── time_logs.py      # CRUD time log su task + weekly summary + report + export
+│       │   ├── tempo.py          # Import/push Tempo + users + config + status
+│       │   ├── jira.py           # Config sync + users mapping + manual sync
+│       │   ├── invitations.py    # Inviti progetto + accept/decline
+│       │   ├── notifications.py  # In-app notifications + mark read
+│       │   └── reports.py        # Report configs + generate + history
 │       ├── services/
-│       │   ├── recurrence_service.py  # RRULE builder, occorrenze, workday adjust
-│       │   ├── telegram_service.py    # send_message async/sync
-│       │   ├── google_calendar.py     # Push/pull/delete eventi
-│       │   ├── google_drive.py        # Upload backup + rotazione
-│       │   ├── email_service.py       # SMTP Gmail per report
-│       │   ├── tempo_push_service.py  # Push ore a Tempo (aggregazione per entity/giorno, note concatenate)
-│       │   └── quickadd_parser.py     # Parser italiano (regex-based)
+│       │   ├── recurrence_service.py    # RRULE builder, occorrenze, workday adjust
+│       │   ├── telegram_service.py      # send_message async/sync
+│       │   ├── notification_service.py  # Dispatch notifiche multi-canale
+│       │   ├── google_calendar.py       # Push/pull/delete eventi
+│       │   ├── google_drive.py          # Upload backup + rotazione
+│       │   ├── email_service.py         # SMTP Gmail per report
+│       │   ├── quickadd_parser.py       # Parser italiano (regex-based)
+│       │   ├── jira_service.py          # Sync Jira epic/task bidirezionale
+│       │   ├── tempo_service.py         # Client API Tempo Cloud
+│       │   ├── tempo_import_service.py  # Import worklogs Tempo → Zeno
+│       │   ├── tempo_push_service.py    # Push ore Zeno → Tempo (aggregazione per entity/giorno)
+│       │   ├── report_service.py        # Orchestrazione report periodici
+│       │   ├── pdf_generator.py         # Generazione PDF con ReportLab
+│       │   └── excel_generator.py       # Generazione Excel con openpyxl
 │       └── workers/
 │           ├── celery_app.py     # Celery config, beat schedule
-│           └── tasks.py          # Istanze ricorrenti, notifiche, report, backup, evaluate_automations [v2]
+│           └── tasks.py          # Istanze ricorrenti, notifiche, report, backup, sync, automazioni
 │
-└── frontend/
-    ├── package.json
-    ├── next.config.ts
-    ├── tsconfig.json
-    ├── public/
-    │   ├── manifest.json         # PWA manifest
-    │   └── sw.js                 # Service worker per push notifications
-    └── src/
-        ├── app/
-        │   ├── layout.tsx        # Geist font, dark theme, lang="it", Providers
-        │   ├── globals.css       # Tailwind, thin scrollbars
-        │   ├── page.tsx          # Dashboard principale (routing viste)
-        │   └── login/page.tsx    # Login/Register form
-        ├── components/
-        │   ├── Sidebar.tsx       # Navigazione + liste + aree/progetti [v2] + drag & drop reorder
-        │   ├── TaskListView.tsx  # Lista task filtrata + ordinamento
-        │   ├── TaskItem.tsx      # Riga task (orologio + checkbox, colonne allineate: Jira/ore/ricorrenza/data)
-        │   ├── TaskDetail.tsx    # Pannello dettaglio (edit, subtask, tag, commenti, template, custom fields, dipendenze) [v2]
-        │   ├── AddTaskForm.tsx   # Creazione task (structured + quick + template, defaultProjectId). Senza defaultProjectId → "Nessun progetto" [v2]
-        │   ├── DatePicker.tsx    # Calendario popup (shortcuts + griglia + orario)
-        │   ├── DayCalendar.tsx   # Vista giornaliera con timeline
-        │   ├── CalendarView.tsx  # Calendario mensile con task
-        │   ├── KanbanView.tsx    # Board 3 colonne con drag & drop
-        │   ├── EisenhowerMatrix.tsx # Matrice 2x2 priorita
-        │   ├── HabitListView.tsx # Lista abitudini con week strip
-        │   ├── HabitDetail.tsx   # Dettaglio abitudine (stats + calendario mensile)
-        │   ├── AddHabitForm.tsx  # Modal creazione abitudine
-        │   ├── PomodoroTimer.tsx # Timer circolare SVG
-        │   ├── PomodoroHistory.tsx # Stats + cronologia sessioni
-        │   ├── ShareListModal.tsx # Condivisione lista con membri
-        │   ├── StatsView.tsx     # Dashboard statistiche
-        │   ├── SettingsView.tsx  # Tutte le impostazioni
-        │   ├── Toast.tsx         # ToastProvider context, auto-dismiss 4s
-        │   ├── BottomTabBar.tsx  # Tab bar mobile (5 tab con ciclo "More")
-        │   ├── MobileHeader.tsx  # Header mobile con hamburger
-        │   ├── FloatingAddButton.tsx # FAB mobile
-        │   ├── ProjectView.tsx       # Vista progetto (header, stats, task, pannelli) [v2]
-        │   ├── CustomFieldsPanel.tsx  # Pannello campi custom in TaskDetail [v2]
-        │   ├── CustomFieldEditor.tsx  # Editor definizioni campi custom [v2]
-        │   ├── DependenciesPanel.tsx  # Pannello dipendenze in TaskDetail [v2]
-        │   ├── AutomationsView.tsx    # Editor regole automazione [v2]
-        │   ├── TimeLogForm.tsx          # Form registrazione ore (shortcut 30m-8h, date picker, nota). Layout compatto per pannelli stretti
-        │   ├── TimeLogPanel.tsx         # Pannello time log in TaskDetail (lista log, edit inline, aggiungi)
-        │   ├── QuickLogView.tsx         # Quick log ore: lista epic + timesheet settimanale con dettaglio giorno
-        │   └── SprintBoard.tsx        # Board sprint con metriche [v2]
-        ├── hooks/
-        │   └── useIsMobile.ts    # Breakpoint md (768px)
-        ├── lib/
-        │   ├── api.ts            # Client HTTP con cookie auth, 401 guard
-        │   └── dates.ts          # formatRelativeDate, isOverdue
-        └── types/
-            └── index.ts          # Interfacce TypeScript
+├── frontend/
+│   ├── package.json
+│   ├── next.config.ts
+│   ├── tsconfig.json
+│   ├── public/
+│   │   ├── manifest.json         # PWA manifest
+│   │   └── sw.js                 # Service worker per push notifications
+│   ├── e2e/                      # Test E2E Playwright
+│   └── src/
+│       ├── app/
+│       │   ├── layout.tsx        # Geist font, dark theme, lang="it", Providers
+│       │   ├── globals.css       # Tailwind, thin scrollbars
+│       │   ├── page.tsx          # Dashboard principale (routing viste)
+│       │   └── login/page.tsx    # Login/Register form
+│       ├── components/
+│       │   ├── Providers.tsx         # Context providers (Toast, Theme, Onboarding)
+│       │   ├── Sidebar.tsx           # Navigazione + aree/progetti + favorites + collapsible sections
+│       │   ├── TaskListView.tsx      # Lista task filtrata + ordinamento
+│       │   ├── TaskItem.tsx          # Riga task (orologio + checkbox, colonne: Jira/ore/ricorrenza/data)
+│       │   ├── TaskDetail.tsx        # Pannello dettaglio (edit, subtask, tag, commenti, time log, custom fields, dipendenze)
+│       │   ├── AddTaskForm.tsx       # Creazione task (structured + quick + template, defaultProjectId, time_only)
+│       │   ├── DatePicker.tsx        # Calendario popup (shortcuts + griglia + orario)
+│       │   ├── DayCalendar.tsx       # Vista giornaliera con timeline
+│       │   ├── CalendarView.tsx      # Calendario mensile con task
+│       │   ├── KanbanView.tsx        # Board 3 colonne con drag & drop
+│       │   ├── EisenhowerMatrix.tsx  # Matrice 2x2 priorita
+│       │   ├── HabitListView.tsx     # Lista abitudini con week strip
+│       │   ├── HabitDetail.tsx       # Dettaglio abitudine (stats + calendario mensile)
+│       │   ├── AddHabitForm.tsx      # Modal creazione abitudine
+│       │   ├── PomodoroTimer.tsx     # Timer circolare SVG
+│       │   ├── PomodoroHistory.tsx   # Stats + cronologia sessioni
+│       │   ├── StatsView.tsx         # Dashboard statistiche
+│       │   ├── SettingsView.tsx      # Tutte le impostazioni (tab: Generale, Integrazioni, Admin)
+│       │   ├── Toast.tsx             # ToastProvider context, auto-dismiss 4s
+│       │   ├── BottomTabBar.tsx      # Tab bar mobile (5 tab con ciclo "More")
+│       │   ├── MobileHeader.tsx      # Header mobile con hamburger
+│       │   ├── FloatingAddButton.tsx # FAB mobile
+│       │   ├── ProjectView.tsx       # Vista progetto (header, stats, task con headings, epic, sprint)
+│       │   ├── ProjectMembersPanel.tsx # Gestione membri progetto
+│       │   ├── CustomFieldsPanel.tsx # Pannello campi custom in TaskDetail
+│       │   ├── CustomFieldEditor.tsx # Editor definizioni campi custom
+│       │   ├── DependenciesPanel.tsx # Pannello dipendenze in TaskDetail
+│       │   ├── AutomationsView.tsx   # Editor regole automazione
+│       │   ├── SprintBoard.tsx       # Board sprint con metriche
+│       │   ├── TimeLogForm.tsx       # Form registrazione ore (shortcut 30m-8h, date picker, nota)
+│       │   ├── TimeLogPanel.tsx      # Pannello time log in TaskDetail (lista, edit inline, aggiungi)
+│       │   ├── QuickLogView.tsx      # Quick log ore: lista epic + timesheet settimanale
+│       │   ├── WeeklyTimeReport.tsx  # Report ore settimanale con dettaglio giorno
+│       │   ├── ReportsView.tsx       # Configurazione e generazione report periodici
+│       │   ├── TempoImportPanel.tsx  # Import manuale worklogs da Tempo
+│       │   ├── TempoUsersPanel.tsx   # Admin: mapping utenti Tempo → Zeno
+│       │   ├── TempoSettingsPanel.tsx # Configurazione API Tempo
+│       │   ├── ReminderPanel.tsx     # Impostazioni notifiche/reminder
+│       │   ├── UserManagementPanel.tsx # Admin: gestione utenti
+│       │   ├── AcceptInvitationDialog.tsx # Dialog accettazione inviti
+│       │   ├── NotificationsPanel.tsx # Inbox notifiche in-app
+│       │   ├── KeyboardShortcutsModal.tsx # Modal con lista shortcut tastiera
+│       │   └── onboarding/
+│       │       ├── OnboardingProvider.tsx  # Context + state machine tour guidato
+│       │       ├── SpotlightOverlay.tsx    # Overlay scuro con cutout spotlight
+│       │       ├── TourTooltip.tsx         # Tooltip posizionato con contenuto step
+│       │       ├── TourLauncher.tsx        # Pannello selezione percorsi tour
+│       │       ├── types.ts               # Interfacce Tour/TourStep
+│       │       └── tours/                 # Definizioni tour tematici
+│       ├── hooks/
+│       │   ├── useIsMobile.ts         # Breakpoint md (768px)
+│       │   ├── useKeyboardShortcuts.ts # Shortcut tastiera globali
+│       │   └── useTheme.tsx           # Gestione tema dark/light
+│       ├── lib/
+│       │   ├── api.ts            # Client HTTP con cookie auth, 401 guard
+│       │   └── dates.ts          # formatRelativeDate, isOverdue
+│       └── types/
+│           └── index.ts          # Interfacce TypeScript
 ```
 
 ---
@@ -313,53 +366,19 @@ SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
 
 **Problema**: SQLAlchemy async causa `MissingGreenlet` se Pydantic tenta di serializzare relationship lazy-loaded.
 
-**Soluzione**: La funzione `_enrich_with_recurrence()` carica in batch: ricorrenze, tag, assigned_to_name, subtask_count/subtask_done_count. Tutti gli endpoint che restituiscono Task passano per questa funzione.
+**Soluzione**: La funzione `_enrich_with_recurrence()` carica in batch: ricorrenze, tag, assigned_to_name, subtask_count/subtask_done_count, time_logs. Tutti gli endpoint che restituiscono Task passano per questa funzione.
 
-### 5. List access check (owner O membro)
+### 5. Modello Things 3: Aree → Progetti → Headings → Task
 
-**Decisione**: `_check_list_access()` verifica che l'utente sia owner della lista O membro con ruolo edit/view.
+**Decisione**: Unificazione del modello Liste in Progetti. I task hanno `project_id` (opzionale) e `heading_id` (opzionale) per raggruppamento in sezioni.
 
-**Motivazione**: Permette ai membri di una lista condivisa di creare, modificare e eliminare task nella lista senza essere owner.
+**Gerarchia**: Area → Progetto → Heading → Task. Le aree sono contenitori tematici (es. Family, Lavoro). I progetti hanno tipo (technical/administrative/personal), stato (active/on_hold/completed/archived), e membri con ruoli. Gli heading sono sezioni all'interno dei progetti per raggruppare task logicamente.
 
-### 6. RRULE RFC 5545 + Workday Adjustment
+**Status task**: `todo`, `doing`, `done`, `someday`. Lo status `someday` indica task parcheggiati in "Prima o Poi".
 
-**Soluzione**: Due livelli:
-1. **RRULE standard** tramite `python-dateutil` per frequenze base
-2. **Post-processing custom** (`adjust_to_workday()`) che sposta la data al giorno lavorativo target
+**Scheduling**: Ogni task ha `start_date` (quando iniziare) e `due_date` (scadenza). La vista "Oggi" mostra task con start_date <= oggi O due_date = oggi. L'Inbox raccoglie task senza progetto e senza date.
 
-### 7. Priorita come Eisenhower Quadrants
-
-| Priorita | Valore | Colore | Quadrante Eisenhower |
-|---|---|---|---|
-| Urgente | 1 | Rosso | Urgente & Importante |
-| Alta | 2 | Arancione | Non Urgente & Importante |
-| Media | 3 | Giallo | Urgente & Non Importante |
-| Bassa | 4 | Grigio | Non Urgente & Non Importante |
-
-### 8. Route ordering FastAPI
-
-**Regola**: Le route statiche (`/reorder`, `/reset-order`) devono essere definite PRIMA delle route parametriche (`/{list_id}`, `/{task_id}`) per evitare che FastAPI matchi "reorder" come parametro intero. Questo vale anche per `PATCH /tasks/reorder` che deve precedere `PATCH /tasks/{task_id}`.
-
-### 9. Ordinamento liste: manuale + automatico
-
-**Logica**: Se almeno una lista ha `position > 0`, tutte le liste vengono ordinate per position (manuale). Altrimenti, vengono ordinate per numero di task (decrescente, automatico). Il reset azzera tutte le position a 0.
-
-### 10. Task defaults e ordinamento
-
-- **Data**: default a "oggi" alla creazione
-- **Assegnazione**: auto-assegnato al creatore se non specificato
-- **Progetto**: se `defaultProjectId` e' fornito (es. da ProjectView), il selettore lo preseleziona; altrimenti (es. dalla vista Oggi) il default e' "Nessun progetto" cosi' l'utente sceglie esplicitamente
-- **Ordinamento lista task**: query backend ordina per `position, id` (non piu' `priority, due_date`) per supportare riordino manuale
-- **Ordinamento ProjectView**: task con due_date prima (ordine ascendente), poi task senza data (ordine per position manuale). Stesso ordinamento sia per task non raggruppati che per task dentro sezioni heading
-- **Vista Oggi/Prossimi 7gg**: include task scaduti (overdue)
-
-### 11. Aree e Progetti (v2) — Backward compatibility
-
-**Decisione**: I task mantengono sia `list_id` (obbligatorio) che `project_id` (opzionale). Le liste restano per la condivisione e le viste tradizionali, i progetti aggiungono organizzazione gerarchica.
-
-**Gerarchia**: Area → Progetto → Task. Le aree sono contenitori tematici (es. Family, Lavoro). I progetti hanno tipo (technical/administrative/personal), stato (active/on_hold/completed/archived), e membri con ruoli.
-
-### 12. Campi custom per tipo progetto (v2)
+### 6. Campi custom per tipo progetto
 
 **Decisione**: Alla creazione di un progetto, vengono auto-popolati campi custom di default in base al `project_type`:
 - **technical**: Sprint, Story Points, Component, Branch Name
@@ -368,19 +387,74 @@ SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
 
 I campi sono definiti in `ProjectCustomField` e i valori salvati come JSONB (`custom_fields`) nel Task.
 
-### 13. Rilevamento cicli nelle dipendenze (v2)
+### 7. RRULE RFC 5545 + Workday Adjustment
+
+**Soluzione**: Due livelli:
+1. **RRULE standard** tramite `python-dateutil` per frequenze base
+2. **Post-processing custom** (`adjust_to_workday()`) che sposta la data al giorno lavorativo target
+
+### 8. Priorita come Eisenhower Quadrants
+
+| Priorita | Valore | Colore | Quadrante Eisenhower |
+|---|---|---|---|
+| Urgente | 1 | Rosso | Urgente & Importante |
+| Alta | 2 | Arancione | Non Urgente & Importante |
+| Media | 3 | Giallo | Urgente & Non Importante |
+| Bassa | 4 | Grigio | Non Urgente & Non Importante |
+
+### 9. Route ordering FastAPI
+
+**Regola**: Le route statiche (`/reorder`, `/reset-order`) devono essere definite PRIMA delle route parametriche (`/{list_id}`, `/{task_id}`) per evitare che FastAPI matchi "reorder" come parametro intero.
+
+### 10. Task defaults e ordinamento
+
+- **Data**: default a "oggi" alla creazione
+- **Assegnazione**: auto-assegnato al creatore se non specificato
+- **Progetto**: se `defaultProjectId` e' fornito (es. da ProjectView), il selettore lo preseleziona; altrimenti il default e' "Nessun progetto"
+- **Ordinamento lista task**: query backend ordina per `position, id` per supportare riordino manuale
+- **Ordinamento ProjectView**: task time_only prima, poi per due_date ascendente, poi per position manuale. Stesso ordinamento sia per task non raggruppati che per task dentro sezioni heading
+- **Vista Oggi**: include task con start_date <= oggi, due_date = oggi, e task scaduti (overdue)
+- **Vista Prossimi 7gg**: include task con scadenza entro 7 giorni + overdue
+
+### 11. Rilevamento cicli nelle dipendenze
 
 **Soluzione**: Recursive CTE in PostgreSQL per verificare che aggiungere una dipendenza `blocks` non crei un ciclo. Solo il tipo `blocks` viene verificato (non `relates_to` o `duplicates`).
 
-### 14. Automazioni con depth guard (v2)
+### 12. Automazioni con depth guard
 
 **Problema**: Le automazioni possono causare loop infiniti (es. status_changed → change_status → status_changed).
 
 **Soluzione**: Il Celery task `evaluate_automations` accetta un parametro `depth` (max 3). L'azione `create_task` non re-triggera automazioni. Tutte le azioni sono wrappate in try/except per isolamento errori.
 
-### 15. Sprint con task condivisi (v2)
+### 13. Sprint con task condivisi
 
 **Decisione**: `sprint_tasks` e' una tabella di associazione N:M — un task puo' appartenere a piu' sprint (es. backlog → sprint attivo). Gli sprint hanno status transitions: planned → active → completed.
+
+### 14. Time tracking con sync Tempo bidirezionale
+
+**Architettura**: I `TimeLog` possono essere associati a task o epic. Ogni log ha `source` (manual/tempo) e campi per Tempo sync (`tempo_worklog_id`, `tempo_push_status`, `tempo_pushed_at`).
+
+**Import Tempo → Zeno**: Fetch worklogs da API Tempo, matching per `tempo_worklog_id`, creazione/aggiornamento time_log con deduplicazione. Risoluzione Jira issue → epic/task tramite `jira_issue_key`.
+
+**Push Zeno → Tempo**: Aggregazione time_log per (entity + user + giorno), push a Tempo API. Tombstone table `TimeLogDeleted` per sincronizzare cancellazioni di log gia' pushati.
+
+**TempoUser**: Mapping utenti Tempo → Zeno via `tempo_account_id`. Utenti non linkati (ghost users) hanno `zeno_user_id = null`. Audit trail completo con `TempoImportLog` e `TempoPushLog`.
+
+### 15. Epic come entita' di primo livello
+
+**Decisione**: Gli Epic sono entita' separate dai task, associati a un progetto. Hanno stato, date, campi Jira e time_logs propri. Usati come unita' di tracking ore nel QuickLog e per sync con Jira epic/story.
+
+### 16. Notifiche in-app (AppNotification)
+
+**Architettura**: Modello `AppNotification` separato dai `TaskReminder`. Supporta tipi: task_assigned, task_status_changed, task_commented, task_due_soon, project_invitation, sprint_started, sprint_completed, mention, automation_triggered, tempo_sync_error, report_ready. Ogni notifica ha `is_read`, `read_at`, e flag per dispatch multicanale (telegram, push).
+
+### 17. Inviti progetto
+
+**Flusso**: Invito via email con token sicuro (48 byte urlsafe), scadenza 7 giorni. Status: pending → accepted/declined/expired/cancelled. Celery task `expire_pending_invitations` pulisce gli inviti scaduti ogni notte.
+
+### 18. Report periodici
+
+**Architettura**: `ReportConfig` definisce report schedulati per tipo (person/project/client), frequenza (weekly/monthly), con invio email. `ReportHistory` traccia ogni generazione con file PDF/Excel e dati JSON. Generazione server-side con ReportLab (PDF) e openpyxl (Excel).
 
 ---
 
@@ -391,15 +465,15 @@ I campi sono definiti in `ProjectCustomField` e i valori salvati come JSONB (`cu
 - **Dual auth**: cookie + Bearer header + API key (X-API-Key)
 - **bcrypt** per hashing password (diretto, min 8 char, max 128 char)
 - **API key** hashata con SHA-256 nel DB per iOS Shortcuts
-- **List access check**: owner O membro su tutte le operazioni task
-- **Project access check** (v2): owner O membro su tutte le operazioni progetto
+- **Project access check**: owner O membro su tutte le operazioni progetto/task
 - **IDOR fix**: comments, tags, push subscription, project_id assignment verificano accesso
 - **Rate limiting**: `slowapi` 5 req/min su `/auth/login` e `/auth/register`
 - **Backup**: solo admin (is_admin check)
-- **FK ondelete** (v2): tasks.created_by e assigned_to usano SET NULL (non CASCADE)
-- **Automation depth guard** (v2): max 3 livelli di ricorsione per prevenire loop infiniti
-- **Cycle detection** (v2): recursive CTE per dipendenze task (tipo blocks)
-- **Sprint task access** (v2): verifica list_access prima di aggiungere task a sprint
+- **FK ondelete**: tasks.created_by e assigned_to usano SET NULL (non CASCADE)
+- **Automation depth guard**: max 3 livelli di ricorsione per prevenire loop infiniti
+- **Cycle detection**: recursive CTE per dipendenze task (tipo blocks)
+- **Sprint task access**: verifica project access prima di aggiungere task a sprint
+- **Invitation token**: 48 byte urlsafe, scadenza 7 giorni
 
 ### Validazione Input
 - **Title**: max 500 char
@@ -408,7 +482,7 @@ I campi sono definiti in `ProjectCustomField` e i valori salvati come JSONB (`cu
 - **Quick add**: max 500 char
 - **Priority**: `Field(ge=1, le=4)`
 - **Tag color**: regex `^#[0-9a-fA-F]{6}$`
-- **Member role**: pattern `^(edit|view)$`
+- **Member role**: pattern `^(admin|super_user|user)$`
 
 ### Infrastruttura
 - **HTTPS** via Caddy + certificati Tailscale (validi, no self-signed warnings)
@@ -429,40 +503,51 @@ I campi sono definiti in `ProjectCustomField` e i valori salvati come JSONB (`cu
 users
 ├── id (PK)
 ├── email (UNIQUE)
-├── hashed_password
+├── password_hash
 ├── display_name
 ├── telegram_chat_id (BIGINT, nullable)
 ├── is_admin (BOOLEAN)
-├── api_key_hash (nullable, SHA-256)
+├── api_key (nullable, UNIQUE)
+├── jira_account_id (nullable)
+├── has_seen_tour (BOOLEAN, default false)
 ├── daily_report_email (BOOLEAN)
 ├── daily_report_push (BOOLEAN)
-└── daily_report_time (TIME, nullable)
+├── daily_report_time (TIME, nullable)
+├── daily_report_last_sent (DATETIME, nullable)
+└── created_at
 ```
 
 ### Task Management
 ```
-lists                          tasks
-├── id (PK)                    ├── id (PK)
-├── name                       ├── title
-├── color                      ├── description
-├── icon                       ├── list_id (FK -> lists, CASCADE)
-├── owner_id (FK -> users)     ├── created_by (FK -> users, SET NULL)
-├── position (INT, default 0)  ├── assigned_to (FK -> users, SET NULL, nullable)
-├── created_at                 ├── priority (1-4)
-│                              ├── status (todo/doing/done)
-list_members                   ├── due_date
-├── id (PK)                    ├── due_time
-├── list_id (FK, CASCADE)      ├── completed_at
-├── user_id (FK, CASCADE)      ├── parent_id (self-ref FK, CASCADE)
-└── role (edit/view)           ├── project_id (FK -> projects, SET NULL, nullable) [v2]
-                               ├── custom_fields (JSONB, nullable) [v2]
-                               ├── google_event_id (nullable)
-                               ├── position (INT)
-                               ├── created_at
-                               └── updated_at
+tasks
+├── id (PK)
+├── title
+├── description
+├── created_by (FK -> users, SET NULL)
+├── assigned_to (FK -> users, SET NULL, nullable)
+├── priority (1-4)
+├── status (todo/doing/done/someday)
+├── due_date
+├── due_time
+├── start_date (nullable)
+├── completed_at
+├── parent_id (self-ref FK, CASCADE)
+├── project_id (FK -> projects, SET NULL, nullable)
+├── heading_id (FK -> project_headings, SET NULL, nullable)
+├── custom_fields (JSONB)
+├── time_only (BOOLEAN, default false)
+├── estimated_minutes (INT, nullable)
+├── jira_issue_key (nullable)
+├── jira_issue_id (nullable)
+├── jira_synced_at (nullable)
+├── jira_url (nullable)
+├── google_event_id (nullable)
+├── position (INT)
+├── created_at
+└── updated_at
 ```
 
-### Aree e Progetti (v2)
+### Aree, Progetti, Headings
 ```
 areas                          projects
 ├── id (PK)                    ├── id (PK)
@@ -479,19 +564,116 @@ project_members                ├── start_date / target_date
 ├── user_id (FK, CASCADE)      ├── created_at
 └── role (admin/edit/view)     └── updated_at
 
-project_custom_fields
-├── id (PK)
-├── project_id (FK -> projects, CASCADE)
-├── name
-├── field_key (UNIQUE con project_id)
-├── field_type (text/number/date/select/multi_select/boolean/url)
-├── options (JSONB, nullable)
-├── default_value (JSONB, nullable)
-├── is_required (BOOLEAN)
-└── position (INT)
+project_headings               project_custom_fields
+├── id (PK)                    ├── id (PK)
+├── project_id (FK, CASCADE)   ├── project_id (FK, CASCADE)
+├── name                       ├── name
+├── position (INT)             ├── field_key (UNIQUE con project_id)
+└── created_at                 ├── field_type (text/number/date/select/multi_select/boolean/url)
+                               ├── options (JSONB, nullable)
+                               ├── default_value (JSONB, nullable)
+                               ├── is_required (BOOLEAN)
+                               └── position (INT)
 ```
 
-### Dipendenze Task (v2)
+### Epic e Time Tracking
+```
+epics                          time_logs
+├── id (PK)                    ├── id (PK)
+├── project_id (FK, CASCADE)   ├── task_id (FK, CASCADE, nullable)
+├── name                       ├── epic_id (FK, CASCADE, nullable)
+├── description                ├── user_id (FK, CASCADE, nullable)
+├── status (todo/in_progress/done) ├── logged_at (DATE)
+├── color                      ├── minutes (INT)
+├── start_date / target_date   ├── note
+├── completed_at               ├── source (manual/tempo)
+├── jira_issue_key             ├── tempo_worklog_id (nullable)
+├── jira_issue_id              ├── tempo_user_id (FK, SET NULL, nullable)
+├── jira_synced_at             ├── tempo_push_status (pending/pushed/error)
+├── jira_url                   ├── tempo_push_error
+├── position (INT)             ├── tempo_pushed_at
+├── created_by (FK, SET NULL)  ├── created_at
+├── created_at                 └── updated_at
+└── updated_at
+                               time_logs_deleted (tombstone)
+                               ├── id (PK)
+                               ├── original_log_id
+                               ├── tempo_worklog_id
+                               ├── deleted_at
+                               ├── synced_to_tempo (BOOLEAN)
+                               └── sync_attempted_at
+```
+
+### Integrazioni Esterne
+```
+tempo_users                    tempo_import_log
+├── id (PK)                    ├── id (PK)
+├── tempo_account_id (UNIQUE)  ├── triggered_by (FK -> users)
+├── display_name               ├── period_from / period_to
+├── email                      ├── status (running/completed/error)
+├── zeno_user_id (FK, SET NULL)├── worklogs_found/created/updated/skipped
+├── is_active (BOOLEAN)        ├── error_message
+├── created_at                 ├── started_at
+└── updated_at                 └── completed_at
+
+tempo_push_log                 jira_config
+├── id (PK)                    ├── id (PK)
+├── triggered_by (FK)          ├── user_id (FK, CASCADE)
+├── status                     ├── jira_project_key
+├── logs_found/pushed/updated  ├── zeno_project_id (FK, CASCADE)
+├── logs_deleted/skipped/error ├── sync_enabled (BOOLEAN)
+├── error_message              ├── last_sync_at / status / error
+├── started_at                 └── created_at
+└── completed_at
+                               jira_user_mappings
+                               ├── id (PK)
+                               ├── config_id (FK, CASCADE)
+                               ├── jira_account_id
+                               ├── jira_display_name / email
+                               └── zeno_user_id (FK, SET NULL)
+```
+
+### Sharing e Notifiche
+```
+project_invitations            notifications (AppNotification)
+├── id (PK)                    ├── id (PK)
+├── project_id (FK, CASCADE)   ├── user_id (FK, CASCADE)
+├── invited_by (FK, CASCADE)   ├── type (task_assigned/status_changed/commented/...)
+├── invited_user_id (FK)       ├── title
+├── email                      ├── body
+├── role (admin/super_user/user) ├── project_id / task_id / epic_id (FK, nullable)
+├── token (UNIQUE, 64 char)    ├── is_read (BOOLEAN)
+├── status (pending/accepted/declined/expired) ├── read_at
+├── expires_at                 ├── sent_telegram / sent_push
+├── responded_at               └── created_at
+└── created_at
+
+user_project_areas             (organizzazione per-user di progetti in aree)
+├── id (PK)
+├── user_id (FK, CASCADE)
+├── project_id (FK, CASCADE)
+├── area_id (FK, SET NULL)
+├── created_at
+└── updated_at
+```
+
+### Report
+```
+report_configs                 report_history
+├── id (PK)                    ├── id (PK)
+├── user_id (FK, CASCADE)      ├── config_id (FK, SET NULL)
+├── name                       ├── user_id (FK, CASCADE)
+├── report_type (person/project/client) ├── report_type
+├── frequency (weekly/monthly) ├── title
+├── target_user_id / project_id / client_name ├── period_from / period_to
+├── is_active (BOOLEAN)        ├── generated_at
+├── send_email (BOOLEAN)       ├── file_path / excel_path
+├── email_to                   ├── data_json (JSONB)
+├── last_sent_at               ├── status / error_message
+└── created_at                 └──
+```
+
+### Dipendenze Task
 ```
 task_dependencies
 ├── id (PK)
@@ -503,7 +685,7 @@ task_dependencies
 └── CHECK (blocking_task_id != blocked_task_id)
 ```
 
-### Automazioni (v2)
+### Automazioni
 ```
 automation_rules
 ├── id (PK)
@@ -518,7 +700,7 @@ automation_rules
 └── last_triggered
 ```
 
-### Sprint (v2)
+### Sprint
 ```
 sprints                        sprint_tasks (association)
 ├── id (PK)                    ├── sprint_id (FK -> sprints, CASCADE)
@@ -530,7 +712,7 @@ sprints                        sprint_tasks (association)
 └── created_at
 ```
 
-### Tags & Commenti
+### Tags, Commenti, Ricorrenze, Abitudini, Template, Pomodoro, Reminder, Push
 ```
 tags                           task_tags (association)
 ├── id (PK)                    ├── task_id (FK)
@@ -542,10 +724,7 @@ tags                           task_tags (association)
                                ├── user_id (FK)
                                ├── text
                                └── created_at
-```
 
-### Ricorrenze
-```
 recurrence_rules               task_instances
 ├── id (PK)                    ├── id (PK)
 ├── task_id (FK, UNIQUE)       ├── task_id (FK)
@@ -553,28 +732,21 @@ recurrence_rules               task_instances
 ├── workday_adjust (ENUM)      ├── status (todo/done/skip)
 ├── workday_target (INT)       ├── completed_at
 └── next_occurrence            └── completed_by (FK)
-```
 
-### Abitudini
-```
 habits                         habit_logs
 ├── id (PK)                    ├── id (PK)
 ├── name                       ├── habit_id (FK)
 ├── description                ├── user_id (FK)
-├── list_id (FK, nullable)     ├── log_date (DATE)
-├── created_by (FK)            ├── value (FLOAT)
-├── frequency_type             └── note
-├── frequency_days (ARRAY)
+├── created_by (FK)            ├── log_date (DATE)
+├── frequency_type             ├── value (FLOAT)
+├── frequency_days (ARRAY)     └── note
 ├── times_per_period
 ├── time_of_day
 ├── start_date / end_date
 ├── color / icon
 ├── position
 └── is_archived
-```
 
-### Template, Pomodoro, Notifiche, Push
-```
 task_templates                 pomodoro_sessions
 ├── id (PK)                    ├── id (PK)
 ├── user_id (FK)               ├── user_id (FK)
@@ -585,24 +757,31 @@ task_templates                 pomodoro_sessions
 ├── subtask_titles (JSON)
 └── recurrence_config (JSON)   push_subscriptions
                                ├── id (PK)
-notifications                  ├── user_id (FK)
+task_reminders                 ├── user_id (FK)
 ├── id (PK)                    ├── endpoint
-├── user_id / task_id          ├── p256dh
-├── channel                    └── auth
+├── task_id / habit_id (FK)    ├── p256dh
+├── user_id (FK)               └── auth
+├── channel (telegram/email/push/both)
 ├── offset_minutes
-└── sent_at
+├── sent_at
+└── created_at
 ```
 
 ### DB Indexes
-- `tasks`: list_id, created_by, assigned_to, status, due_date, parent_id, project_id
-- `notifications`: task_id, user_id, sent_at
+- `tasks`: created_by, assigned_to, status, due_date, start_date, parent_id, project_id, heading_id
+- `task_reminders`: task_id, user_id, sent_at
 - `comments`: task_id
 - `areas`: owner_id
 - `projects`: area_id, owner_id
+- `project_headings`: project_id
 - `project_custom_fields`: project_id, UNIQUE(project_id, field_key)
 - `task_dependencies`: blocking_task_id, blocked_task_id, UNIQUE(blocking, blocked)
 - `automation_rules`: project_id
 - `sprints`: project_id
+- `epics`: project_id, (project_id + status)
+- `time_logs`: task_id, user_id, logged_at, (user_id + logged_at)
+- `jira_config`: user_id, sync_enabled
+- `report_configs`: user_id, (is_active + frequency)
 
 ---
 
@@ -615,31 +794,17 @@ notifications                  ├── user_id (FK)
 | POST | `/api/auth/login` | Login, setta JWT cookie |
 | POST | `/api/auth/logout` | Logout, cancella cookie |
 | GET | `/api/auth/me` | Profilo utente |
-| PATCH | `/api/auth/me/preferences` | Aggiorna preferenze report |
+| PATCH | `/api/auth/me/preferences` | Aggiorna preferenze (report, tour, etc.) |
 | POST | `/api/auth/me/api-key` | Genera API key |
 | DELETE | `/api/auth/me/api-key` | Revoca API key |
 
-### Liste
+### Task (con project access check)
 | Metodo | Path | Descrizione |
 |---|---|---|
-| GET | `/api/lists/` | Liste utente (proprie + condivise), ordinate |
-| POST | `/api/lists/` | Crea lista |
-| PATCH | `/api/lists/reorder` | Salva ordine manuale |
-| PATCH | `/api/lists/reset-order` | Reset a ordine automatico |
-| PATCH | `/api/lists/{id}` | Aggiorna lista |
-| DELETE | `/api/lists/{id}` | Elimina lista + task |
-| GET | `/api/lists/{id}/members` | Membri della lista |
-| POST | `/api/lists/{id}/members` | Aggiungi membro |
-| PATCH | `/api/lists/{id}/members/{mid}` | Aggiorna ruolo |
-| DELETE | `/api/lists/{id}/members/{mid}` | Rimuovi membro |
-
-### Task (con list access check)
-| Metodo | Path | Descrizione |
-|---|---|---|
-| GET | `/api/tasks/` | Task con filtri (list_id, status, tag_id), ordinati per position, id |
+| GET | `/api/tasks/` | Task con filtri (project_id, status, tag_id), ordinati per position, id |
 | POST | `/api/tasks/` | Crea task (auto-assign, default oggi) |
 | PATCH | `/api/tasks/reorder` | Riordina task via drag-and-drop (array di {id, position}) |
-| PATCH | `/api/tasks/{id}` | Aggiorna task (incluso cambio lista) |
+| PATCH | `/api/tasks/{id}` | Aggiorna task (incluso cambio progetto) |
 | DELETE | `/api/tasks/{id}` | Elimina task |
 | GET | `/api/tasks/{id}/subtasks` | Subtask di un task |
 | POST | `/api/tasks/{id}/subtasks` | Crea subtask |
@@ -721,6 +886,13 @@ notifications                  ├── user_id (FK)
 | DELETE | `/api/push/subscribe` | Rimuovi push subscription |
 | POST | `/api/push/test` | Invia notifica di test |
 
+### Notifiche In-App
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/notifications/` | Notifiche utente (paginate) |
+| PATCH | `/api/notifications/{id}/read` | Segna come letta |
+| DELETE | `/api/notifications/{id}` | Elimina notifica |
+
 ### Google Calendar
 | Metodo | Path | Descrizione |
 |---|---|---|
@@ -747,7 +919,7 @@ notifications                  ├── user_id (FK)
 | GET | `/api/stats/dashboard` | Dashboard statistiche complete |
 | GET | `/api/health` | Healthcheck |
 
-### Aree (v2)
+### Aree
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/areas/` | Aree utente con project_count |
@@ -756,7 +928,7 @@ notifications                  ├── user_id (FK)
 | PATCH | `/api/areas/{id}` | Aggiorna area |
 | DELETE | `/api/areas/{id}` | Elimina area (progetti spostati a area_id=null) |
 
-### Progetti (v2)
+### Progetti
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/projects/` | Progetti utente (propri + membro), con task_count |
@@ -770,7 +942,16 @@ notifications                  ├── user_id (FK)
 | DELETE | `/api/projects/{id}/members/{mid}` | Rimuovi membro |
 | GET | `/api/projects/{id}/stats` | Statistiche progetto |
 
-### Campi Custom (v2)
+### Headings (sezioni progetto)
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/projects/{id}/headings` | Headings del progetto |
+| POST | `/api/projects/{id}/headings` | Crea heading |
+| PATCH | `/api/projects/{id}/headings/{hid}` | Aggiorna nome heading |
+| DELETE | `/api/projects/{id}/headings/{hid}` | Elimina heading (scollega task) |
+| PATCH | `/api/projects/{id}/headings/reorder` | Riordina headings |
+
+### Campi Custom
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/projects/{id}/fields` | Definizioni campi progetto |
@@ -779,14 +960,14 @@ notifications                  ├── user_id (FK)
 | DELETE | `/api/projects/{id}/fields/{fid}` | Elimina campo |
 | PATCH | `/api/projects/{id}/fields/reorder` | Riordina campi |
 
-### Dipendenze Task (v2)
+### Dipendenze Task
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/tasks/{id}/dependencies` | Dipendenze del task (blocking, blocked_by, relates_to) |
 | POST | `/api/tasks/{id}/dependencies` | Aggiungi dipendenza (con cycle detection) |
 | DELETE | `/api/tasks/dependencies/{did}` | Rimuovi dipendenza |
 
-### Automazioni (v2)
+### Automazioni
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/projects/{id}/automations` | Regole automazione del progetto |
@@ -795,14 +976,7 @@ notifications                  ├── user_id (FK)
 | PATCH | `/api/projects/{id}/automations/{aid}/toggle` | Attiva/disattiva regola |
 | DELETE | `/api/projects/{id}/automations/{aid}` | Elimina regola |
 
-### Epic Time Logs (v2)
-| Metodo | Path | Descrizione |
-|---|---|---|
-| GET | `/api/epics/{id}/time` | Lista time log dell'epic (data, durata, nota, utente) |
-| PATCH | `/api/epics/{id}/time/{log_id}` | Modifica time log (minuti, nota) |
-| DELETE | `/api/epics/{id}/time/{log_id}` | Elimina singolo time log |
-
-### Sprint (v2)
+### Sprint
 | Metodo | Path | Descrizione |
 |---|---|---|
 | GET | `/api/projects/{id}/sprints` | Sprint del progetto |
@@ -813,30 +987,99 @@ notifications                  ├── user_id (FK)
 | POST | `/api/sprints/{id}/tasks/{tid}` | Aggiungi task a sprint |
 | DELETE | `/api/sprints/{id}/tasks/{tid}` | Rimuovi task da sprint |
 
+### Epic
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/projects/{id}/epics` | Epic del progetto |
+| POST | `/api/projects/{id}/epics` | Crea epic |
+| GET | `/api/projects/{id}/epics/{eid}` | Dettaglio epic |
+| PATCH | `/api/projects/{id}/epics/{eid}` | Aggiorna epic |
+| DELETE | `/api/projects/{id}/epics/{eid}` | Elimina epic |
+| PATCH | `/api/projects/{id}/epics/reorder` | Riordina epic |
+| POST | `/api/projects/{id}/epics/{eid}/push-jira` | Push epic a Jira |
+| GET | `/api/epics/{eid}/time` | Time log dell'epic |
+| POST | `/api/epics/{eid}/time` | Crea time log su epic |
+| PATCH | `/api/epics/{eid}/time/{lid}` | Modifica time log |
+| DELETE | `/api/epics/{eid}/time/{lid}` | Elimina time log |
+| GET | `/api/quick-log/epics` | Epic per QuickLog (con timesheet settimanale) |
+
+### Time Logs
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/tasks/{id}/time` | Time log del task |
+| POST | `/api/tasks/{id}/time` | Crea time log su task |
+| PATCH | `/api/tasks/{id}/time/{lid}` | Modifica time log (minuti, data, nota) |
+| DELETE | `/api/tasks/{id}/time/{lid}` | Elimina time log |
+| GET | `/api/time/week` | Riepilogo ore settimanale (per giorno, inclusi epic) |
+| GET | `/api/time/report` | Report ore con filtri |
+| GET | `/api/time/export` | Export time log CSV/JSON |
+
+### Tempo Cloud
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/tempo/users` | Lista utenti Tempo con stats import |
+| PATCH | `/api/tempo/users/{uid}` | Link/unlink utente Tempo → Zeno |
+| PATCH | `/api/tempo/users/{uid}/deactivate` | Toggle attivo/disattivo utente Tempo |
+| POST | `/api/tempo/import` | Trigger import manuale (≤30gg sync, >30gg Celery) |
+| GET | `/api/tempo/import/log/{lid}` | Progresso/risultato import |
+| POST | `/api/tempo/push` | Trigger push manuale ore → Tempo |
+| GET | `/api/tempo/push/log/{lid}` | Progresso/risultato push |
+| GET | `/api/tempo/status` | Dashboard stato sync |
+| PATCH | `/api/tempo/config` | Aggiorna impostazioni sync |
+
+### Jira
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/jira/config` | Config sync Jira utente |
+| POST | `/api/jira/config` | Crea config sync progetto Jira |
+| DELETE | `/api/jira/config/{cid}` | Elimina config |
+| PATCH | `/api/jira/config/{cid}` | Toggle sync on/off |
+| POST | `/api/jira/sync/{cid}` | Trigger sync manuale |
+| GET | `/api/jira/users` | Mapping utenti Jira → Zeno |
+| PATCH | `/api/jira/users/{mid}` | Aggiorna mapping utente |
+
+### Inviti Progetto
+| Metodo | Path | Descrizione |
+|---|---|---|
+| POST | `/api/projects/{id}/invite` | Invita utente al progetto |
+| GET | `/api/invitations/pending` | Inviti in sospeso per l'utente |
+| POST | `/api/invitations/{id}/accept` | Accetta invito e unisciti al progetto |
+| DELETE | `/api/invitations/{id}` | Rifiuta/cancella invito |
+
+### Report
+| Metodo | Path | Descrizione |
+|---|---|---|
+| GET | `/api/reports/configs` | Config report utente |
+| POST | `/api/reports/configs` | Crea config report |
+| PATCH | `/api/reports/configs/{id}` | Aggiorna config |
+| DELETE | `/api/reports/configs/{id}` | Elimina config |
+| POST | `/api/reports/generate` | Genera report on-demand |
+| GET | `/api/reports/history` | Storico report generati |
+
 ---
 
 ## Viste Frontend
 
 ### 1. Oggi
-Task con scadenza oggi + task scaduti (overdue). Ordinamento per data.
+Task con start_date <= oggi, due_date = oggi, e task scaduti (overdue). Ordinamento per data.
 
 ### 2. Prossimi 7 Giorni
 Task con scadenza entro 7 giorni + task scaduti. Ordinamento per data.
 
 ### 3. Inbox
-Tutti i task non completati. Ordinamento per data.
+Area di cattura: task senza progetto e senza date. Elaborali assegnando progetto, data, o archiviando in "Prima o Poi".
 
-### 4. Vista per Lista
-Task filtrati per `list_id`, con form di creazione inline.
+### 4. Prima o Poi (Someday)
+Task con status `someday`. Parcheggio per task che non si vogliono affrontare ora.
 
 ### 5. Calendario
 Vista mensile con task posizionati sui giorni. Click per creare task su data specifica.
 
 ### 6. Kanban Board
-3 colonne (Todo, In Progress, Done) con drag & drop per cambiare stato. Filtro per lista. Card con priorita, data, tag, subtask progress.
+3 colonne (Todo, In Progress, Done) con drag & drop per cambiare stato. Filtro per progetto. Card con priorita, data, tag, subtask progress.
 
 ### 7. Matrice di Eisenhower
-Griglia 2x2 che mappa le 4 priorita. Ogni quadrante raggruppa i task per scadenza.
+Griglia 2x2 che mappa le 4 priorita. Ogni quadrante raggruppa i task per scadenza. Drag & drop tra quadranti.
 
 ### 8. Abitudini
 Lista abitudini con week strip (pallini cliccabili Lun-Dom). Dettaglio con statistiche e calendario mensile.
@@ -848,43 +1091,51 @@ Timer circolare SVG con progress ring (25/5/15 min). Pannello con statistiche e 
 Dashboard con completion rate, weekly/monthly charts, habits overview, focus hours.
 
 ### 11. Impostazioni
-Invito famiglia (copia invito con fallback clipboard per HTTP), Google Calendar, backup, push notifications, Telegram (linking/unlinking account con codice via bot), report giornaliero (email + push + Telegram), export/import, import TickTick, template, API key, logout.
+Tab **Generale**: tema, notifiche, Telegram (linking/unlinking), report giornaliero, guided tour, export/import, template, API key, logout.
+Tab **Integrazioni**: Tempo (settings, import, users), Jira (config, users).
+Tab **Admin**: gestione utenti, backup, Google Calendar, Google Drive.
 
-### 12. Vista Progetto (v2)
-Header con nome progetto, badge stato, tipo, descrizione. Barra progresso (task completati / totali). Lista task filtrata per project_id con form di creazione inline. Pannelli laterali per Campi Custom, Automazioni e Sprint (mutuamente esclusivi).
+### 12. Vista Progetto (ProjectView)
+Header con nome progetto, badge stato, tipo, descrizione. Barra progresso (task completati / totali).
 
-**Drag-and-drop task**: I task nel tab Task possono essere riordinati tramite drag-and-drop (dnd-kit con handle GripVertical). L'ordine viene persistito al backend via `PATCH /tasks/reorder`.
+**Tab Task**: Lista task con headings (sezioni), form creazione inline, drag-and-drop reorder.
 
-**Epic time logs**: Nel tab Epic, cliccando sulle ore totali si espande la lista dei time log per quell'epic. Ogni log mostra data, durata, nota e utente. I log possono essere eliminati singolarmente tramite icona trash e modificati inline (PATCH endpoint).
+**Tab Epic**: Lista epic con icona orologio per registrare ore, Jira key con link, ore totali, stato. Cliccando sulle ore totali si espande la lista dei time log. Log modificabili/eliminabili inline.
 
-**Gestione stato locale**: ProjectView gestisce il proprio ciclo di reload dati. Toggle task (completa/ripristina), aggiunta nuovi task, e modifiche dal pannello TaskDetail (es. toggle "Solo ore") aggiornano la vista immediatamente senza ricaricare la pagina. Usa una prop `refreshKey` dal componente padre per restare sincronizzato.
+**Tab Sprint**: Board sprint con metriche, aggiunta/rimozione task.
 
-**Ordinamento task**: I task sono ordinati con `sortTasks()`: prima i task "solo ore" (time_only), poi per due_date ascendente, poi per position manuale. Lo stesso ordinamento vale sia per task non raggruppati che per task dentro sezioni heading.
+**Tab Team**: Membri con ruoli, inviti.
 
-**Pulsanti differenziati**: "Aggiungi task al progetto" usa stile prominente (sfondo blu, font medium) per distinguerlo da "Nuova sezione" (stile dashed, testo piu' piccolo, icona LayoutList).
+**Pannelli laterali**: Campi Custom, Automazioni (mutuamente esclusivi).
 
-**Allineamento colonne task**: Le informazioni sulla destra di ogni task (Jira key, ore loggate, ricorrenza, scadenza) hanno larghezze fisse per allineare le colonne tra le diverse righe.
+**Gestione stato locale**: Toggle task, aggiunta nuovi task, modifiche dal pannello TaskDetail aggiornano la vista immediatamente senza ricaricare la pagina.
 
-### 13. Campi Custom (v2)
-Pannello collassabile in TaskDetail per i task con project_id. Renderizza input appropriato per tipo campo (text, number, date, select, multi_select, boolean, url). Editor separato per le definizioni dei campi del progetto.
+**Pulsanti differenziati**: "Aggiungi task al progetto" (sfondo blu, prominente) vs "Nuova sezione" (stile dashed, icona LayoutList).
 
-### 14. Dipendenze (v2)
-Pannello in TaskDetail che mostra 3 sezioni: "Blocca", "Bloccato da", "Correlato a". Form per aggiungere dipendenza con ricerca task e selettore tipo. Gestione errore 422 per dipendenze circolari.
-
-### 15. Automazioni (v2)
-Editor regole con lista toggle, creazione form con trigger/action type dinamici. Configurazione condizionale in base al tipo (es. status_changed richiede from_status/to_status).
-
-### 16. Sprint Board (v2)
-Selettore sprint, form creazione, vista dettaglio con barra progresso e metriche (task totali, completati, %, giorni rimanenti). Aggiunta/rimozione task, transizioni di stato (planned → active → completed).
-
-### 17. Quick Log (QuickLogView)
+### 13. Quick Log (QuickLogView)
 Vista a due colonne per il log rapido delle ore sugli epic.
 
-**Colonna sinistra (lista epic)**: Filtro per progetto e ricerca testuale. Ogni epic mostra icona orologio per registrare ore, Jira key con link, ore totali, stato e data ultimo log. Cliccando l'orologio si apre il form TimeLogForm inline. Header con due pulsanti Tempo: "Invia a Tempo" (push ore locali) e "Aggiorna da Tempo" (import worklogs ultimi 7 giorni). La colonna sinistra puo' essere nascosta con un toggle per ottimizzare la visualizzazione su tablet.
+**Colonna sinistra (lista epic)**: Filtro per progetto e ricerca testuale. Ogni epic mostra icona orologio per registrare ore, Jira key con link, ore totali, stato e data ultimo log. Cliccando l'orologio si apre TimeLogForm inline. Header con pulsanti Tempo: "Invia a Tempo" (push) e "Aggiorna da Tempo" (import). Toggle per nascondere la colonna.
 
-**Colonna destra (timesheet settimanale)**: Tabella con navigazione settimanale (frecce + click per settimana corrente). Righe per progetto con minuti giornalieri. Totali per giorno e per settimana. Barra progresso vs 40h. Cliccando su una colonna giorno si espande un pannello dettaglio con tutti i log del giorno. Ogni log mostra ore, task, progetto evidenziato con badge, nota. I log sono modificabili inline (edit ore/minuti/nota) e cancellabili con conferma a due step (click trash → bottone "Elimina" + X annulla).
+**Colonna destra (timesheet settimanale)**: Tabella con navigazione settimanale. Righe per progetto con minuti giornalieri. Totali per giorno e settimana. Barra progresso vs 40h. Click su colonna giorno espande dettaglio con log modificabili/cancellabili (conferma a due step). Toggle per nascondere la colonna.
 
-**Toggle colonne**: Due toggle indipendenti per nascondere/mostrare ciascuna colonna. PanelRightClose/PanelRightOpen nell'header epic per nascondere il timesheet. PanelLeftClose/PanelLeftOpen nell'header timesheet per nascondere la lista epic. Ciascuna colonna si espande a piena larghezza quando l'altra e' nascosta.
+### 14. Report
+Configurazione report periodici (person/project/client, weekly/monthly). Generazione on-demand. Storico con download PDF/Excel.
+
+### 15. Campi Custom
+Pannello collassabile in TaskDetail per task con project_id. Input per tipo campo (text, number, date, select, multi_select, boolean, url). Editor definizioni in ProjectView.
+
+### 16. Dipendenze
+Pannello in TaskDetail con 3 sezioni: "Blocca", "Bloccato da", "Correlato a". Ricerca task e selettore tipo. Gestione errore 422 per cicli.
+
+### 17. Automazioni
+Editor regole con lista toggle, form con trigger/action type dinamici. Configurazione condizionale per tipo.
+
+### 18. Sprint Board
+Selettore sprint, form creazione, barra progresso, metriche (task totali, completati, %, giorni rimanenti). Aggiunta/rimozione task, transizioni stato.
+
+### 19. Onboarding (Guided Tour)
+Tour guidato step-by-step con spotlight overlay e tooltip posizionati. 6 percorsi tematici: Benvenuto, Organizzazione, Produttivita', Abitudini, Collaborazione, Avanzate. Auto-trigger al primo login, riavviabile da Impostazioni. Specifica completa in `docs/guided-tour-spec.md`.
 
 ---
 
@@ -892,11 +1143,18 @@ Vista a due colonne per il log rapido delle ore sugli epic.
 
 | Task | Schedule | Funzione |
 |---|---|---|
+| `check_and_send_notifications` | Ogni 60 secondi | Verifica e invia reminder (Telegram + Push) |
 | `generate_recurring_instances` | Ogni giorno alle 00:05 | Genera TaskInstance per i prossimi 7 giorni |
-| `check_and_send_notifications` | Ogni 60 secondi | Verifica e invia notifiche (Telegram + Push) |
-| `send_daily_reports` | Ogni 5 minuti | Report giornaliero (email + push + Telegram). Finestra 10 min per compensare schedule drift. Utenti con telegram_chat_id ricevono report anche senza email/push attivi |
-| `backup_to_drive` | Ogni giorno alle 03:00 | pg_dump + gzip + upload Google Drive |
-| `evaluate_automations` | On-demand (Celery task) | Esegue regole automazione per task (depth max 3) [v2] |
+| `send_daily_reports` | Ogni 5 minuti | Report giornaliero (email + push + Telegram) |
+| `backup_database_to_drive` | Ogni giorno alle 03:00 | pg_dump + gzip + upload Google Drive |
+| `send_weekly_time_report` | Venerdi' alle 18:00 | Email report ore settimanale |
+| `auto_push_to_tempo` | Ogni notte alle 02:00 | Push time log pendenti Zeno → Tempo |
+| `auto_sync_tempo` | Lunedi' alle 06:00 | Import worklogs Tempo → Zeno |
+| `send_periodic_reports` (weekly) | Lunedi' alle 07:00 | Report settimanale per config attive |
+| `send_periodic_reports` (monthly) | 1° del mese alle 07:00 | Report mensile per config attive |
+| `expire_pending_invitations` | Ogni giorno alle 01:00 | Pulisce inviti scaduti |
+| `check_due_soon` | Ogni giorno alle 08:00 | Notifica task in scadenza |
+| ~~`sync_jira_projects`~~ | ~~Ogni N minuti~~ | ~~Auto-sync Jira~~ (DISABILITATO fino a stabilizzazione) |
 
 Timezone: `Europe/Rome`
 
@@ -907,7 +1165,7 @@ Timezone: `Europe/Rome`
 L'endpoint `POST /export/import/ticktick` accetta il CSV di backup di TickTick e importa:
 
 - **Task** con titolo, descrizione, priorita mappata (TT 0→4, 1→1, 3→2, 5→3)
-- **Liste** create automaticamente dal campo "List Name"
+- **Progetti** creati automaticamente dal campo "List Name"
 - **Subtask** collegati tramite parentId/taskId
 - **Tag** creati automaticamente con colori ciclici
 - **Ricorrenze** (campo Repeat in formato RRULE)
@@ -941,36 +1199,6 @@ npm run start    # porta 3000
 # Le API su http://localhost:8000/api
 # Docs OpenAPI su http://localhost:8000/docs
 ```
-
----
-
-## Migrazione v1 → v2
-
-Script: `backend/scripts/migrate_to_v2.py`
-
-La migrazione crea la struttura gerarchica a partire dalle liste esistenti:
-
-1. **6 Aree**: Family, Vision-e, AIthink, La Voce, Croce Rossa, Manu
-2. **8 Progetti**: uno per ogni lista esistente, mappati all'area corrispondente
-3. **60 Task**: associati ai progetti tramite `project_id` (senza toccare `list_id`)
-
-Le liste originali restano intatte. I task hanno ora sia `list_id` che `project_id`.
-
-Esecuzione:
-```bash
-docker cp backend/scripts/migrate_to_v2.py $(docker compose ps -q backend):/app/scripts/
-docker compose exec -w /app backend python scripts/migrate_to_v2.py
-```
-
-### Alembic Migrations (v2)
-| ID | Descrizione |
-|---|---|
-| `9f852858cc1c` | areas, projects, project_members + task project_id/custom_fields |
-| `5cf662c3691f` | project_custom_fields |
-| `6d4d6a65be95` | task_dependencies |
-| `e4ef3b49e85b` | automation_rules |
-| `bc016dbea859` | sprints + sprint_tasks |
-| `5f233bf6479b` | Fix FK ondelete (tasks.created_by, assigned_to → SET NULL) |
 
 ---
 

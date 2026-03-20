@@ -1,19 +1,18 @@
 # Zeno — Stima ore/uomo sviluppo
 
-Data stima: 16 marzo 2026
+Data stima: 16 marzo 2026 (aggiornata: 20 marzo 2026)
 
 ## Dimensioni del progetto
 
 | Metrica | Valore |
 |---------|--------|
-| Righe di codice totali | ~32.000 (14k backend Python, 18k frontend TypeScript) |
-| File totali | 245 (86 .py, 71 .tsx/.ts) |
-| Modelli database | 33 |
-| File route API | 32 |
-| Componenti React | 46 |
-| File di test | 236 (unit, integration, E2E) |
-| Commit | 60 |
-| Documentazione architetturale | 921 righe |
+| Righe di codice totali | ~35.000 (17k backend Python, 18k frontend TypeScript) |
+| Modelli database | 23 file (30+ tabelle) |
+| File route API | 31 |
+| Componenti React | 46 + 5 onboarding |
+| Servizi backend | 14 |
+| Commit | 63 |
+| Documentazione architetturale | 1.209 righe |
 
 ## Breakdown per area
 
@@ -45,7 +44,7 @@ Data stima: 16 marzo 2026
 ## Stack tecnologico
 
 - **Backend**: Python 3.12, FastAPI, SQLAlchemy 2 (async), PostgreSQL, Redis, Celery
-- **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS 4
 - **Infrastruttura**: Docker Compose, Tailscale, Google Drive backup
 - **Integrazioni**: Jira REST API, Tempo v4 API, Google Calendar, Telegram Bot, Web Push, SMTP
 - **Testing**: Pytest, Vitest, React Testing Library, Playwright
